@@ -1,0 +1,26 @@
+[[source]]
+name = "pypi"
+url = "https://pypi.org/simple"
+verify_ssl = true
+
+[dev-packages]
+
+[packages]
+
+# Data analysis and plotting
+matplotlib = "3.5.2"
+numpy = "1.22.4"
+pandas = "1.4.2"
+pyyaml = "6.0"
+seaborn = "0.11.2"
+silx = "1.0.0"
+
+# Emulator training
+gpflow = "2.5.2"
+gpytorch = "1.6.0"
+pymc = "4.0.0"
+scikit-learn = "1.1.1"
+torch = "1.11.0"
+
+[requires]
+python_version = "3.9.12"

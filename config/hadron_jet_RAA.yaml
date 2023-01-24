@@ -1,0 +1,97 @@
+# Configuration for STAT analysis
+#-------------------------------------------
+# General parameters
+
+output_dir: '/home/james/jetscape-docker/bayesian-inference/output/20230116'
+
+initialize_observables: True
+fit_emulators: False
+run_mcmc: False
+plot: False
+
+debug_level: 0
+
+#-------------------------------------------
+# The design points, predictions, and experimental data are located in tables produced by the aggregation machinery
+observable_table_dir: '/rstorage/jetscape/STAT-Bayesian/Analysis1/20230116/tables'
+
+# We make use of some info in the JETSCAPE-analysis config that was used to aggregate/plot observables
+observable_config_dir: '/home/james/jetscape-docker/JETSCAPE-analysis/config'
+
+#-------------------------------------------
+# Specify observables
+# We want to allow to configure the analysis to only use various subsets of observables
+#   (e.g. jet/hadron/substructure observables, sqrts, centrality, ...)
+# We will do this by looping over the specified models below:
+#   - We will loop through the parameterizations and run a separate analysis for each
+#   - We will start by using all observables in the table directory for that parameterization
+#   - We will then filter by the sqrts, centrality specified
+#   - Finally, we select any observables whose filename contains a string from observable_list
+
+# Set general share parameters
+analysis_base: &model_base
+  model_name: 'MATTER+LBT'
+  parameterizations: ['exponential']
+  sqrts_list: [200, 2760, 5020]
+  centrality_range: [0,10]
+  recoil_scheme: 'negative_recominber'
+  parameters: 
+    exponential: 
+      names: ['$\\alpha_S^{\\rm{fix}}$', '$Q_0$', '$c_1$', '$c_2$', '$c_3$', '$\\tau_0$']
+      min: [0.1, 1, 0, 0, 0, 0]
+      max: [0.5, 10, 10, 10, 100, 1.5]
+    binomial:
+      names: ['$\\alpha_S^{\\rm{fix}}$', '$Q_0$', '$c_1$', '$c_2$', '$a$', '$b$', '$\\tau_0$']
+      min: [0.1, 1, 0, 0, -10, -10, 0]
+      max: [0.5, 10, 10, 10, 100, 100, 1.5]
+  alpha: 0.2
+
+analyses:
+
+  analysis1:
+    <<: *model_base
+    observable_list:
+      - 'hadron__pt_'
+
+  analysis2:
+    <<: *model_base
+    observable_list:
+      - 'jet__pt_'
+
+#-------------------------------------------
+# Emulator parameters
+train_emulator: True
+n_pc: 3
+n_restarts: 50
+
+mean_function: 'constant'                      # constant, linear
+constant: 0.
+linear_weights: []
+
+covariance_function: 'matern'                  # squared_exponential, power_exponential, matern
+matern_nu: 1.5
+variance: 1                                    # overall variance
+noise: None                                    
+
+# Validation
+# We want to support the following:
+#  - k-fold cross-validation
+#  - validation dataset
+
+# Cross-validation
+cross_validation: True
+cross_validation_k: 5
+
+# TODO: Independent validation dataset
+independent_validation: False
+validation_indices: []
+
+#-------------------------------------------
+# MCMC parameters
+n_walkers: 500
+n_burn_steps: 1000
+n_steps: 500
+
+#-------------------------------------------
+# Closure test parameters
+confidence: [0.9, 0.6]
