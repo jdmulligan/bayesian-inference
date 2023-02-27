@@ -72,27 +72,40 @@ class SteerAnalysis(common_base.CommonBase):
                 if self.initialize_observables:
                     print()
                     print(f'Initializing model: {analysis_name} ({parameterization} parameterization)...')
+
+                    # We separate out the validation indices specified in the config
+                    validation_range = analysis_config['validation_indices']
+                    validation_indices = range(validation_range[0], validation_range[1])
+
                     observables = self.data_IO.initialize_observables(self.observable_table_dir, 
                                                                       analysis_config, 
-                                                                      parameterization)
+                                                                      parameterization,
+                                                                      validation_indices)
                     self.data_IO.write_data(observables, 
                                             os.path.join(self.output_dir, f'{analysis_name}_{parameterization}'), 
                                             filename='observables.h5')
 
-                continue
-
                 # Fit emulators
-                #   do PCA
+                if self.fit_emulators:
+
+                    # Do PCA
+                    continue
 
                 # Run MCMC
-                
+                if self.run_mcmc:
+
+                    analysis = run_analysis.RunAnalysis(config_file=self.config_file,
+                                                        model=model,
+                                                        output_dir=self.output_dir,
+                                                        kfold_index=self.kfold_index)
+                    analysis.initialize()
+                    analysis.run_model()
+                    
                 # Plot   
-                analysis = run_analysis.RunAnalysis(config_file=self.config_file,
-                                                    model=model,
-                                                    output_dir=self.output_dir,
-                                                    kfold_index=self.kfold_index)
-                analysis.initialize()
-                analysis.run_model()
+                if self.plot:
+                    
+                    continue
+
 
 ####################################################################################################################
 if __name__ == '__main__':

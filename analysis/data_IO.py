@@ -52,6 +52,7 @@ class DataIO(common_base.CommonBase):
     #   - We include only those observables:
     #      - That have sqrts,centrality specified in the model_config
     #      - Whose filename contains a string from model_config observable_list
+    #   - We also separate out the design/predictions with indices in the validation set
     #
     # Return a dictionary with the following structure:
     #    observables['Data'][observable_label]['y'] -- value
@@ -62,12 +63,15 @@ class DataIO(common_base.CommonBase):
     #    observables['Prediction'][observable_label]['y'] -- value
     #                                               ['y_err'] -- statistical uncertainty
     #
+    #    observables['Design_validation']... -- design points for validation set
+    #    observables['Prediction_validation']... -- predictions for validation set
+    #
     # where observable_label follows the convention from the table filenames:
     #      observable_label = f'{sqrts}__{system}__{observable_type}__{observable}__{subobservable}__{centrality}'
     #
     # Note that all of the data points are the ratio of AA/pp
     #---------------------------------------------------------------
-    def initialize_observables(self, table_dir, model_config, parameterization):
+    def initialize_observables(self, table_dir, model_config, parameterization, validation_indices):
         print('Including the following observables:')
     
         # We will construct a dict containing all observables  
@@ -98,7 +102,17 @@ class DataIO(common_base.CommonBase):
         for filename in os.listdir(design_dir):
 
             if self.filename_to_labels(filename)[1] == parameterization: 
-                observables['Design'] = np.loadtxt(os.path.join(design_dir, filename), ndmin=2)
+                design_points = np.loadtxt(os.path.join(design_dir, filename), ndmin=2)
+
+                # Separate training and validation sets into separate dicts
+                with open(os.path.join(design_dir, filename)) as f:
+                    for line in f.readlines():
+                        if 'Design point indices' in line:
+                            indices = set([int(s) for s in line.split(':')[1].split()])
+                training_indices_numpy = list(indices - set(validation_indices))
+                validation_indices_numpy = list(indices.intersection(set(validation_indices)))
+                observables['Design'] = design_points[training_indices_numpy]
+                observables['Design_validation'] = design_points[validation_indices_numpy]
 
         #----------------------
         # Read predictions and uncertainty
@@ -110,14 +124,24 @@ class DataIO(common_base.CommonBase):
 
                     filename_prediction_values = filename
                     filename_prediction_errors = filename.replace('values', 'errors') 
+                    observable_label, _ = self.filename_to_labels(filename_prediction_values)
 
                     prediction_values = np.loadtxt(os.path.join(prediction_dir, filename_prediction_values), ndmin=2)
                     prediction_errors = np.loadtxt(os.path.join(prediction_dir, filename_prediction_errors), ndmin=2)
 
-                    observable_label, _ = self.filename_to_labels(filename_prediction_values)
+                    # Separate training and validation sets into separate dicts
+                    with open(os.path.join(prediction_dir, filename_prediction_values)) as f:
+                        for line in f.readlines():
+                            if 'design_point' in line:
+                                indices = set([int(s[12:]) for s in line.split('#')[1].split()])
+                    training_indices_numpy = list(indices - set(validation_indices))
+                    validation_indices_numpy = list(indices.intersection(set(validation_indices)))
 
-                    observables['Prediction'][observable_label]['y'] = prediction_values
-                    observables['Prediction'][observable_label]['y_err'] = prediction_errors
+                    observables['Prediction'][observable_label]['y'] = np.take(prediction_values, training_indices_numpy, axis=1)
+                    observables['Prediction'][observable_label]['y_err'] = np.take(prediction_errors, training_indices_numpy, axis=1)
+
+                    observables['Prediction_validation'][observable_label]['y'] = np.take(prediction_values, validation_indices_numpy, axis=1)
+                    observables['Prediction_validation'][observable_label]['y_err'] = np.take(prediction_errors, validation_indices_numpy, axis=1)
 
                     # TODO: Do something about bins that have value=0?
                     if 0 in prediction_values:

@@ -2,10 +2,10 @@
 #-------------------------------------------
 # General parameters
 
-output_dir: '/home/james/jetscape-docker/bayesian-inference/output/20230116'
+output_dir: '/home/james/jetscape-docker/bayesian-inference/output/20230227'
 
 initialize_observables: True
-fit_emulators: False
+fit_emulators: True
 run_mcmc: False
 plot: False
 
@@ -45,6 +45,7 @@ analysis_base: &model_base
       min: [0.1, 1, 0, 0, -10, -10, 0]
       max: [0.5, 10, 10, 10, 100, 100, 1.5]
   alpha: 0.2
+  validation_indices: [200, 230] # For exp parameterization, these are the same for all sqrts (i.e. all points 200-229 inclusive)
 
 analyses:
 
@@ -61,7 +62,7 @@ analyses:
 #-------------------------------------------
 # Emulator parameters
 train_emulator: True
-n_pc: 3
+n_pc: 4
 n_restarts: 50
 
 mean_function: 'constant'                      # constant, linear
@@ -84,7 +85,6 @@ cross_validation_k: 5
 
 # TODO: Independent validation dataset
 independent_validation: False
-validation_indices: []
 
 #-------------------------------------------
 # MCMC parameters
