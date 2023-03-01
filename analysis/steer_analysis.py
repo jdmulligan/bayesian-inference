@@ -11,10 +11,10 @@ import os
 import sys
 import yaml
 
-import common_base
-
 import data_IO
-import run_analysis
+import emulation
+
+import common_base
 
 ####################################################################################################################
 class SteerAnalysis(common_base.CommonBase):
@@ -27,9 +27,6 @@ class SteerAnalysis(common_base.CommonBase):
         # Initialize config file
         self.config_file = config_file
         self.initialize()
-
-        # Create data IO class
-        self.data_IO = data_IO.DataIO()
 
         print(self)
 
@@ -77,34 +74,39 @@ class SteerAnalysis(common_base.CommonBase):
                     validation_range = analysis_config['validation_indices']
                     validation_indices = range(validation_range[0], validation_range[1])
 
-                    observables = self.data_IO.initialize_observables(self.observable_table_dir, 
-                                                                      analysis_config, 
-                                                                      parameterization,
-                                                                      validation_indices)
-                    self.data_IO.write_data(observables, 
-                                            os.path.join(self.output_dir, f'{analysis_name}_{parameterization}'), 
-                                            filename='observables.h5')
+                    observables = data_IO.initialize_observables(self.observable_table_dir, 
+                                                                 analysis_config, 
+                                                                 parameterization,
+                                                                 validation_indices)
+                    data_IO.write_data(observables, 
+                                       os.path.join(self.output_dir, f'{analysis_name}_{parameterization}'), 
+                                       filename='observables.h5')
 
-                # Fit emulators
+                # Fit emulators and write them to file
                 if self.fit_emulators:
-
-                    # Do PCA
-                    continue
+                    print()
+                    print(f'Fitting emulators for {analysis_name}_{parameterization}...')
+                    emulation_config = emulation.EmulationConfig(analysis_name=analysis_name,
+                                                                 parameterization=parameterization,
+                                                                 analysis_config=analysis_config,
+                                                                 config_file=self.config_file,
+                                                                 output_dir=self.output_dir)
+                    emulation.fit_emulators(emulation_config)
 
                 # Run MCMC
                 if self.run_mcmc:
+                    print()
+                    print(f'Running MCMC for {analysis_name}_{parameterization}...')
+                
+        # Plot   
+        if self.plot:
 
-                    analysis = run_analysis.RunAnalysis(config_file=self.config_file,
-                                                        model=model,
-                                                        output_dir=self.output_dir,
-                                                        kfold_index=self.kfold_index)
-                    analysis.initialize()
-                    analysis.run_model()
-                    
-                # Plot   
-                if self.plot:
-                    
+            # Plots for individual analysis
+            for analysis_name,analysis_config in self.analyses.items():
+                for parameterization in analysis_config['parameterizations']:            
                     continue
+
+            # Plots across multiple analyses
 
 
 ####################################################################################################################

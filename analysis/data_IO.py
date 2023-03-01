@@ -1,245 +1,282 @@
 #!/usr/bin/env python
+'''
+Module related to reading and writing of tables of observables into numpy arrays
+
+The main functionalities are:
+ - read_data()/write_data() -- read/write nested dict of numpy arrays to HDF5  
+ - initialize_observables() -- read design/prediction/data tables (.dat files) into nested dictionary of numpy arrays 
+ - observable_label_to_keys() -- convert observable string label to list of subobservables strings
+
+authors: J.Mulligan, R.Ehlers
+'''
 
 import os
 import sys
+from collections import defaultdict
 import numpy as np
 from silx.io.dictdump import dicttoh5, h5todict
 
-import common_base
+####################################################################################################################
+def write_data(results, output_dir, filename):
+    '''
+    Write nested dictionary of ndarray to hdf5 file
+    Note: all keys should be strings
+
+    :param str output_dir: directory to write to
+    :param str filename: name of hdf5 file to create (will overwrite)
+    '''
+    print()
+
+    print(f'Writing results to {output_dir}/{filename}...')
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    dicttoh5(results, os.path.join(output_dir, filename), overwrite_data=True)
+
+    print('Done.')
+    print()
 
 ####################################################################################################################
-class DataIO(common_base.CommonBase):
+def read_data(input_dir, filename):
+    '''
+    Read dictionary of ndarrays from hdf5
+    Note: all keys should be strings
 
-    #---------------------------------------------------------------
-    # Constructor
-    #---------------------------------------------------------------
-    def __init__(self, **kwargs):
-        super(DataIO, self).__init__(**kwargs)
+    :param str input_dir: directory from which to read data
+    :param str filename: name of hdf5 file to read
+    '''
+    print()
+    print(f'Loading results from {input_dir}/{filename}...')
 
-    #---------------------------------------------------------------
-    # Write nested dictionary of ndarray to hdf5 file
-    # Note: all keys should be strings
-    #---------------------------------------------------------------
-    def write_data(self, results, output_dir, filename):
-        print()
+    results = h5todict(os.path.join(input_dir, filename))
 
-        print(f'Writing results to {output_dir}/{filename}...')
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
-        dicttoh5(results, os.path.join(output_dir, filename), overwrite_data=True)
+    print('Done.')
+    print()
 
-        print('Done.')
-        print()
+    return results
 
-    #---------------------------------------------------------------
-    # Read dictionary of ndarrays from hdf5
-    # Note: all keys should be strings
-    #---------------------------------------------------------------
-    def read_data(self, input_file):
-        print()
-        print(f'Loading results from {input_file}...')
+####################################################################################################################
+def initialize_observables(table_dir, analysis_config, parameterization, validation_indices):
+    '''
+    Initialize from .dat files into a dictionary of numpy arrays
+      - We loop through all observables in the table directory for the given model and parameterization
+      - We include only those observables:
+         - That have sqrts,centrality specified in the analysis_config
+         - Whose filename contains a string from analysis_config observable_list
+      - We also separate out the design/predictions with indices in the validation set
 
-        results = h5todict(input_file)
+    Note that all of the data points are the ratio of AA/pp
 
-        print('Done.')
-        print()
+    :param str table_dir: directory where tables are located
+    :param dict analysis_config: dictionary of analysis configuration
+    :param str parameterization: name of qhat parameterization
+    :param list validation_indices: list of design point indices to be used as validation set
+    :return Return a dictionary with the following structure:
+       observables['Data'][observable_label]['y'] -- value
+                                            ['y_err'] -- total uncertainty (TODO: include uncertainty breakdowns)
+                                            ['xmin'] -- bin lower edge (used only for plotting)
+                                            ['xmax'] -- bin upper edge (used only for plotting)
+       observables['Design'][parameterization] -- design points for a given parameterization
+       observables['Prediction'][observable_label]['y'] -- value
+                                                  ['y_err'] -- statistical uncertainty
 
-        return results
+       observables['Design_validation']... -- design points for validation set
+       observables['Prediction_validation']... -- predictions for validation set
 
-    #---------------------------------------------------------------
-    # Initialize from .dat files into a dictionary of numpy arrays
-    #   - We loop through all observables in the table directory for the given model and parameterization
-    #   - We include only those observables:
-    #      - That have sqrts,centrality specified in the model_config
-    #      - Whose filename contains a string from model_config observable_list
-    #   - We also separate out the design/predictions with indices in the validation set
-    #
-    # Return a dictionary with the following structure:
-    #    observables['Data'][observable_label]['y'] -- value
-    #                                         ['y_err'] -- total uncertainty (TODO: include uncertainty breakdowns)
-    #                                         ['xmin'] -- bin lower edge (used only for plotting)
-    #                                         ['xmax'] -- bin upper edge (used only for plotting)
-    #    observables['Design'][parameterization] -- design points for a given parameterization
-    #    observables['Prediction'][observable_label]['y'] -- value
-    #                                               ['y_err'] -- statistical uncertainty
-    #
-    #    observables['Design_validation']... -- design points for validation set
-    #    observables['Prediction_validation']... -- predictions for validation set
-    #
-    # where observable_label follows the convention from the table filenames:
-    #      observable_label = f'{sqrts}__{system}__{observable_type}__{observable}__{subobservable}__{centrality}'
-    #
-    # Note that all of the data points are the ratio of AA/pp
-    #---------------------------------------------------------------
-    def initialize_observables(self, table_dir, model_config, parameterization, validation_indices):
-        print('Including the following observables:')
-    
-        # We will construct a dict containing all observables  
-        observables = self.recursive_defaultdict()
+       where observable_label follows the convention from the table filenames:
+           observable_label = f'{sqrts}__{system}__{observable_type}__{observable}__{subobservable}__{centrality}'
+    :rtype dict
+    '''
+    print('Including the following observables:')
 
-        #----------------------
-        # Read experimental data 
-        data_dir = os.path.join(table_dir, 'Data')
-        for filename in os.listdir(data_dir):
-            if self.accept_observable(model_config, filename):
+    # We will construct a dict containing all observables  
+    observables = _recursive_defaultdict()
 
-                data = np.loadtxt(os.path.join(data_dir, filename), ndmin=2)
-                data_entry = {}
-                data_entry['xmin'] = data[:,0]
-                data_entry['xmax'] = data[:,1]
-                data_entry['y'] = data[:,2]
-                data_entry['y_err'] = data[:,3]
+    #----------------------
+    # Read experimental data 
+    data_dir = os.path.join(table_dir, 'Data')
+    for filename in os.listdir(data_dir):
+        if _accept_observable(analysis_config, filename):
 
-                observable_label, _ = self.filename_to_labels(filename)
-                observables['Data'][observable_label] = data_entry
+            data = np.loadtxt(os.path.join(data_dir, filename), ndmin=2)
+            data_entry = {}
+            data_entry['xmin'] = data[:,0]
+            data_entry['xmax'] = data[:,1]
+            data_entry['y'] = data[:,2]
+            data_entry['y_err'] = data[:,3]
 
-                if 0 in data_entry['y']:
-                    sys.exit(f'{filename} has value=0')
+            observable_label, _ = _filename_to_labels(filename)
+            observables['Data'][observable_label] = data_entry
 
-        #----------------------
-        # Read design points 
-        design_dir = os.path.join(table_dir, 'Design')
-        for filename in os.listdir(design_dir):
+            if 0 in data_entry['y']:
+                sys.exit(f'{filename} has value=0')
 
-            if self.filename_to_labels(filename)[1] == parameterization: 
-                design_points = np.loadtxt(os.path.join(design_dir, filename), ndmin=2)
+    #----------------------
+    # Read design points 
+    design_dir = os.path.join(table_dir, 'Design')
+    for filename in os.listdir(design_dir):
+
+        if _filename_to_labels(filename)[1] == parameterization: 
+            design_points = np.loadtxt(os.path.join(design_dir, filename), ndmin=2)
+
+            # Separate training and validation sets into separate dicts
+            with open(os.path.join(design_dir, filename)) as f:
+                for line in f.readlines():
+                    if 'Design point indices' in line:
+                        indices = set([int(s) for s in line.split(':')[1].split()])
+            training_indices_numpy = list(indices - set(validation_indices))
+            validation_indices_numpy = list(indices.intersection(set(validation_indices)))
+            observables['Design'] = design_points[training_indices_numpy]
+            observables['Design_validation'] = design_points[validation_indices_numpy]
+
+    #----------------------
+    # Read predictions and uncertainty
+    prediction_dir = os.path.join(table_dir, 'Prediction')
+    for filename in os.listdir(prediction_dir):
+
+        if 'values' in filename and parameterization in filename:
+            if _accept_observable(analysis_config, filename):
+
+                filename_prediction_values = filename
+                filename_prediction_errors = filename.replace('values', 'errors') 
+                observable_label, _ = _filename_to_labels(filename_prediction_values)
+
+                prediction_values = np.loadtxt(os.path.join(prediction_dir, filename_prediction_values), ndmin=2)
+                prediction_errors = np.loadtxt(os.path.join(prediction_dir, filename_prediction_errors), ndmin=2)
 
                 # Separate training and validation sets into separate dicts
-                with open(os.path.join(design_dir, filename)) as f:
+                with open(os.path.join(prediction_dir, filename_prediction_values)) as f:
                     for line in f.readlines():
-                        if 'Design point indices' in line:
-                            indices = set([int(s) for s in line.split(':')[1].split()])
+                        if 'design_point' in line:
+                            indices = set([int(s[12:]) for s in line.split('#')[1].split()])
                 training_indices_numpy = list(indices - set(validation_indices))
                 validation_indices_numpy = list(indices.intersection(set(validation_indices)))
-                observables['Design'] = design_points[training_indices_numpy]
-                observables['Design_validation'] = design_points[validation_indices_numpy]
 
-        #----------------------
-        # Read predictions and uncertainty
-        prediction_dir = os.path.join(table_dir, 'Prediction')
-        for filename in os.listdir(prediction_dir):
+                observables['Prediction'][observable_label]['y'] = np.take(prediction_values, training_indices_numpy, axis=1)
+                observables['Prediction'][observable_label]['y_err'] = np.take(prediction_errors, training_indices_numpy, axis=1)
 
-            if 'values' in filename and parameterization in filename:
-                if self.accept_observable(model_config, filename):
+                observables['Prediction_validation'][observable_label]['y'] = np.take(prediction_values, validation_indices_numpy, axis=1)
+                observables['Prediction_validation'][observable_label]['y_err'] = np.take(prediction_errors, validation_indices_numpy, axis=1)
 
-                    filename_prediction_values = filename
-                    filename_prediction_errors = filename.replace('values', 'errors') 
-                    observable_label, _ = self.filename_to_labels(filename_prediction_values)
+                # TODO: Do something about bins that have value=0?
+                if 0 in prediction_values:
+                    print(f'WARNING: {filename_prediction_values} has value=0 at design points {np.where(prediction_values == 0)[1]}')
 
-                    prediction_values = np.loadtxt(os.path.join(prediction_dir, filename_prediction_values), ndmin=2)
-                    prediction_errors = np.loadtxt(os.path.join(prediction_dir, filename_prediction_errors), ndmin=2)
+                # Check that data and prediction have same observables with the same size
+                if observable_label not in observables['Data']:
+                    data_keys = observables['Data'].keys()
+                    sys.exit(f'{observable_label} not found in observables[Data]: {data_keys}')
+                
+                data_size = observables['Data'][observable_label]['y'].shape[0]
+                prediction_size = observables['Prediction'][observable_label]['y'].shape[0]
+                if data_size != prediction_size:
+                    sys.exit(f'({filename_prediction_values}) has different shape ({prediction_size}) than Data ({data_size}).')
 
-                    # Separate training and validation sets into separate dicts
-                    with open(os.path.join(prediction_dir, filename_prediction_values)) as f:
-                        for line in f.readlines():
-                            if 'design_point' in line:
-                                indices = set([int(s[12:]) for s in line.split('#')[1].split()])
-                    training_indices_numpy = list(indices - set(validation_indices))
-                    validation_indices_numpy = list(indices.intersection(set(validation_indices)))
+    #----------------------
+    # Construct covariance matrices
 
-                    observables['Prediction'][observable_label]['y'] = np.take(prediction_values, training_indices_numpy, axis=1)
-                    observables['Prediction'][observable_label]['y_err'] = np.take(prediction_errors, training_indices_numpy, axis=1)
+    #----------------------
+    # Print observables that we will use
+    [print(f'  {s}') for s in sorted(observables['Prediction'].keys())]
 
-                    observables['Prediction_validation'][observable_label]['y'] = np.take(prediction_values, validation_indices_numpy, axis=1)
-                    observables['Prediction_validation'][observable_label]['y_err'] = np.take(prediction_errors, validation_indices_numpy, axis=1)
+    return observables
 
-                    # TODO: Do something about bins that have value=0?
-                    if 0 in prediction_values:
-                        print(f'WARNING: {filename_prediction_values} has value=0 at design points {np.where(prediction_values == 0)[1]}')
+####################################################################################################################
+def observable_label_to_keys(observable_label):
+    '''
+    Parse filename into individual keys
 
-                    # Check that data and prediction have same observables with the same size
-                    if observable_label not in observables['Data']:
-                        data_keys = observables['Data'].keys()
-                        sys.exit(f'{observable_label} not found in observables[Data]: {data_keys}')
-                    
-                    data_size = observables['Data'][observable_label]['y'].shape[0]
-                    prediction_size = observables['Prediction'][observable_label]['y'].shape[0]
-                    if data_size != prediction_size:
-                        sys.exit(f'({filename_prediction_values}) has different shape ({prediction_size}) than Data ({data_size}).')
+    :param str observable_label: observable label
+    :return list of subobservables
+    :rtype list
+    '''
 
-        #----------------------
-        # Construct covariance matrices
+    observable_keys = observable_label.split('__')
 
-        #----------------------
-        # Print observables that we will use
-        [print(f'  {s}') for s in sorted(observables['Prediction'].keys())]
+    sqrts = observable_keys[0]
+    system = observable_keys[1]
+    observable_type = observable_keys[2]
+    observable = observable_keys[3]
+    subobserable = observable_keys[4]
+    centrality = observable_keys[5]
+    return sqrts, system, observable_type, observable, subobserable, centrality
 
-        return observables
+#---------------------------------------------------------------
+def _filename_to_labels(filename):
+    '''
+    Parse filename to return observable_label, parameterization
 
-    #---------------------------------------------------------------
-    # Parse filename to return observable_label, parameterization
-    #---------------------------------------------------------------
-    def filename_to_labels(self, filename):
+    :param str filename: filename to parse
+    :return list of subobservables and parameterization
+    :rtype (list, str)
+    '''
 
-        # Remove file suffix
-        filename_keys = filename[:-4].split('__')
+    # Remove file suffix
+    filename_keys = filename[:-4].split('__')
 
-        # Get table type and return observable_label, parameterization
-        data_type = filename_keys[0]
+    # Get table type and return observable_label, parameterization
+    data_type = filename_keys[0]
 
-        if data_type == 'Data':
+    if data_type == 'Data':
 
-            observable_label = '__'.join(filename_keys[1:])
-            parameterization = None
+        observable_label = '__'.join(filename_keys[1:])
+        parameterization = None
 
-        elif data_type == 'Design':
+    elif data_type == 'Design':
 
-            observable_label = None
-            parameterization = filename_keys[1]
+        observable_label = None
+        parameterization = filename_keys[1]
 
-        elif data_type == 'Prediction':
+    elif data_type == 'Prediction':
 
-            parameterization = filename_keys[1]
-            observable_label = '__'.join(filename_keys[2:-1])
-        
-        return observable_label, parameterization
+        parameterization = filename_keys[1]
+        observable_label = '__'.join(filename_keys[2:-1])
+    
+    return observable_label, parameterization
 
-    #---------------------------------------------------------------
-    # Parse filename into individual keys
-    #---------------------------------------------------------------
-    def observable_label_to_keys(self, observable_label):
+#---------------------------------------------------------------
+def _accept_observable(analysis_config, filename):
+    '''
+    Check if observable should be included in the analysis.
+    It must:
+      - Have sqrts,centrality specified in the analysis_config
+      - Have a filename that contains a string from analysis_config observable_list
 
-        observable_keys = observable_label.split('__')
+    :param dict analysis_config: dictionary of analysis configuration
+    :param str filename: filename of table for the considered observable
+    '''
 
-        sqrts = observable_keys[0]
-        system = observable_keys[1]
-        observable_type = observable_keys[2]
-        observable = observable_keys[3]
-        subobserable = observable_keys[4]
-        centrality = observable_keys[5]
-        return sqrts, system, observable_type, observable, subobserable, centrality
+    observable_label, _ = _filename_to_labels(filename)
 
-    #---------------------------------------------------------------
-    # Check if observable should be included in the analysis.
-    # It must:
-    #  - Have sqrts,centrality specified in the model_config
-    #  - Have a filename that contains a string from model_config observable_list
-    #---------------------------------------------------------------
-    def accept_observable(self, model_config, filename):
+    sqrts, _, _, _, _, centrality = observable_label_to_keys(observable_label)
 
-        observable_label, _ = self.filename_to_labels(filename)
+    # Check sqrts
+    if int(sqrts) not in analysis_config['sqrts_list']:
+        return False
 
-        sqrts, _, _, _, _, centrality = self.observable_label_to_keys(observable_label)
+    # Check centrality
+    accepted_centrality = False
+    centrality_min, centrality_max = centrality.split('-')
+    if int(centrality_min) >= analysis_config['centrality_range'][0]:
+        if int(centrality_max) <= analysis_config['centrality_range'][1]:
+            accepted_centrality = True
+    if not accepted_centrality:
+        return False
 
-        # Check sqrts
-        if int(sqrts) not in model_config['sqrts_list']:
-            return False
+    # Check observable
+    found_observable = False
+    for observable_string in analysis_config['observable_list']:
+        if observable_string in filename:
+            found_observable = True
+    if not found_observable:
+        return False
 
-        # Check centrality
-        accepted_centrality = False
-        centrality_min, centrality_max = centrality.split('-')
-        if int(centrality_min) >= model_config['centrality_range'][0]:
-            if int(centrality_max) <= model_config['centrality_range'][1]:
-                accepted_centrality = True
-        if not accepted_centrality:
-            return False
+    return True
 
-        # Check observable
-        found_observable = False
-        for observable_string in model_config['observable_list']:
-            if observable_string in filename:
-                found_observable = True
-        if not found_observable:
-            return False
+#---------------------------------------------------------------
+def _recursive_defaultdict():
+    '''
+    Create a nested defaultdict
 
-        return True
+    :return recursive defaultdict
+    '''
+    return defaultdict(_recursive_defaultdict)
