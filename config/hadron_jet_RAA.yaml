@@ -61,7 +61,7 @@ analyses:
 
 #-------------------------------------------
 # Emulator parameters
-train_emulator: True
+force_retrain: True
 n_pc: 4
 n_restarts: 50
 
