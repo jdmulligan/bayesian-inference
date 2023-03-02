@@ -16,6 +16,7 @@ import os
 import yaml
 
 import numpy as np
+import pickle
 import sklearn.preprocessing as sklearn_preprocessing
 import sklearn.decomposition as sklearn_decomposition
 import sklearn.gaussian_process as sklearn_gaussian_process
@@ -27,23 +28,24 @@ import common_base
 def fit_emulators(config):
     '''
     Do PCA, fit emulators, and write to file.
-
-    Note that the emulators map design points to PCs; the output will need to be inverted from PCA space to physical space.
+.
+    The first config.n_pc principal components (PCs) are emulated by independent Gaussian processes (GPs)
+    The emulators map design points to PCs; the output will need to be inverted from PCA space to physical space.
 
     :param EmulationConfig config: we take an instance of EmulationConfig as an argument to keep track of config info.
     '''
 
     # Check if emulator already exists
-    emulator_path = os.path.join(config.output_dir, 'emulator.pkl')
-    if os.path.exists(emulator_path):
-        if config.retrain_emulator:
-            os.remove(emulator_path)
-            print(f'Removed {emulator_path}')
+    if os.path.exists(config.emulation_outputfile):
+        if config.force_retrain:
+            os.remove(config.emulation_outputfile)
+            print(f'Removed {config.emulation_outputfile}')
         else:
-            print(f'Emulator already exists: {emulator_path} (to force retrain, set retrain_emulator: True')
+            print(f'Emulators already exist: {config.emulation_outputfile} (to force retrain, set force_retrain: True)')
+            return
 
     # Initialize observables
-    observables = data_IO.read_data(os.path.join(config.output_dir, f'{config.analysis_name}_{config.parameterization}'), 
+    observables = data_IO.read_data(config.output_dir, 
                                     filename='observables.h5')
 
     # Concatenate observables into a single 2D array: (design_point_index, observable_bins) i.e. (n_samples, n_features)
@@ -55,17 +57,31 @@ def fit_emulators(config):
             Y = values
         else:
             Y = np.concatenate([Y,values], axis=1)
-    print(f'  Total shape of data (observable_bins, n_design_points): {Y.shape}')
+    print(f'  Total shape of data (n_samples, n_features): {Y.shape}')
 
     # Use sklearn to:
     #  - Center and scale each feature (and later invert)
-    #  - Perform PCA to reduce to self.n_pc features
-    # Note: The below code assumes Y is a 2D array of format (n_samples, n_features) and returns a
-    #       2D array Z of format (n_samples, n_components) -- (see docs for StandardScaler and PCA)
-    # TODO: do we want whiten=True?
+    #  - Perform SVD-based PCA to reduce to config.n_pc features
+    #
+    # The input Y is a 2D array of format (n_samples, n_features).
+    #
+    # The output of pca.fit_transform() is a 2D array of format (n_samples, n_components), 
+    #   which is equivalent to:
+    #     Y_pca = Y.dot(pca.components_.T), where:
+    #       pca.components_ are the principal axes, sorted by decreasing explained variance -- shape (n_components, n_features)
+    #
+    # We can invert this back to the original feature space by: pca.inverse_transform(Y_pca),
+    #   which is equivalent to:
+    #     Y_reconstructed = Y_pca.dot(pca.components_)
+    #
+    # See docs for StandardScaler and PCA for further details.
+    # This post explains exactly what fit_transform,inverse_transform do: https://stackoverflow.com/a/36567821
+    #
+    # TODO: do we want whiten=True? (NOTE: beware that inverse_transform also undoes whitening)
     scaler = sklearn_preprocessing.StandardScaler()
-    pca = sklearn_decomposition.PCA(svd_solver='full', whiten=True) # Include all PCs here, so we can access them later
-    Z = pca.fit_transform(scaler.fit_transform(Y))[:,:config.n_pc]    # Select PCs here
+    pca = sklearn_decomposition.PCA(svd_solver='full', whiten=False) # Include all PCs here, so we can access them later
+    Y_pca = pca.fit_transform(scaler.fit_transform(Y))
+    Y_pca_truncated = Y_pca[:,:config.n_pc]    # Select PCs here
     explained_variance_ratio = pca.explained_variance_ratio_
     print(f'  Variance explained by first {config.n_pc} components: {np.sum(explained_variance_ratio[:config.n_pc])}')
 
@@ -96,12 +112,20 @@ def fit_emulators(config):
     print()
     print(f'Fitting GPs...')
     print(f'  The design has {design.shape[1]} parameters')
-    gps = [sklearn_gaussian_process.GaussianProcessRegressor(kernel=kernel, 
+    emulators = [sklearn_gaussian_process.GaussianProcessRegressor(kernel=kernel, 
                                                              alpha=alpha,
                                                              n_restarts_optimizer=config.n_restarts,
-                                                             copy_X_train=False).fit(design, z) for z in Z.T]
+                                                             copy_X_train=False).fit(design, y) for y in Y_pca_truncated.T]
 
-    # Write the emulators to file
+    # Write all info we want to file
+    output_dict = {}
+    output_dict['PCA'] = {}
+    output_dict['PCA']['Y'] = Y
+    output_dict['PCA']['Y_pca'] = Y_pca
+    output_dict['PCA']['pca'] = pca
+    output_dict['emulators'] = emulators
+    with open(config.emulation_outputfile, 'wb') as f:
+	    pickle.dump(output_dict, f)
 
 ####################################################################################################################
 class EmulationConfig(common_base.CommonBase):
@@ -111,11 +135,12 @@ class EmulationConfig(common_base.CommonBase):
     #---------------------------------------------------------------
     def __init__(self, analysis_name='', parameterization='', analysis_config='', config_file='', output_dir='', **kwargs):
 
-        self.analysis_name = analysis_name
+        self.output_dir = os.path.join(output_dir, f'{analysis_name}_{parameterization}')
+        self.emulation_outputfile = os.path.join(self.output_dir, 'emulation.pkl')
+
         self.parameterization = parameterization
         self.analysis_config = analysis_config
         self.config_file = config_file
-        self.output_dir = output_dir
 
         with open(self.config_file, 'r') as stream:
             config = yaml.safe_load(stream)

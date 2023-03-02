@@ -13,6 +13,7 @@ import yaml
 
 import data_IO
 import emulation
+import plot_emulation
 
 import common_base
 
@@ -68,6 +69,7 @@ class SteerAnalysis(common_base.CommonBase):
                 # We store them in a dict and write/read it to HDF5
                 if self.initialize_observables:
                     print()
+                    print('========================================================================')
                     print(f'Initializing model: {analysis_name} ({parameterization} parameterization)...')
 
                     # We separate out the validation indices specified in the config
@@ -84,7 +86,7 @@ class SteerAnalysis(common_base.CommonBase):
 
                 # Fit emulators and write them to file
                 if self.fit_emulators:
-                    print()
+                    print('------------------------------------------------------------------------')
                     print(f'Fitting emulators for {analysis_name}_{parameterization}...')
                     emulation_config = emulation.EmulationConfig(analysis_name=analysis_name,
                                                                  parameterization=parameterization,
@@ -96,6 +98,7 @@ class SteerAnalysis(common_base.CommonBase):
                 # Run MCMC
                 if self.run_mcmc:
                     print()
+                    print('------------------------------------------------------------------------')
                     print(f'Running MCMC for {analysis_name}_{parameterization}...')
                 
         # Plot   
@@ -103,8 +106,23 @@ class SteerAnalysis(common_base.CommonBase):
 
             # Plots for individual analysis
             for analysis_name,analysis_config in self.analyses.items():
-                for parameterization in analysis_config['parameterizations']:            
-                    continue
+                for parameterization in analysis_config['parameterizations']:   
+
+                    print('========================================================================')
+                    print(f'Plotting for {analysis_name} ({parameterization} parameterization)...')
+                    print()         
+                    
+                    print('------------------------------------------------------------------------')
+                    print(f'Plotting emulators for {analysis_name}_{parameterization}...')
+                    emulation_config = emulation.EmulationConfig(analysis_name=analysis_name,
+                                                                 parameterization=parameterization,
+                                                                 analysis_config=analysis_config,
+                                                                 config_file=self.config_file,
+                                                                 output_dir=self.output_dir)
+                    plot_emulation.plot(emulation_config)
+
+
+                    print()
 
             # Plots across multiple analyses
 
