@@ -44,20 +44,9 @@ def fit_emulators(config):
             print(f'Emulators already exist: {config.emulation_outputfile} (to force retrain, set force_retrain: True)')
             return
 
-    # Initialize observables
-    observables = data_IO.read_data(config.output_dir, 
-                                    filename='observables.h5')
-
-    # Concatenate observables into a single 2D array: (design_point_index, observable_bins) i.e. (n_samples, n_features)
-    print(f'Doing PCA...')
-    observable_list = observables['Prediction'].keys()
-    for i,observable_label in enumerate(observable_list):
-        values = observables['Prediction'][observable_label]['y'].T
-        if i==0:
-            Y = values
-        else:
-            Y = np.concatenate([Y,values], axis=1)
-    print(f'  Total shape of data (n_samples, n_features): {Y.shape}')
+    # Initialize predictions into a single 2D array: (design_point_index, observable_bins) i.e. (n_samples, n_features)
+    # A consistent order of observables is enforced internally in data_IO 
+    Y = data_IO.predictions_matrix_from_h5(config.output_dir, filename='observables.h5')
 
     # Use sklearn to:
     #  - Center and scale each feature (and later invert)
@@ -86,7 +75,7 @@ def fit_emulators(config):
     print(f'  Variance explained by first {config.n_pc} components: {np.sum(explained_variance_ratio[:config.n_pc])}')
 
     # Get design
-    design = observables['Design']
+    design = data_IO.design_array_from_h5(config.output_dir, filename='observables.h5')
 
     # Define GP kernel (covariance function)
     # TODO: abstract parameters / choices to config file
@@ -145,6 +134,7 @@ class EmulationConfig(common_base.CommonBase):
         with open(self.config_file, 'r') as stream:
             config = yaml.safe_load(stream)
 
+        self.observable_config_dir = config['observable_config_dir']
         self.force_retrain = config['force_retrain']
         self.n_pc = config['n_pc']
         self.n_restarts = config['n_restarts']

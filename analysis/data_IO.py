@@ -3,9 +3,12 @@
 Module related to reading and writing of tables of observables into numpy arrays
 
 The main functionalities are:
- - read_data()/write_data() -- read/write nested dict of numpy arrays to HDF5  
- - initialize_observables() -- read design/prediction/data tables (.dat files) into nested dictionary of numpy arrays 
+ - initialize_observables_dict_from_tables() -- read design/prediction/data tables (.dat files) into nested dictionary of numpy arrays
+ - read/write_dict_to_h5() -- read/write nested dict of numpy arrays to HDF5  
+ - predictions_matrix_from_h5() -- construct prediction matrix (design_points, observable_bins) from observables.h5 
+ - design_array_from_h5() -- read design points from observables.h5 
  - observable_label_to_keys() -- convert observable string label to list of subobservables strings
+ - sorted_observable_list_from_dict() -- get sorted list of observable_label keys, using fixed ordering convention that we enforce
 
 authors: J.Mulligan, R.Ehlers
 '''
@@ -13,49 +16,12 @@ authors: J.Mulligan, R.Ehlers
 import os
 import sys
 from collections import defaultdict
+from operator import itemgetter
 import numpy as np
 from silx.io.dictdump import dicttoh5, h5todict
 
 ####################################################################################################################
-def write_data(results, output_dir, filename):
-    '''
-    Write nested dictionary of ndarray to hdf5 file
-    Note: all keys should be strings
-
-    :param str output_dir: directory to write to
-    :param str filename: name of hdf5 file to create (will overwrite)
-    '''
-    print()
-
-    print(f'Writing results to {output_dir}/{filename}...')
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-    dicttoh5(results, os.path.join(output_dir, filename), overwrite_data=True)
-
-    print('Done.')
-    print()
-
-####################################################################################################################
-def read_data(input_dir, filename):
-    '''
-    Read dictionary of ndarrays from hdf5
-    Note: all keys should be strings
-
-    :param str input_dir: directory from which to read data
-    :param str filename: name of hdf5 file to read
-    '''
-    print()
-    print(f'Loading results from {input_dir}/{filename}...')
-
-    results = h5todict(os.path.join(input_dir, filename))
-
-    print('Done.')
-    print()
-
-    return results
-
-####################################################################################################################
-def initialize_observables(table_dir, analysis_config, parameterization, validation_indices):
+def initialize_observables_dict_from_tables(table_dir, analysis_config, parameterization, validation_indices):
     '''
     Initialize from .dat files into a dictionary of numpy arrays
       - We loop through all observables in the table directory for the given model and parameterization
@@ -181,6 +147,89 @@ def initialize_observables(table_dir, analysis_config, parameterization, validat
     return observables
 
 ####################################################################################################################
+def write_dict_to_h5(results, output_dir, filename):
+    '''
+    Write nested dictionary of ndarray to hdf5 file
+    Note: all keys should be strings
+
+    :param dict results: (nested) dictionary to write
+    :param str output_dir: directory to write to
+    :param str filename: name of hdf5 file to create (will overwrite)
+    '''
+    print()
+
+    print(f'Writing results to {output_dir}/{filename}...')
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    dicttoh5(results, os.path.join(output_dir, filename), overwrite_data=True)
+
+    print('Done.')
+    print()
+
+####################################################################################################################
+def read_dict_from_h5(input_dir, filename):
+    '''
+    Read dictionary of ndarrays from hdf5
+    Note: all keys should be strings
+
+    :param str input_dir: directory from which to read data
+    :param str filename: name of hdf5 file to read
+    '''
+    print()
+    print(f'Loading results from {input_dir}/{filename}...')
+
+    results = h5todict(os.path.join(input_dir, filename))
+
+    print('Done.')
+    print()
+
+    return results
+
+####################################################################################################################
+def predictions_matrix_from_h5(output_dir, filename):
+    '''
+    Initialize predictions from observables.h5 file into a single 2D array: 
+
+    :param str output_dir: location of filename
+    :param str filename: h5 filename (typically 'observables.h5')
+    :return 2darray Y: matrix of predictions at all design points (design_point_index, observable_bins) i.e. (n_samples, n_features)
+    '''
+    
+    # Initialize observables dict from observables.h5 file
+    observables = read_dict_from_h5(output_dir, filename)
+
+    # Sort observables, to keep well-defined ordering in matrix
+    sorted_observable_list = sorted_observable_list_from_dict(observables)
+
+    # Loop through sorted observables and concatenate them into a single 2D array: 
+    #   (design_point_index, observable_bins) i.e. (n_samples, n_features)
+    print(f'Doing PCA...')
+    for i,observable_label in enumerate(sorted_observable_list):
+        values = observables['Prediction'][observable_label]['y'].T
+        if i==0:
+            Y = values
+        else:
+            Y = np.concatenate([Y,values], axis=1)
+    print(f'  Total shape of data (n_samples, n_features): {Y.shape}')
+
+    return Y
+
+####################################################################################################################
+def design_array_from_h5(output_dir, filename):
+    '''
+    Initialize design array from observables.h5 file
+
+    :param str output_dir: location of filename
+    :param str filename: h5 filename (typically 'observables.h5')
+    :return 2darray design: array of design points
+    '''
+
+    # Initialize observables dict from observables.h5 file
+    observables = read_dict_from_h5(output_dir, filename)
+    design = observables['Design']
+    return design
+
+####################################################################################################################
 def observable_label_to_keys(observable_label):
     '''
     Parse filename into individual keys
@@ -199,6 +248,44 @@ def observable_label_to_keys(observable_label):
     subobserable = observable_keys[4]
     centrality = observable_keys[5]
     return sqrts, system, observable_type, observable, subobserable, centrality
+
+####################################################################################################################
+def sorted_observable_list_from_dict(observables):
+    '''
+    Define a sorted list of observable_labels from the keys of the observables dict, to keep well-defined ordering in matrix 
+
+    :param dict observables: dictionary containing predictions/design/data
+    :return list[str] sorted_observable_list: list of observable labels
+    '''
+    
+    # Sort observables, to keep well-defined ordering in matrix
+    sorted_observable_list = _sort_observable_labels(list(observables['Prediction'].keys()))
+    return sorted_observable_list
+
+#---------------------------------------------------------------
+def _sort_observable_labels(unordered_observable_labels):
+    '''
+    Sort list of observable keys by observable_type, observable, subobservable, centrality, sqrts.
+    TODO: Instead of a fixed sorting, we may want to allow the user to specify list of sort 
+          criteria to apply, e.g. list of regex to iteratively sort by.
+
+    :param list[str] observable_labels: unordered list of observable_label keys
+    :return list[str] sorted_observable_labels: sorted observable_labels
+    '''
+
+    # First, sort the observable_labels to ensure an unambiguous ordering
+    ordered_observable_labels = sorted(unordered_observable_labels)
+
+    # Get the individual keys from the observable_label
+    x = [observable_label_to_keys(observable_label) for observable_label in ordered_observable_labels]
+
+    # Sort by (in order): observable_type, observable, subobservable, centrality, sqrts
+    sorted_observable_label_tuples = sorted(x, key=itemgetter(2,3,4,5,0))
+
+    # Reconstruct the observable_key 
+    sorted_observable_labels = ['__'.join(x) for x in sorted_observable_label_tuples]
+
+    return sorted_observable_labels
 
 #---------------------------------------------------------------
 def _filename_to_labels(filename):
