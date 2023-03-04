@@ -147,7 +147,7 @@ def initialize_observables_dict_from_tables(table_dir, analysis_config, paramete
     return observables
 
 ####################################################################################################################
-def write_dict_to_h5(results, output_dir, filename):
+def write_dict_to_h5(results, output_dir, filename, verbose=True):
     '''
     Write nested dictionary of ndarray to hdf5 file
     Note: all keys should be strings
@@ -156,18 +156,20 @@ def write_dict_to_h5(results, output_dir, filename):
     :param str output_dir: directory to write to
     :param str filename: name of hdf5 file to create (will overwrite)
     '''
-    print()
+    if verbose:
+        print()
+        print(f'Writing results to {output_dir}/{filename}...')
 
-    print(f'Writing results to {output_dir}/{filename}...')
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     dicttoh5(results, os.path.join(output_dir, filename), overwrite_data=True)
 
-    print('Done.')
-    print()
+    if verbose:
+        print('Done.')
+        print()
 
 ####################################################################################################################
-def read_dict_from_h5(input_dir, filename):
+def read_dict_from_h5(input_dir, filename, verbose=True):
     '''
     Read dictionary of ndarrays from hdf5
     Note: all keys should be strings
@@ -175,13 +177,15 @@ def read_dict_from_h5(input_dir, filename):
     :param str input_dir: directory from which to read data
     :param str filename: name of hdf5 file to read
     '''
-    print()
-    print(f'Loading results from {input_dir}/{filename}...')
+    if verbose:
+        print()
+        print(f'Loading results from {input_dir}/{filename}...')
 
     results = h5todict(os.path.join(input_dir, filename))
 
-    print('Done.')
-    print()
+    if verbose:
+        print('Done.')
+        print()
 
     return results
 
@@ -225,9 +229,49 @@ def design_array_from_h5(output_dir, filename):
     '''
 
     # Initialize observables dict from observables.h5 file
-    observables = read_dict_from_h5(output_dir, filename)
+    observables = read_dict_from_h5(output_dir, filename, verbose=False)
     design = observables['Design']
     return design
+
+####################################################################################################################
+def data_array_from_h5(output_dir, filename):
+    '''
+    Initialize data array from observables.h5 file
+
+    :param str output_dir: location of filename
+    :param str filename: h5 filename (typically 'observables.h5')
+    :return 2darray data: arrays of data points (columns of data[observable_label]: xmin xmax y y_err)
+    '''
+
+    # Initialize observables dict from observables.h5 file
+    observables = read_dict_from_h5(output_dir, filename, verbose=False)
+    data = observables['Data']
+    return data
+
+####################################################################################################################
+def prediction_dict_from_matrix(Y, observables):
+    '''
+    Translate matrix of stacked observables to a dict of matrices per observable 
+
+    :param ndarray Y: 2D array: (design_point_index, observable_bins)
+    :param dict observables: dict 
+    :return dict[ndarray] Y_dict: dict with ndarray for each observable
+    '''
+
+    Y_dict = {}
+
+    # Loop through sorted list of observables
+    sorted_observable_list = sorted_observable_list_from_dict(observables)
+    current_bin = 0
+    for observable_label in sorted_observable_list:
+        n_bins = observables['Prediction'][observable_label]['y'].shape[0]
+        Y_dict[observable_label] = Y[:,current_bin:current_bin+n_bins]
+        current_bin += n_bins
+
+    # Check that the total number of bins is correct
+    assert current_bin == Y.shape[1]
+
+    return Y_dict
 
 ####################################################################################################################
 def observable_label_to_keys(observable_label):
