@@ -4,10 +4,10 @@
 
 output_dir: '/home/james/jetscape-docker/bayesian-inference/output/20230227'
 
-initialize_observables: True
-fit_emulators: True
+initialize_observables: False
+fit_emulators: False
 run_mcmc: False
-plot: False
+plot: True
 
 debug_level: 0
 
@@ -53,11 +53,13 @@ analyses:
     <<: *model_base
     observable_list:
       - 'hadron__pt_'
+    plot_panel_shapes: [[3,3], [3,3]]
 
   analysis2:
     <<: *model_base
     observable_list:
       - 'jet__pt_'
+    plot_panel_shapes: [[3,3], [3,3], [3,3]]
 
 #-------------------------------------------
 # Emulator parameters
