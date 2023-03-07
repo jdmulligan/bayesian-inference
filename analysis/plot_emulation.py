@@ -114,14 +114,19 @@ def _plot_pca_reconstruction_observables(results, config, plot_dir):
     plot_config_dir = config.observable_config_dir
 
     # Get data (Note: this is where the bin values are stored)
-    data = data_IO.data_array_from_h5(config.output_dir, filename='observables.h5')
+    data = data_IO.data_array_from_h5(config.output_dir, filename='observables.h5', 
+                                      observable_table_dir=config.observable_table_dir)
 
     # Get sorted list of observables
     observables = data_IO.read_dict_from_h5(config.output_dir, 'observables.h5')
     sorted_observable_list = data_IO.sorted_observable_list_from_dict(observables)
 
     # Translate matrix of stacked observables to a dict of matrices per observable 
-    Y_dict = data_IO.prediction_dict_from_matrix(Y, observables)
+    Y_dict = data_IO.prediction_dict_from_matrix(Y, observables, 
+                                                 observable_table_dir=config.observable_table_dir, 
+                                                 parameterization=config.parameterization,
+                                                 analysis_config=config.analysis_config,
+                                                 validation_set=False)
     Y_dict_truncated_reconstructed = data_IO.prediction_dict_from_matrix(Y_truncated_reconstructed, observables)
 
     #-----

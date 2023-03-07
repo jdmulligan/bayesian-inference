@@ -21,7 +21,7 @@ import numpy as np
 from silx.io.dictdump import dicttoh5, h5todict
 
 ####################################################################################################################
-def initialize_observables_dict_from_tables(table_dir, analysis_config, parameterization, validation_indices):
+def initialize_observables_dict_from_tables(table_dir, analysis_config, parameterization):
     '''
     Initialize from .dat files into a dictionary of numpy arrays
       - We loop through all observables in the table directory for the given model and parameterization
@@ -35,7 +35,6 @@ def initialize_observables_dict_from_tables(table_dir, analysis_config, paramete
     :param str table_dir: directory where tables are located
     :param dict analysis_config: dictionary of analysis configuration
     :param str parameterization: name of qhat parameterization
-    :param list validation_indices: list of design point indices to be used as validation set
     :return Return a dictionary with the following structure:
        observables['Data'][observable_label]['y'] -- value
                                             ['y_err'] -- total uncertainty (TODO: include uncertainty breakdowns)
@@ -56,6 +55,10 @@ def initialize_observables_dict_from_tables(table_dir, analysis_config, paramete
 
     # We will construct a dict containing all observables  
     observables = _recursive_defaultdict()
+
+    # We separate out the validation indices specified in the config
+    validation_range = analysis_config['validation_indices']
+    validation_indices = range(validation_range[0], validation_range[1])
 
     #----------------------
     # Read experimental data 
@@ -85,12 +88,7 @@ def initialize_observables_dict_from_tables(table_dir, analysis_config, paramete
             design_points = np.loadtxt(os.path.join(design_dir, filename), ndmin=2)
 
             # Separate training and validation sets into separate dicts
-            with open(os.path.join(design_dir, filename)) as f:
-                for line in f.readlines():
-                    if 'Design point indices' in line:
-                        indices = set([int(s) for s in line.split(':')[1].split()])
-            training_indices_numpy = list(indices - set(validation_indices))
-            validation_indices_numpy = list(indices.intersection(set(validation_indices)))
+            training_indices_numpy, validation_indices_numpy = _split_training_validation_indices(validation_indices, table_dir, parameterization)
             observables['Design'] = design_points[training_indices_numpy]
             observables['Design_validation'] = design_points[validation_indices_numpy]
 
@@ -234,7 +232,7 @@ def design_array_from_h5(output_dir, filename):
     return design
 
 ####################################################################################################################
-def data_array_from_h5(output_dir, filename):
+def data_array_from_h5(output_dir, filename, observable_table_dir=None):
     '''
     Initialize data array from observables.h5 file
 
@@ -246,15 +244,32 @@ def data_array_from_h5(output_dir, filename):
     # Initialize observables dict from observables.h5 file
     observables = read_dict_from_h5(output_dir, filename, verbose=False)
     data = observables['Data']
+
+    # Check that data matches original table (if observable_table_dir is specified)
+    if observable_table_dir:
+        data_table_dir = os.path.join(observable_table_dir, 'Data')
+        for observable_label in observables['Data'].keys():
+            data_table_filename = f'Data__{observable_label}.dat'
+            data_table = np.loadtxt(os.path.join(data_table_dir, data_table_filename), ndmin=2)
+            assert np.allclose(data[observable_label]['xmin'], data_table[:,0])
+            assert np.allclose(data[observable_label]['xmax'], data_table[:,1])
+            assert np.allclose(data[observable_label]['y'], data_table[:,2])
+            assert np.allclose(data[observable_label]['y_err'] , data_table[:,3])
+    
     return data
 
 ####################################################################################################################
-def prediction_dict_from_matrix(Y, observables):
+def prediction_dict_from_matrix(Y, observables, 
+                                observable_table_dir=None, parameterization=None, analysis_config=None, validation_set=False):
     '''
     Translate matrix of stacked observables to a dict of matrices per observable 
 
     :param ndarray Y: 2D array: (design_point_index, observable_bins)
     :param dict observables: dict 
+    :param str observable_table_dir: (optional, only needed to check against table values) 
+    :param str parameterization: (optional, only needed to check against table values) 
+    :param str validation_range: (optional, only needed to check against table values) 
+    :param str validation_set: (optional, only needed to check against table values) 
     :return dict[ndarray] Y_dict: dict with ndarray for each observable
     '''
 
@@ -270,6 +285,26 @@ def prediction_dict_from_matrix(Y, observables):
 
     # Check that the total number of bins is correct
     assert current_bin == Y.shape[1]
+
+    # Check that prediction matches original table (if observable_table_dir, parameterization,validation_indices are specified)
+    # If validation_set, select the validation indices; otherwise, select the training indices
+    if observable_table_dir and parameterization and analysis_config:
+
+        validation_range = analysis_config['validation_indices']
+        validation_indices = range(validation_range[0], validation_range[1])
+        training_indices_numpy, validation_indices = _split_training_validation_indices(validation_indices, observable_table_dir, parameterization)
+        if validation_set:
+            indices_numpy = validation_indices
+        else:
+            indices_numpy = training_indices_numpy
+
+        prediction_table_dir = os.path.join(observable_table_dir, 'Prediction')
+        for observable_label in sorted_observable_list:
+            prediction_table_filename = f'Prediction__{parameterization}__{observable_label}__values.dat'
+            prediction_table = np.loadtxt(os.path.join(prediction_table_dir, prediction_table_filename), ndmin=2)
+            prediction_table_selected = np.take(prediction_table, indices_numpy, axis=1).T
+            assert np.allclose(Y_dict[observable_label], prediction_table_selected), \
+                               f'{observable_label} (design point 0) \n prediction: {Y_dict[observable_label][0,:]} \n prediction (table): {prediction_table_selected[0,:]}'
 
     return Y_dict
 
@@ -402,6 +437,28 @@ def _accept_observable(analysis_config, filename):
         return False
 
     return True
+
+#---------------------------------------------------------------
+def _split_training_validation_indices(validation_indices, observable_table_dir, parameterization):
+    '''
+    Get numpy indices of training and validation sets
+
+    :param list[int] validation_indices: list of validation indices
+    :param str observable_table_dir: location of table dir
+    :param str parameterization: qhat parameterization type
+    '''
+        
+    # Get training set or validation set
+    design_table_dir = os.path.join(observable_table_dir, 'Design')
+    design_filename = f'Design__{parameterization}.dat'
+    with open(os.path.join(design_table_dir, design_filename)) as f:
+        for line in f.readlines():
+            if 'Design point indices' in line:
+                indices = set([int(s) for s in line.split(':')[1].split()])
+    training_indices_numpy = list(indices - set(validation_indices))
+    validation_indices_numpy = list(indices.intersection(set(validation_indices)))
+
+    return training_indices_numpy, validation_indices_numpy
 
 #---------------------------------------------------------------
 def _recursive_defaultdict():

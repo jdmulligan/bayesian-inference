@@ -134,6 +134,7 @@ class EmulationConfig(common_base.CommonBase):
         with open(self.config_file, 'r') as stream:
             config = yaml.safe_load(stream)
 
+        self.observable_table_dir = config['observable_table_dir']
         self.observable_config_dir = config['observable_config_dir']
         self.force_retrain = config['force_retrain']
         self.n_pc = config['n_pc']

@@ -71,15 +71,9 @@ class SteerAnalysis(common_base.CommonBase):
                     print()
                     print('========================================================================')
                     print(f'Initializing model: {analysis_name} ({parameterization} parameterization)...')
-
-                    # We separate out the validation indices specified in the config
-                    validation_range = analysis_config['validation_indices']
-                    validation_indices = range(validation_range[0], validation_range[1])
-
                     observables = data_IO.initialize_observables_dict_from_tables(self.observable_table_dir, 
                                                                                   analysis_config, 
-                                                                                  parameterization,
-                                                                                  validation_indices)
+                                                                                  parameterization)
                     data_IO.write_dict_to_h5(observables, 
                                              os.path.join(self.output_dir, f'{analysis_name}_{parameterization}'), 
                                              filename='observables.h5')
