@@ -188,7 +188,7 @@ def read_dict_from_h5(input_dir, filename, verbose=True):
     return results
 
 ####################################################################################################################
-def predictions_matrix_from_h5(output_dir, filename):
+def predictions_matrix_from_h5(output_dir, filename, validation_set=False):
     '''
     Initialize predictions from observables.h5 file into a single 2D array: 
 
@@ -198,26 +198,31 @@ def predictions_matrix_from_h5(output_dir, filename):
     '''
     
     # Initialize observables dict from observables.h5 file
-    observables = read_dict_from_h5(output_dir, filename)
+    observables = read_dict_from_h5(output_dir, filename, verbose=False)
 
     # Sort observables, to keep well-defined ordering in matrix
     sorted_observable_list = sorted_observable_list_from_dict(observables)
 
+    # Set dictionary key
+    if validation_set:
+        prediction_label = 'Prediction_validation'
+    else:
+        prediction_label = 'Prediction'
+
     # Loop through sorted observables and concatenate them into a single 2D array: 
     #   (design_point_index, observable_bins) i.e. (n_samples, n_features)
-    print(f'Doing PCA...')
     for i,observable_label in enumerate(sorted_observable_list):
-        values = observables['Prediction'][observable_label]['y'].T
+        values = observables[prediction_label][observable_label]['y'].T
         if i==0:
             Y = values
         else:
             Y = np.concatenate([Y,values], axis=1)
-    print(f'  Total shape of data (n_samples, n_features): {Y.shape}')
+    print(f'  Total shape of {prediction_label} data (n_samples, n_features): {Y.shape}')
 
     return Y
 
 ####################################################################################################################
-def design_array_from_h5(output_dir, filename):
+def design_array_from_h5(output_dir, filename, validation_set=False):
     '''
     Initialize design array from observables.h5 file
 
@@ -228,7 +233,10 @@ def design_array_from_h5(output_dir, filename):
 
     # Initialize observables dict from observables.h5 file
     observables = read_dict_from_h5(output_dir, filename, verbose=False)
-    design = observables['Design']
+    if validation_set:
+        design = observables['Design_validation']
+    else:
+        design = observables['Design']
     return design
 
 ####################################################################################################################
@@ -259,8 +267,7 @@ def data_array_from_h5(output_dir, filename, observable_table_dir=None):
     return data
 
 ####################################################################################################################
-def prediction_dict_from_matrix(Y, observables, 
-                                observable_table_dir=None, parameterization=None, analysis_config=None, validation_set=False):
+def prediction_dict_from_matrix(Y, observables, config=None, validation_set=False):
     '''
     Translate matrix of stacked observables to a dict of matrices per observable 
 
@@ -278,8 +285,12 @@ def prediction_dict_from_matrix(Y, observables,
     # Loop through sorted list of observables
     sorted_observable_list = sorted_observable_list_from_dict(observables)
     current_bin = 0
+    if validation_set:
+        prediction_key = 'Prediction_validation'
+    else:
+        prediction_key = 'Prediction'
     for observable_label in sorted_observable_list:
-        n_bins = observables['Prediction'][observable_label]['y'].shape[0]
+        n_bins = observables[prediction_key][observable_label]['y'].shape[0]
         Y_dict[observable_label] = Y[:,current_bin:current_bin+n_bins]
         current_bin += n_bins
 
@@ -288,19 +299,19 @@ def prediction_dict_from_matrix(Y, observables,
 
     # Check that prediction matches original table (if observable_table_dir, parameterization,validation_indices are specified)
     # If validation_set, select the validation indices; otherwise, select the training indices
-    if observable_table_dir and parameterization and analysis_config:
+    if config:
 
-        validation_range = analysis_config['validation_indices']
+        validation_range = config.analysis_config['validation_indices']
         validation_indices = range(validation_range[0], validation_range[1])
-        training_indices_numpy, validation_indices = _split_training_validation_indices(validation_indices, observable_table_dir, parameterization)
+        training_indices_numpy, validation_indices = _split_training_validation_indices(validation_indices, config.observable_table_dir, config.parameterization)
         if validation_set:
             indices_numpy = validation_indices
         else:
             indices_numpy = training_indices_numpy
 
-        prediction_table_dir = os.path.join(observable_table_dir, 'Prediction')
+        prediction_table_dir = os.path.join(config.observable_table_dir, 'Prediction')
         for observable_label in sorted_observable_list:
-            prediction_table_filename = f'Prediction__{parameterization}__{observable_label}__values.dat'
+            prediction_table_filename = f'Prediction__{config.parameterization}__{observable_label}__values.dat'
             prediction_table = np.loadtxt(os.path.join(prediction_table_dir, prediction_table_filename), ndmin=2)
             prediction_table_selected = np.take(prediction_table, indices_numpy, axis=1).T
             assert np.allclose(Y_dict[observable_label], prediction_table_selected), \

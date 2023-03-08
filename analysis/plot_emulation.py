@@ -16,6 +16,7 @@ import seaborn as sns
 sns.set_context('paper', rc={'font.size':18,'axes.titlesize':18,'axes.labelsize':18})
 
 import data_IO
+import emulation
 
 ####################################################################################################################
 def plot(config):
@@ -46,6 +47,8 @@ def plot(config):
     _plot_pca_reconstruction_observables(results, config, plot_dir)
 
     # Emulator plots
+    _plot_emulator_results_observables(results, config, plot_dir, validation_set=False)
+    _plot_emulator_results_observables(results, config, plot_dir, validation_set=True)
 
 #---------------------------------------------------------------
 def _plot_pca_explained_variance(results, plot_dir):
@@ -103,35 +106,76 @@ def _plot_pca_reconstruction_observables(results, config, plot_dir):
     Plot observables before and after PCA -- for fixed n_pc
     '''
 
-    # Y, Y_truncated_reconstructed are 2D arrays: (design_point_index, observable_bins)
-    pca = results['PCA']['pca'] 
+    # Get PCA results -- 2D arrays: (design_point_index, observable_bins)
     Y = results['PCA']['Y']
-    Y_pca = results['PCA']['Y_pca']
-    Y_pca_truncated = Y_pca[:,:config.n_pc]
-    Y_truncated_reconstructed = Y_pca_truncated.dot(pca.components_[:config.n_pc,:])
+    Y_reconstructed_truncated = results['PCA']['Y_reconstructed_truncated']
+    # Translate matrix of stacked observables to a dict of matrices per observable
+    observables = data_IO.read_dict_from_h5(config.output_dir, 'observables.h5')
+    Y_dict = data_IO.prediction_dict_from_matrix(Y, observables, config, validation_set=False)
+    Y_dict_truncated_reconstructed = data_IO.prediction_dict_from_matrix(Y_reconstructed_truncated, observables, validation_set=False)
 
-    # We will use the JETSCAPE-analysis config files for plotting metadata
-    plot_config_dir = config.observable_config_dir
+    # Pass in a list of dicts to plot, each of which has structure Y[observable_label][design_point_index]
+    plot_list = [Y_dict, Y_dict_truncated_reconstructed]
+    labels = [r'JETSCAPE', r'JETSCAPE (reconstructed)']
+    colors = [sns.xkcd_rgb['dark sky blue'], sns.xkcd_rgb['denim blue']] # sns.xkcd_rgb['light blue'], sns.xkcd_rgb['pale red'] 
+    design_point_index = 0
+    filename = f'PCA_observables__design_point{design_point_index}'
+    _plot_observable_panels(plot_list, labels, colors, design_point_index, config, plot_dir, filename)
+
+#-------------------------------------------------------------------------------------------
+def _plot_emulator_results_observables(results, config, plot_dir, validation_set=False):
+    '''
+    '''
+
+    # Get observables
+    observables = data_IO.read_dict_from_h5(config.output_dir, 'observables.h5', verbose=False)
+
+    # Get design points
+    design = data_IO.design_array_from_h5(config.output_dir, filename='observables.h5', validation_set=validation_set)
+
+    # Get JETSCAPE predictions
+    Y = data_IO.predictions_matrix_from_h5(config.output_dir, filename='observables.h5', validation_set=validation_set)
+    # Translate matrix of stacked observables to a dict of matrices per observable
+    Y_dict = data_IO.prediction_dict_from_matrix(Y, observables, config, validation_set=validation_set)
+
+    # Get emulator predictions
+    emulator_predictions_training = emulation.predict(design, results, config, validation_set=validation_set)
+
+    # Plot
+    design_point_index = 0
+    if validation_set:
+        plot_list = [Y_dict, emulator_predictions_training]
+        labels = [r'JETSCAPE', r'Emulator']
+        colors = [sns.xkcd_rgb['dark sky blue'], sns.xkcd_rgb['light blue']] 
+        filename = f'emulator_observables_validation_design_point{design_point_index}'
+    else:
+        # Get PCA results -- 2D arrays: (design_point_index, observable_bins)
+        Y_reconstructed_truncated = results['PCA']['Y_reconstructed_truncated']
+        # Translate matrix of stacked observables to a dict of matrices per observable
+        Y_dict_truncated_reconstructed = data_IO.prediction_dict_from_matrix(Y_reconstructed_truncated, observables, validation_set=validation_set)
+
+        plot_list = [Y_dict, Y_dict_truncated_reconstructed, emulator_predictions_training]
+        labels = [r'JETSCAPE', r'JETSCAPE (reconstructed)', r'Emulator']
+        colors = [sns.xkcd_rgb['dark sky blue'], sns.xkcd_rgb['denim blue'], sns.xkcd_rgb['light blue']]
+        filename = f'emulator_observables_training__design_point{design_point_index}'
+    _plot_observable_panels(plot_list, labels, colors, design_point_index, config, plot_dir, filename)
+
+#---------------------------------------------------------------
+def _plot_observable_panels(plot_list, labels, colors, design_point_index, config, plot_dir, filename):
+    '''
+    Plot observables before and after PCA -- for fixed n_pc
+    '''
+    #-----
+    # Loop through observables and plot 
+    # TODO: probably want to put the main pieces of this functionality in plot_base.py or something
+
+    # Get sorted list of observables
+    observables = data_IO.read_dict_from_h5(config.output_dir, 'observables.h5', verbose=False)
+    sorted_observable_list = data_IO.sorted_observable_list_from_dict(observables)
 
     # Get data (Note: this is where the bin values are stored)
     data = data_IO.data_array_from_h5(config.output_dir, filename='observables.h5', 
                                       observable_table_dir=config.observable_table_dir)
-
-    # Get sorted list of observables
-    observables = data_IO.read_dict_from_h5(config.output_dir, 'observables.h5')
-    sorted_observable_list = data_IO.sorted_observable_list_from_dict(observables)
-
-    # Translate matrix of stacked observables to a dict of matrices per observable 
-    Y_dict = data_IO.prediction_dict_from_matrix(Y, observables, 
-                                                 observable_table_dir=config.observable_table_dir, 
-                                                 parameterization=config.parameterization,
-                                                 analysis_config=config.analysis_config,
-                                                 validation_set=False)
-    Y_dict_truncated_reconstructed = data_IO.prediction_dict_from_matrix(Y_truncated_reconstructed, observables)
-
-    #-----
-    # Loop through observables and plot 
-    # TODO: probably want to put the main pieces of this functionality in plot_base.py or something
 
     # Group observables into subplots, with shapes specified in config
     plot_panel_shapes = config.analysis_config['plot_panel_shapes']
@@ -140,6 +184,9 @@ def _plot_pca_reconstruction_observables(results, config, plot_dir):
     i_plot = 0
     i_subplot = 0
     fig, axs = None, None
+
+    # We will use the JETSCAPE-analysis config files for plotting metadata
+    plot_config_dir = config.observable_config_dir
 
     for i_observable,observable_label in enumerate(sorted_observable_list):
         sqrts, system, observable_type, observable, subobserable, centrality = data_IO.observable_label_to_keys(observable_label)
@@ -153,9 +200,6 @@ def _plot_pca_reconstruction_observables(results, config, plot_dir):
         ytitle = _latex_from_tlatex(plot_block['ytitle_AA'])
 
         color_data = sns.xkcd_rgb['almost black']
-        color_prediction = sns.xkcd_rgb['dark sky blue']
-        color_prediction_reconstructed = sns.xkcd_rgb['denim blue']  # sns.xkcd_rgb['light blue'], sns.xkcd_rgb['pale red']
-
         linewidth = 2
         alpha = 0.7
 
@@ -168,15 +212,6 @@ def _plot_pca_reconstruction_observables(results, config, plot_dir):
         # Get experimental data
         data_y = data[observable_label]['y']
         data_y_err = data[observable_label]['y_err'] 
-
-        # To start, let's just grab a single design point
-        design_point_index = 0
-
-        # Get prediction
-        prediction_y = Y_dict[observable_label][design_point_index]
-
-        # Get PCA-reconstructed prediction
-        prediction_y_truncated_reconstruated = Y_dict_truncated_reconstructed[observable_label][design_point_index]
 
         # Plot -- create new plot and/or fill appropriate subplot
         plot_shape = plot_panel_shapes[i_plot]
@@ -197,15 +232,15 @@ def _plot_pca_reconstruction_observables(results, config, plot_dir):
         axs[row,col].set_ylim([0., 2.])
         axs[row,col].set_xlim(xmin[0], xmax[-1])
 
-        # Draw data and predictions
+        # Draw predictions
+        for i_prediction,_ in enumerate(plot_list):
+            axs[row,col].plot(x, plot_list[i_prediction][observable_label][design_point_index], 
+                              label=labels[i_prediction], color=colors[i_prediction], 
+                              linewidth=linewidth, alpha=alpha)
+        
+        # Draw data
         axs[row,col].errorbar(x, data_y, xerr=xerr, yerr=data_y_err,
                               color=color_data, marker='s', markersize=markersize, linestyle='', label='Experimental data')
-        
-        axs[row,col].plot(x, prediction_y, label=r'JETSCAPE',
-                          color=color_prediction, linewidth=linewidth, alpha=alpha)
-        
-        axs[row,col].plot(x, prediction_y_truncated_reconstruated, label=r'JETSCAPE (reconstructed)',
-                          color=color_prediction_reconstructed, linewidth=linewidth, alpha=alpha)
 
         # Draw dashed line at RAA=1
         axs[row,col].plot([xmin[0], xmax[-1]], [1, 1],
@@ -221,7 +256,7 @@ def _plot_pca_reconstruction_observables(results, config, plot_dir):
             i_plot += 1
             i_subplot = 0
             
-            plt.savefig(os.path.join(plot_dir, f'PCA_{i_plot}.pdf'))
+            plt.savefig(os.path.join(plot_dir, f'{filename}__{i_plot}.pdf'))
             plt.close()   
 
 #-------------------------------------------------------------------------------------------

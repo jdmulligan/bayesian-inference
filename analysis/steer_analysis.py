@@ -114,8 +114,7 @@ class SteerAnalysis(common_base.CommonBase):
                                                                  config_file=self.config_file,
                                                                  output_dir=self.output_dir)
                     plot_emulation.plot(emulation_config)
-
-
+                    print(f'Done!')
                     print()
 
             # Plots across multiple analyses

@@ -46,6 +46,7 @@ def fit_emulators(config):
 
     # Initialize predictions into a single 2D array: (design_point_index, observable_bins) i.e. (n_samples, n_features)
     # A consistent order of observables is enforced internally in data_IO 
+    print(f'Doing PCA...')
     Y = data_IO.predictions_matrix_from_h5(config.output_dir, filename='observables.h5')
 
     # Use sklearn to:
@@ -71,6 +72,7 @@ def fit_emulators(config):
     pca = sklearn_decomposition.PCA(svd_solver='full', whiten=False) # Include all PCs here, so we can access them later
     Y_pca = pca.fit_transform(scaler.fit_transform(Y))
     Y_pca_truncated = Y_pca[:,:config.n_pc]    # Select PCs here
+    Y_reconstructed_truncated = Y_pca_truncated.dot(pca.components_[:config.n_pc,:])
     explained_variance_ratio = pca.explained_variance_ratio_
     print(f'  Variance explained by first {config.n_pc} components: {np.sum(explained_variance_ratio[:config.n_pc])}')
 
@@ -105,16 +107,57 @@ def fit_emulators(config):
                                                              alpha=alpha,
                                                              n_restarts_optimizer=config.n_restarts,
                                                              copy_X_train=False).fit(design, y) for y in Y_pca_truncated.T]
+    
+    # Print hyperparameters
+    print()
+    print('Kernel hyperparameters:')
+    [print(f'  {emulator.kernel_}') for emulator in emulators]
+    print()
 
     # Write all info we want to file
     output_dict = {}
     output_dict['PCA'] = {}
     output_dict['PCA']['Y'] = Y
     output_dict['PCA']['Y_pca'] = Y_pca
+    output_dict['PCA']['Y_pca_truncated'] = Y_pca_truncated
+    output_dict['PCA']['Y_reconstructed_truncated'] = Y_reconstructed_truncated
     output_dict['PCA']['pca'] = pca
     output_dict['emulators'] = emulators
     with open(config.emulation_outputfile, 'wb') as f:
 	    pickle.dump(output_dict, f)
+
+####################################################################################################################
+def predict(parameters, results, config, validation_set=False):
+    '''
+    Construct dictionary of emulator predictions for each observable
+
+    :param ndarray[float] parameters: list of parameter values (e.g. [tau0, c1, c2, ...]), with shape (n_design_points, n_parameters)
+    :param str results: dictionary that stores emulator
+
+    :return dict emulator_predicctions: dictionary of emulator predictions, with format emulator_predictions[observable_label]
+    '''
+
+    # The emulators are stored as a list (one for each PC) 
+    emulators = results['emulators']
+            
+    # Get predictions (in PC space) from each emulator and concatenate them into a numpy array with shape (n_design_points, n_PCs)
+    emulator_mean = np.zeros((parameters.shape[0], config.n_pc))
+    emulator_std = np.zeros((parameters.shape[0], config.n_pc))
+    for i,emulator in enumerate(emulators):
+        y_mean, y_std = emulator.predict(parameters, return_std=True)
+        #y_mean, y_cov = emulator.predict(parameters, return_cov=True)
+        emulator_mean[:,i] = y_mean
+        emulator_std[:,i] = y_std
+
+    # Reconstruct the physical space from the PCs
+    pca = results['PCA']['pca'] 
+    emulator_mean_reconstructed = emulator_mean.dot(pca.components_[:config.n_pc,:])
+
+    # Construct dict of observables
+    observables = data_IO.read_dict_from_h5(config.output_dir, 'observables.h5', verbose=False)
+    emulator_predictions = data_IO.prediction_dict_from_matrix(emulator_mean_reconstructed, observables, validation_set=validation_set)
+
+    return emulator_predictions
 
 ####################################################################################################################
 class EmulationConfig(common_base.CommonBase):
