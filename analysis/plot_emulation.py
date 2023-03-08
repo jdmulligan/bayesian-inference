@@ -47,8 +47,11 @@ def plot(config):
     _plot_pca_reconstruction_observables(results, config, plot_dir)
 
     # Emulator plots
-    _plot_emulator_results_observables(results, config, plot_dir, validation_set=False)
-    _plot_emulator_results_observables(results, config, plot_dir, validation_set=True)
+    _plot_emulator_observables(results, config, plot_dir, validation_set=False)
+    _plot_emulator_observables(results, config, plot_dir, validation_set=True)
+
+    _plot_emulator_residuals(results, config, plot_dir, validation_set=False)
+    _plot_emulator_residuals(results, config, plot_dir, validation_set=True)
 
 #---------------------------------------------------------------
 def _plot_pca_explained_variance(results, plot_dir):
@@ -116,15 +119,16 @@ def _plot_pca_reconstruction_observables(results, config, plot_dir):
 
     # Pass in a list of dicts to plot, each of which has structure Y[observable_label][design_point_index]
     plot_list = [Y_dict, Y_dict_truncated_reconstructed]
-    labels = [r'JETSCAPE', r'JETSCAPE (reconstructed)']
+    labels = [r'JETSCAPE (before PCA)', r'JETSCAPE (after PCA)']
     colors = [sns.xkcd_rgb['dark sky blue'], sns.xkcd_rgb['denim blue']] # sns.xkcd_rgb['light blue'], sns.xkcd_rgb['pale red'] 
     design_point_index = 0
     filename = f'PCA_observables__design_point{design_point_index}'
     _plot_observable_panels(plot_list, labels, colors, design_point_index, config, plot_dir, filename)
 
 #-------------------------------------------------------------------------------------------
-def _plot_emulator_results_observables(results, config, plot_dir, validation_set=False):
+def _plot_emulator_observables(results, config, plot_dir, validation_set=False):
     '''
+    Plot observables predicted by emulator, and compare to JETSCAPE calculations
     '''
 
     # Get observables
@@ -139,13 +143,13 @@ def _plot_emulator_results_observables(results, config, plot_dir, validation_set
     Y_dict = data_IO.prediction_dict_from_matrix(Y, observables, config, validation_set=validation_set)
 
     # Get emulator predictions
-    emulator_predictions_training = emulation.predict(design, results, config, validation_set=validation_set)
+    emulator_predictions = emulation.predict(design, results, config, validation_set=validation_set)
 
     # Plot
     design_point_index = 0
     if validation_set:
-        plot_list = [Y_dict, emulator_predictions_training]
-        labels = [r'JETSCAPE', r'Emulator']
+        plot_list = [Y_dict, emulator_predictions]
+        labels = [r'JETSCAPE (before PCA)', r'Emulator']
         colors = [sns.xkcd_rgb['dark sky blue'], sns.xkcd_rgb['light blue']] 
         filename = f'emulator_observables_validation_design_point{design_point_index}'
     else:
@@ -154,11 +158,111 @@ def _plot_emulator_results_observables(results, config, plot_dir, validation_set
         # Translate matrix of stacked observables to a dict of matrices per observable
         Y_dict_truncated_reconstructed = data_IO.prediction_dict_from_matrix(Y_reconstructed_truncated, observables, validation_set=validation_set)
 
-        plot_list = [Y_dict, Y_dict_truncated_reconstructed, emulator_predictions_training]
+        plot_list = [Y_dict, Y_dict_truncated_reconstructed, emulator_predictions]
         labels = [r'JETSCAPE', r'JETSCAPE (reconstructed)', r'Emulator']
         colors = [sns.xkcd_rgb['dark sky blue'], sns.xkcd_rgb['denim blue'], sns.xkcd_rgb['light blue']]
         filename = f'emulator_observables_training__design_point{design_point_index}'
     _plot_observable_panels(plot_list, labels, colors, design_point_index, config, plot_dir, filename)
+
+#-------------------------------------------------------------------------------------------
+def _plot_emulator_residuals(results, config, plot_dir, validation_set=False):
+    '''
+    Plot residuals between emulator and JETSCAPE calculations
+    '''
+
+    # Get observables
+    observables = data_IO.read_dict_from_h5(config.output_dir, 'observables.h5', verbose=False)
+
+    # Get design points
+    design = data_IO.design_array_from_h5(config.output_dir, filename='observables.h5', validation_set=validation_set)
+
+    # Get JETSCAPE predictions
+    Y = data_IO.predictions_matrix_from_h5(config.output_dir, filename='observables.h5', validation_set=validation_set)
+    # Translate matrix of stacked observables to a dict of matrices per observable
+    Y_dict = data_IO.prediction_dict_from_matrix(Y, observables, config, validation_set=validation_set)
+
+    # Get emulator predictions
+    emulator_predictions = emulation.predict(design, results, config, validation_set=validation_set)
+
+    # Construct scatter plot of |RAA_true - RAA_emulator| over all design points
+    # We will also project the residuals into a histogram as a function of RAA_true
+
+    # TODO: note that all observables are not RAA...may want to plot this more differentially
+    #       depending on the observable considered
+
+    # Construct a figure with two plots
+    plt.figure(1, figsize=(10, 6))
+    ax_scatter = plt.axes([0.1, 0.13, 0.6, 0.8]) # [left, bottom, width, height]
+    ax_residual = plt.axes([0.81, 0.13, 0.15, 0.8])
+    
+    markers = ['o', 's', 'D']
+    colors = [sns.xkcd_rgb['dark sky blue'], sns.xkcd_rgb['denim blue'], sns.xkcd_rgb['pale red']]
+    
+    # Loop through observables
+    RAA_true = np.array([])
+    RAA_emulator = np.array([])
+    sorted_observable_list = data_IO.sorted_observable_list_from_dict(observables)
+    for i_observable,observable_label in enumerate(sorted_observable_list):
+        sqrts, system, observable_type, observable, subobserable, centrality = data_IO.observable_label_to_keys(observable_label)
+
+        RAA_true = np.concatenate((RAA_true, np.ravel(Y_dict[observable_label])))
+        RAA_emulator = np.concatenate((RAA_emulator, np.ravel(emulator_predictions[observable_label])))
+        #std_emulator = std_emulator.concatenate(emulator_predictions[observable_label])
+
+    residual = RAA_true - RAA_emulator
+    #normalized_residual = np.divide(RAA_true-RAA_emulator, std_emulator)
+
+    # Draw scatter plot
+    ax_scatter.scatter(RAA_true, RAA_emulator, s=5, marker=markers[0],
+                        color=colors[0], alpha=0.7, label=r'$\rm{{{}}}$'.format(''), linewidth=0)
+    ax_scatter.set_ylim([0, 1.19])
+    ax_scatter.set_xlim([0, 1.19])
+    ax_scatter.set_xlabel(r'$R_{\rm{AA}}^{\rm{true}}$', fontsize=20)
+    ax_scatter.set_ylabel(r'$R_{\rm{AA}}^{\rm{emulator}}$', fontsize=20)
+    ax_scatter.legend(title='', title_fontsize=16,
+                        loc='upper left', fontsize=14, markerscale=5)
+    plt.setp(ax_scatter.get_xticklabels(), fontsize=14)
+    plt.setp(ax_scatter.get_yticklabels(), fontsize=14)
+
+    # Alternately, plot stdev as a function of RAA_true
+    #ax_scatter.scatter(true_raa_i, emulator_raa_stdev_i, s=5,
+    #                    color=color, alpha=0.7, label=r'$\rm{{{}}}$'.format(system_label), linewidth=0)
+    #ax_scatter.set_xlabel(r'$R_{\rm{AA}}^{\rm{true}}$', fontsize=18)
+    #ax_scatter.set_ylabel(r'$\sigma_{\rm{emulator}}$', fontsize=18)
+    
+    # Draw line with slope 1
+    ax_scatter.plot([0,1], [0,1], sns.xkcd_rgb['almost black'], alpha=0.3,
+                    linewidth=3, linestyle='--')
+    
+    # Print mean value of emulator uncertainty
+    #stdev_mean_relative = np.divide(emulator_raa_stdev_i, true_raa_i)
+    #stdev_mean = np.mean(stdev_mean_relative)
+    #text = r'$\left< \sigma_{{\rm{{emulator}}}}^{{\rm{{{}}}}} \right> = {:0.1f}\%$'.format(system_label, 100*stdev_mean)
+    #ax_scatter.text(0.4, 0.17-0.09*i, text, fontsize=16)
+    
+    # Draw residuals
+    max = 3
+    bins = np.linspace(-max, max, 30)
+    x = (bins[1:] + bins[:-1])/2
+    h = ax_residual.hist(residual, color=colors[0], histtype='step',
+                        orientation='horizontal', linewidth=3, alpha=0.8, density=True, bins=bins)
+    ax_residual.scatter(h[0], x, color=colors[0], s=10, marker=markers[0])
+    #ax_residual.set_ylabel(r'$\left(R_{\rm{AA}}^{\rm{true}} - R_{\rm{AA}}^{\rm{emulator}}\right) / \sigma_{\rm{emulator}}$', fontsize=20)
+    ax_residual.set_ylabel(r'$\left(R_{\rm{AA}}^{\rm{true}} - R_{\rm{AA}}^{\rm{emulator}}\right)$', fontsize=20)
+    plt.setp(ax_residual.get_xticklabels(), fontsize=14)
+    plt.setp(ax_residual.get_yticklabels(), fontsize=14)
+                            
+    # Print out indices of points that deviate significantly
+    # if np.abs(normalized_residual) > 3*stdev:
+    #     print('Index {} has poor  emulator validation...'.format(j))
+            
+    if validation_set:
+        filename = 'emulator_residuals_validation'
+    else:
+        filename = 'emulator_residuals_training'
+
+    plt.savefig(os.path.join(plot_dir, f'{filename}.pdf'))
+    plt.close('all')                  
 
 #---------------------------------------------------------------
 def _plot_observable_panels(plot_list, labels, colors, design_point_index, config, plot_dir, filename):

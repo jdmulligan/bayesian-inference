@@ -153,6 +153,8 @@ def predict(parameters, results, config, validation_set=False):
     pca = results['PCA']['pca'] 
     emulator_mean_reconstructed = emulator_mean.dot(pca.components_[:config.n_pc,:])
 
+    # TODO: propagate and return emulator_std
+
     # Construct dict of observables
     observables = data_IO.read_dict_from_h5(config.output_dir, 'observables.h5', verbose=False)
     emulator_predictions = data_IO.prediction_dict_from_matrix(emulator_mean_reconstructed, observables, validation_set=validation_set)
