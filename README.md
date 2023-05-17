@@ -1,6 +1,6 @@
 # bayesian-inference
 
-This is a playground to implement Bayesian inference for heavy-ion jet measurements.
+Analysis code to implement Bayesian inference for heavy-ion jet measurements.
 
 ## Setup software environment – on hiccup cluster
 <details>
