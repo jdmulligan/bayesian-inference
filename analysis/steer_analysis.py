@@ -13,7 +13,9 @@ import yaml
 
 import data_IO
 import emulation
+import mcmc
 import plot_emulation
+import plot_mcmc
 
 import common_base
 
@@ -85,8 +87,7 @@ class SteerAnalysis(common_base.CommonBase):
                     emulation_config = emulation.EmulationConfig(analysis_name=analysis_name,
                                                                  parameterization=parameterization,
                                                                  analysis_config=analysis_config,
-                                                                 config_file=self.config_file,
-                                                                 output_dir=self.output_dir)
+                                                                 config_file=self.config_file)
                     emulation.fit_emulators(emulation_config)
 
                 # Run MCMC
@@ -94,6 +95,11 @@ class SteerAnalysis(common_base.CommonBase):
                     print()
                     print('------------------------------------------------------------------------')
                     print(f'Running MCMC for {analysis_name}_{parameterization}...')
+                    mcmc_config = mcmc.MCMCConfig(analysis_name=analysis_name,
+                                                  parameterization=parameterization,
+                                                  analysis_config=analysis_config,
+                                                  config_file=self.config_file)
+                    mcmc.run_mcmc(mcmc_config)
                 
         # Plot   
         if self.plot:
@@ -111,9 +117,23 @@ class SteerAnalysis(common_base.CommonBase):
                     emulation_config = emulation.EmulationConfig(analysis_name=analysis_name,
                                                                  parameterization=parameterization,
                                                                  analysis_config=analysis_config,
-                                                                 config_file=self.config_file,
-                                                                 output_dir=self.output_dir)
+                                                                 config_file=self.config_file)
                     plot_emulation.plot(emulation_config)
+                    print(f'Done!')
+                    print()
+
+                    print('------------------------------------------------------------------------')
+                    print(f'Plotting MCMC for {analysis_name}_{parameterization}...')
+                    mcmc_config = mcmc.MCMCConfig(analysis_name=analysis_name,
+                                                  parameterization=parameterization,
+                                                  analysis_config=analysis_config,
+                                                  config_file=self.config_file)
+                    plot_mcmc.plot(mcmc_config)
+                    print(f'Done!')
+                    print()
+
+                    print('------------------------------------------------------------------------')
+                    print(f'Plotting qhat results {analysis_name}_{parameterization}...')
                     print(f'Done!')
                     print()
 
@@ -126,7 +146,7 @@ if __name__ == '__main__':
     parser.add_argument('-c', '--configFile', 
                         help='Path of config file for analysis',
                         action='store', type=str,
-                        default='../config/Analysis1.yaml', )
+                        default='../config/hadron_jet_RAA.yaml', )
     args = parser.parse_args()
 
     print('Configuring...')

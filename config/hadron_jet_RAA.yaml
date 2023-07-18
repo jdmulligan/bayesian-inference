@@ -92,7 +92,9 @@ independent_validation: False
 # MCMC parameters
 n_walkers: 500
 n_burn_steps: 1000
-n_steps: 500
+n_sampling_steps: 500
+
+n_logging_steps: 100
 
 #-------------------------------------------
 # Closure test parameters
