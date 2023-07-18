@@ -121,7 +121,8 @@ def _plot_pca_reconstruction_observables(results, config, plot_dir):
     # Pass in a list of dicts to plot, each of which has structure Y[observable_label][design_point_index]
     plot_list = [Y_dict, Y_dict_truncated_reconstructed]
     labels = [r'JETSCAPE (before PCA)', r'JETSCAPE (after PCA)']
-    colors = [sns.xkcd_rgb['dark sky blue'], sns.xkcd_rgb['denim blue']] # sns.xkcd_rgb['light blue'], sns.xkcd_rgb['pale red'] 
+    colors = [sns.xkcd_rgb['dark sky blue'], sns.xkcd_rgb['denim blue']] # sns.xkcd_rgb['light blue'], sns.xkcd_rgb['pale red'], sns.xkcd_rgb['medium green']
+
     design_point_index = 0
     filename = f'PCA_observables__design_point{design_point_index}'
     plot_utils.plot_observable_panels(plot_list, labels, colors, design_point_index, config, plot_dir, filename)

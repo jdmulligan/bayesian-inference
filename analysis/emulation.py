@@ -4,7 +4,7 @@ Module related to emulators, with functionality to train and call emulators for 
 
 The main functionalities are:
  - fit_emulators() performs PCA, fits an emulator to each PC, and writes the emulator to file
- - inverse_transform() transforms from PCA space to physical space
+ - predict() construct mean, std of emulator for a given set of parameter values
 
 A configuration class EmulationConfig provides simple access to emulation settings 
 
@@ -167,10 +167,7 @@ class EmulationConfig(common_base.CommonBase):
     #---------------------------------------------------------------
     # Constructor
     #---------------------------------------------------------------
-    def __init__(self, analysis_name='', parameterization='', analysis_config='', config_file='', output_dir='', **kwargs):
-
-        self.output_dir = os.path.join(output_dir, f'{analysis_name}_{parameterization}')
-        self.emulation_outputfile = os.path.join(self.output_dir, 'emulation.pkl')
+    def __init__(self, analysis_name='', parameterization='', analysis_config='', config_file='', **kwargs):
 
         self.parameterization = parameterization
         self.analysis_config = analysis_config
@@ -191,3 +188,6 @@ class EmulationConfig(common_base.CommonBase):
         self.matern_nu = config['matern_nu']
         self.variance = config['variance']
         self.noise = config['noise']
+
+        self.output_dir = os.path.join(config['output_dir'], f'{analysis_name}_{parameterization}')
+        self.emulation_outputfile = os.path.join(self.output_dir, 'emulation.pkl')
