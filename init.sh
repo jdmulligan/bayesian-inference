@@ -1,4 +1,4 @@
-#!/usr/bin/bash
+#!/usr/bin/env bash
 
 # Set up pyenv (for python version management)
 export PYENV_ROOT="/home/software/users/james/pyenv"
@@ -26,12 +26,11 @@ done
 if [ ! -z ${INSTALL} ]; then
     echo
     echo "Remove existing virtual environment..."
-    pdm venv remove .venv
+    rm -r .venv
     echo
     echo "Create new virtual environment..."
-    pdm venv create .venv
     pdm install
 fi
 
 # Initialize python virtual environment for package management
-pdm venv activate .venv
+source .venv/bin/activate
