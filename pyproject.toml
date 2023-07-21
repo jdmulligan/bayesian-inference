@@ -1,0 +1,143 @@
+[build-system]
+# pdm
+requires = ["wheel" , "pdm-pep517"]
+build-backend = "pdm.pep517.api"
+# hatch
+#requires = ["hatchling"]
+#build-backend = "hatchling.build"
+
+[project]
+name = "bayesian_inference"
+description = "Analysis pipeline to implement Bayesian inference in high-energy physics "
+license = {text = "BSD-3-Clause"}
+# NOTE: <3.12 cap needed for tensorflow-io-gcs-filesystem
+requires-python = ">=3.8,<3.12"
+authors = [
+  { name = "James Mulligan", email = "james.mulligan@berkeley.edu" },
+  { name = "Raymond Ehlers", email = "raymond.ehlers@cern.ch" },
+]
+# For hatch, need to remove the dependencies references here
+dynamic = ["dependencies", "optional-dependencies", "version"]
+dependencies = [
+    # Data analysis and plotting
+    "matplotlib >=3.5.2",
+    "numpy >=1.22.4",
+    "pandas >=1.4.2",
+    "pyyaml >=6.0",
+    "seaborn >=0.11.2",
+    "silx >=1.0.0",
+    # Emulator training
+    "gpflow >=2.5.2",
+    "gpytorch >=1.6.0",
+    "pymc >=4.0.0",
+    "scikit-learn >=1.1.1",
+    "torch >=1.11.0",
+]
+
+# NOTE: If moving to hatch, move this to "[project.optional-dependencies]"
+[tool.pdm.dev-dependencies]
+dev = [
+    "ruff>=0.0.209",
+    "black >=22.1.0",
+    "mypy >=0.931",
+    "ipython >=8.0",
+    "ipykernel >=6.15.1",
+]
+
+[tool.hatch]
+version.path = "src/bayesian_inference/__init__.py"
+
+[tool.pdm]
+version = { source = "file", path = "src/bayesian_inference/__init__.py" }
+
+[tool.black]
+line-length = 120
+
+[tool.ruff]
+exclude = [
+    '.git',
+    '.env',
+    '.env3',
+    '.venv',
+    '.venv*',
+    'env',
+    '__pycache__',
+    'bak',
+    'build',
+    'dist',
+]
+line-length = 120
+select = [
+    "E", "F", "W", # flake8
+    "C901",        # mccabe
+    "B", "B904",   # flake8-bugbear
+    "I",           # isort
+    "ARG",         # flake8-unused-arguments
+    "C4",          # flake8-comprehensions
+    "EM",          # flake8-errmsg
+    "EXE",         # flake8-executable
+    "ICN",         # flake8-import-conventions
+    "ISC",         # flake8-implicit-str-concat
+    "NPY",         # NumPy specific rules
+    "PGH",         # pygrep-hooks
+    "PIE",         # flake8-pie
+    "PL",          # pylint
+    "PT",          # flake8-pytest-style
+    "PTH",         # flake8-use-pathlib
+    "RET",         # flake8-return
+    "RUF",         # Ruff-specific
+    "SIM",         # flake8-simplify
+    "T20",         # flake8-print
+    "TID251",      # flake8-tidy-imports
+    "UP",          # pyupgrade
+    "YTT",         # flake8-2020
+]
+extend-ignore = [
+    "E501",
+    "E722",
+    "RUF001",  # Unicode chars
+    "PLR",
+    "ISC003",  # Force string to be implicitly concatenated. However, I find this structure to be useful for better
+               # readability due to consistent spacing with plotting labels.
+]
+unfixable = [
+    "T20",      # flake8-print
+    "F841",     # Removes unused variables
+]
+
+[tool.ruff.mccabe]
+max-complexity = 12
+
+[tool.ruff.isort]
+known-first-party = []
+
+[tool.pylint]
+master.py-version = "3.9"
+master.ignore-paths= []
+reports.output-format = "colorized"
+similarities.ignore-imports = "yes"
+messages_control.disable = [
+  "design",
+  "fixme",
+  "line-too-long",
+  "wrong-import-position",
+]
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = ["-ra", "--showlocals", "--strict-markers", "--strict-config"]
+xfail_strict = true
+filterwarnings = ["error"]
+log_cli_level = "INFO"
+testpaths = [
+  "tests",
+]
+
+[tool.check-manifest]
+ignore = [
+  ".github/**",
+  "docs/**",
+  ".pre-commit-config.yaml",
+  ".readthedocs.yml",
+  "noxfile.py",
+]

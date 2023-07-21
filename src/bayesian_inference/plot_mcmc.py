@@ -13,7 +13,7 @@ from matplotlib import pyplot as plt
 import seaborn as sns
 sns.set_context('paper', rc={'font.size':18,'axes.titlesize':18,'axes.labelsize':18})
 
-import data_IO
+from bayesian_inference import data_IO
 
 ####################################################################################################################
 def plot(config):

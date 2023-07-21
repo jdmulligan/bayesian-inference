@@ -11,13 +11,13 @@ import os
 import sys
 import yaml
 
-import data_IO
-import emulation
-import mcmc
-import plot_emulation
-import plot_mcmc
+from bayesian_inference import data_IO
+from bayesian_inference import emulation
+from bayesian_inference import mcmc
+from bayesian_inference import plot_emulation
+from bayesian_inference import plot_mcmc
 
-import common_base
+from bayesian_inference import common_base
 
 ####################################################################################################################
 class SteerAnalysis(common_base.CommonBase):
@@ -53,7 +53,7 @@ class SteerAnalysis(common_base.CommonBase):
         self.fit_emulators = config['fit_emulators']
         self.run_mcmc = config['run_mcmc']
         self.plot = config['plot']
-    
+
         self.analyses = config['analyses']
 
     #---------------------------------------------------------------
@@ -73,11 +73,11 @@ class SteerAnalysis(common_base.CommonBase):
                     print()
                     print('========================================================================')
                     print(f'Initializing model: {analysis_name} ({parameterization} parameterization)...')
-                    observables = data_IO.initialize_observables_dict_from_tables(self.observable_table_dir, 
-                                                                                  analysis_config, 
+                    observables = data_IO.initialize_observables_dict_from_tables(self.observable_table_dir,
+                                                                                  analysis_config,
                                                                                   parameterization)
-                    data_IO.write_dict_to_h5(observables, 
-                                             os.path.join(self.output_dir, f'{analysis_name}_{parameterization}'), 
+                    data_IO.write_dict_to_h5(observables,
+                                             os.path.join(self.output_dir, f'{analysis_name}_{parameterization}'),
                                              filename='observables.h5')
 
                 # Fit emulators and write them to file
@@ -100,18 +100,18 @@ class SteerAnalysis(common_base.CommonBase):
                                                   analysis_config=analysis_config,
                                                   config_file=self.config_file)
                     mcmc.run_mcmc(mcmc_config)
-                
-        # Plot   
+
+        # Plot
         if self.plot:
 
             # Plots for individual analysis
             for analysis_name,analysis_config in self.analyses.items():
-                for parameterization in analysis_config['parameterizations']:   
+                for parameterization in analysis_config['parameterizations']:
 
                     print('========================================================================')
                     print(f'Plotting for {analysis_name} ({parameterization} parameterization)...')
-                    print()         
-                    
+                    print()
+
                     print('------------------------------------------------------------------------')
                     print(f'Plotting emulators for {analysis_name}_{parameterization}...')
                     emulation_config = emulation.EmulationConfig(analysis_name=analysis_name,
@@ -143,7 +143,7 @@ class SteerAnalysis(common_base.CommonBase):
 ####################################################################################################################
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Jet Bayesian Analysis')
-    parser.add_argument('-c', '--configFile', 
+    parser.add_argument('-c', '--configFile',
                         help='Path of config file for analysis',
                         action='store', type=str,
                         default='../config/hadron_jet_RAA.yaml', )

@@ -12,20 +12,20 @@ from matplotlib import pyplot as plt
 import seaborn as sns
 sns.set_context('paper', rc={'font.size':18,'axes.titlesize':18,'axes.labelsize':18})
 
-import data_IO             
+from bayesian_inference import data_IO
 
 #---------------------------------------------------------------
 def plot_observable_panels(plot_list, labels, colors, design_point_index, config, plot_dir, filename):
     '''
     Plot observables before and after PCA -- for fixed n_pc
     '''
-    # Loop through observables and plot 
+    # Loop through observables and plot
     # Get sorted list of observables
     observables = data_IO.read_dict_from_h5(config.output_dir, 'observables.h5', verbose=False)
     sorted_observable_list = data_IO.sorted_observable_list_from_dict(observables)
 
     # Get data (Note: this is where the bin values are stored)
-    data = data_IO.data_array_from_h5(config.output_dir, filename='observables.h5', 
+    data = data_IO.data_array_from_h5(config.output_dir, filename='observables.h5',
                                       observable_table_dir=config.observable_table_dir)
 
     # Group observables into subplots, with shapes specified in config
@@ -41,7 +41,7 @@ def plot_observable_panels(plot_list, labels, colors, design_point_index, config
 
     for i_observable,observable_label in enumerate(sorted_observable_list):
         sqrts, system, observable_type, observable, subobserable, centrality = data_IO.observable_label_to_keys(observable_label)
-        
+
         # Get JETSCAPE-analysis config block for that observable
         plot_config_file = os.path.join(plot_config_dir, f'STAT_{sqrts}.yaml')
         with open(plot_config_file, 'r') as stream:
@@ -62,7 +62,7 @@ def plot_observable_panels(plot_list, labels, colors, design_point_index, config
 
         # Get experimental data
         data_y = data[observable_label]['y']
-        data_y_err = data[observable_label]['y_err'] 
+        data_y_err = data[observable_label]['y_err']
 
         # Plot -- create new plot and/or fill appropriate subplot
         plot_shape = plot_panel_shapes[i_plot]
@@ -85,10 +85,10 @@ def plot_observable_panels(plot_list, labels, colors, design_point_index, config
 
         # Draw predictions
         for i_prediction,_ in enumerate(plot_list):
-            axs[row,col].plot(x, plot_list[i_prediction][observable_label][design_point_index], 
-                              label=labels[i_prediction], color=colors[i_prediction], 
+            axs[row,col].plot(x, plot_list[i_prediction][observable_label][design_point_index],
+                              label=labels[i_prediction], color=colors[i_prediction],
                               linewidth=linewidth, alpha=alpha)
-        
+
         # Draw data
         axs[row,col].errorbar(x, data_y, xerr=xerr, yerr=data_y_err,
                               color=color_data, marker='s', markersize=markersize, linestyle='', label='Experimental data')
@@ -98,7 +98,7 @@ def plot_observable_panels(plot_list, labels, colors, design_point_index, config
                           sns.xkcd_rgb['almost black'], alpha=alpha, linewidth=linewidth, linestyle='dotted')
 
         # Draw legend
-        axs[row,col].legend(loc='upper right', title=observable_label, 
+        axs[row,col].legend(loc='upper right', title=observable_label,
                             title_fontsize=fontsize, fontsize=fontsize, frameon=True)
 
         # Increment subplot, and save if done with plot
@@ -106,9 +106,9 @@ def plot_observable_panels(plot_list, labels, colors, design_point_index, config
         if i_subplot == plot_shape[0]*plot_shape[1] or i_observable == len(sorted_observable_list)-1:
             i_plot += 1
             i_subplot = 0
-            
+
             plt.savefig(os.path.join(plot_dir, f'{filename}__{i_plot}.pdf'))
-            plt.close()   
+            plt.close()
 
 #-------------------------------------------------------------------------------------------
 def latex_from_tlatex(s):
@@ -117,7 +117,7 @@ def latex_from_tlatex(s):
 
     :param str s: TLatex string
     :return str s: latex string
-    ''' 
+    '''
     s = f'${s}$'
     s = s.replace('#it','')
     s = s.replace(' ','\;')
