@@ -15,9 +15,9 @@ from matplotlib import pyplot as plt
 import seaborn as sns
 sns.set_context('paper', rc={'font.size':18,'axes.titlesize':18,'axes.labelsize':18})
 
-import data_IO
-import emulation
-import plot_utils
+from bayesian_inference import data_IO
+from bayesian_inference import emulation
+from bayesian_inference import plot_utils
 
 ####################################################################################################################
 def plot(config):
@@ -35,13 +35,13 @@ def plot(config):
 
     # Get results from file
     with open(config.emulation_outputfile, 'rb') as f:
-	    results = pickle.load(f)
+        results = pickle.load(f)
 
     # Plot output dir
     plot_dir = os.path.join(config.output_dir, 'plot')
     if not os.path.exists(plot_dir):
         os.makedirs(plot_dir)
-            
+
     # PCA plots
     _plot_pca_explained_variance(results, plot_dir)
     _plot_pca_reconstruction_error(results, plot_dir)
@@ -60,7 +60,7 @@ def _plot_pca_explained_variance(results, plot_dir):
     Plot fraction of explained variance as a function of number of principal components
     '''
 
-    pca = results['PCA']['pca'] 
+    pca = results['PCA']['pca']
     n_pc_max = 30 # results['PCA']['Y_pca'].shape[1]
 
     x = range(n_pc_max)
@@ -75,7 +75,7 @@ def _plot_pca_explained_variance(results, plot_dir):
     plt.tight_layout()
     plt.savefig(os.path.join(plot_dir, 'PCA_explained_variance.pdf'))
     plt.close()
- 
+
 #---------------------------------------------------------------
 def _plot_pca_reconstruction_error(results, plot_dir):
     '''
@@ -83,7 +83,7 @@ def _plot_pca_reconstruction_error(results, plot_dir):
     https://stackoverflow.com/questions/36566844/pca-projection-and-reconstruction-in-scikit-learn
     '''
 
-    pca = results['PCA']['pca'] 
+    pca = results['PCA']['pca']
     Y = results['PCA']['Y']
     Y_pca = results['PCA']['Y_pca']
 
@@ -152,7 +152,7 @@ def _plot_emulator_observables(results, config, plot_dir, validation_set=False):
     if validation_set:
         plot_list = [Y_dict, emulator_predictions]
         labels = [r'JETSCAPE (before PCA)', r'Emulator']
-        colors = [sns.xkcd_rgb['dark sky blue'], sns.xkcd_rgb['light blue']] 
+        colors = [sns.xkcd_rgb['dark sky blue'], sns.xkcd_rgb['light blue']]
         filename = f'emulator_observables_validation_design_point{design_point_index}'
     else:
         # Get PCA results -- 2D arrays: (design_point_index, observable_bins)
@@ -196,10 +196,10 @@ def _plot_emulator_residuals(results, config, plot_dir, validation_set=False):
     plt.figure(1, figsize=(10, 6))
     ax_scatter = plt.axes([0.1, 0.13, 0.6, 0.8]) # [left, bottom, width, height]
     ax_residual = plt.axes([0.81, 0.13, 0.15, 0.8])
-    
+
     markers = ['o', 's', 'D']
     colors = [sns.xkcd_rgb['dark sky blue'], sns.xkcd_rgb['denim blue'], sns.xkcd_rgb['pale red']]
-    
+
     # Loop through observables
     RAA_true = np.array([])
     RAA_emulator = np.array([])
@@ -231,17 +231,17 @@ def _plot_emulator_residuals(results, config, plot_dir, validation_set=False):
     #                    color=color, alpha=0.7, label=r'$\rm{{{}}}$'.format(system_label), linewidth=0)
     #ax_scatter.set_xlabel(r'$R_{\rm{AA}}^{\rm{true}}$', fontsize=18)
     #ax_scatter.set_ylabel(r'$\sigma_{\rm{emulator}}$', fontsize=18)
-    
+
     # Draw line with slope 1
     ax_scatter.plot([0,1], [0,1], sns.xkcd_rgb['almost black'], alpha=0.3,
                     linewidth=3, linestyle='--')
-    
+
     # Print mean value of emulator uncertainty
     #stdev_mean_relative = np.divide(emulator_raa_stdev_i, true_raa_i)
     #stdev_mean = np.mean(stdev_mean_relative)
     #text = r'$\left< \sigma_{{\rm{{emulator}}}}^{{\rm{{{}}}}} \right> = {:0.1f}\%$'.format(system_label, 100*stdev_mean)
     #ax_scatter.text(0.4, 0.17-0.09*i, text, fontsize=16)
-    
+
     # Draw residuals
     max = 3
     bins = np.linspace(-max, max, 30)
@@ -253,15 +253,15 @@ def _plot_emulator_residuals(results, config, plot_dir, validation_set=False):
     ax_residual.set_ylabel(r'$\left(R_{\rm{AA}}^{\rm{true}} - R_{\rm{AA}}^{\rm{emulator}}\right)$', fontsize=20)
     plt.setp(ax_residual.get_xticklabels(), fontsize=14)
     plt.setp(ax_residual.get_yticklabels(), fontsize=14)
-                            
+
     # Print out indices of points that deviate significantly
     # if np.abs(normalized_residual) > 3*stdev:
     #     print('Index {} has poor  emulator validation...'.format(j))
-            
+
     if validation_set:
         filename = 'emulator_residuals_validation'
     else:
         filename = 'emulator_residuals_training'
 
     plt.savefig(os.path.join(plot_dir, f'{filename}.pdf'))
-    plt.close('all')                  
+    plt.close('all')

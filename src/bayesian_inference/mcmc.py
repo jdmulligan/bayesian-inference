@@ -6,7 +6,7 @@ The main functionalities are:
  - run_mcmc() performs MCMC and returns posterior
  - credible_interval() compute credible interval for a given posterior
 
-A configuration class MCMCConfig provides simple access to emulation settings 
+A configuration class MCMCConfig provides simple access to emulation settings
 
 authors: J.Mulligan, R.Ehlers
 Based in part on JETSCAPE/STAT code.
@@ -22,9 +22,9 @@ import numpy as np
 from scipy.linalg import lapack
 from multiprocessing import Pool
 
-import common_base
-import data_IO
-import emulation
+from bayesian_inference import common_base
+from bayesian_inference import data_IO
+from bayesian_inference import emulation
 
 ####################################################################################################################
 def run_mcmc(config):
@@ -66,7 +66,7 @@ def run_mcmc(config):
     X0 = sampler.run_mcmc(X0, config.n_burn_steps - nburn0, n_logging_steps=config.n_logging_steps, storechain=False)[0]
     sampler.reset()
     logging.info('Burn-in complete.')
-    
+
     # Production samples
     logging.info('Starting production...')
     sampler.run_mcmc(X0, config.n_sampling_steps, n_logging_steps=config.n_logging_steps)
@@ -224,7 +224,7 @@ def _random_pos(self, n=1):
     Generate `n` random positions in parameter space.
     """
     return np.random.uniform(self.min, self.max, (n, self.ndim))
-    
+
 ####################################################################################################################
 class LoggingEnsembleSampler(emcee.EnsembleSampler):
 
@@ -240,7 +240,7 @@ class LoggingEnsembleSampler(emcee.EnsembleSampler):
                 logging.info(f'step {n}: acceptance fraction: mean {af.mean()}, std {af.std()}, min {af.min()}, max {af.max()}')
 
         return result
-    
+
 ####################################################################################################################
 class MCMCConfig(common_base.CommonBase):
 

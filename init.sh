@@ -26,11 +26,12 @@ done
 if [ ! -z ${INSTALL} ]; then
     echo
     echo "Remove existing virtual environment..."
-    pipenv --rm
+    pdm venv remove .venv
     echo
     echo "Create new virtual environment..."
-    pipenv install
+    pdm venv create .venv
+    pdm install
 fi
 
 # Initialize python virtual environment for package management
-pipenv shell
+pdm venv activate .venv

@@ -1,0 +1,3 @@
+.venv*
+# Ignoring for now since our future use of it is unclear at the moment
+pdm.lock
