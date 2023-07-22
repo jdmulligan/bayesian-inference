@@ -24,11 +24,14 @@ for i in "$@"; do
   esac
 done
 if [ ! -z ${INSTALL} ]; then
-    echo
-    echo "Remove existing virtual environment..."
-    rm -r .venv
+    if [ -d ".venv" ]; then
+        echo
+        echo "Remove existing virtual environment..."
+        rm -r .venv
+    fi
     echo
     echo "Create new virtual environment..."
+    python -m venv .venv
     pdm install
 fi
 
