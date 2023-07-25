@@ -1,2 +1,7 @@
+# Python
 .venv*
 .pdm-python
+
+# VScode
+*.code-workspace
+.vscode/
