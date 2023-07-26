@@ -68,6 +68,9 @@ def fit_emulators(config):
     #   which is equivalent to:
     #     Y_reconstructed = Y_pca.dot(pca.components_)
     #
+    # Then, we still need to make sure to undo the preprocessing (centering and scaling) by:
+    #     Y_reconstructed_unscaled = scaler.inverse_transform(Y_reconstructed)
+    #
     # See docs for StandardScaler and PCA for further details.
     # This post explains exactly what fit_transform,inverse_transform do: https://stackoverflow.com/a/36567821
     #
