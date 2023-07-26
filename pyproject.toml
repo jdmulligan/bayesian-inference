@@ -28,7 +28,6 @@ dependencies = [
     "silx >=1.0.0",
     # Emulator training
     "gpflow >=2.5.2",
-    "gpytorch >=1.6.0",
     "pymc >=4.0.0",
     "scikit-learn >=1.1.1",
     "emcee>=3.1.4",
