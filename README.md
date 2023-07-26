@@ -6,9 +6,20 @@ Analysis code to implement Bayesian inference for heavy-ion jet measurements.
 <details>
   <summary>Click for details</summary>
 <br/> 
-  
+
 ### Logon and allocate a node
-  
+
+You can either use the usual hiccup CPU nodes, or hiccupgpu (useful if slurm queue is busy).
+
+#### hiccup GPU
+
+Logon to hiccupgpu:
+```
+ssh <user>@hic.lbl.gov -p 1142
+```
+
+#### hiccup CPU
+
 Logon to hiccup:
 ```
 ssh <user>@hic.lbl.gov
