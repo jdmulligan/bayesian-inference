@@ -35,8 +35,8 @@ analysis_base: &model_base
   sqrts_list: [200, 2760, 5020]
   centrality_range: [0,10]
   recoil_scheme: 'negative_recominber'
-  parameters: 
-    exponential: 
+  parameters:
+    exponential:
       names: ['$\\alpha_S^{\\rm{fix}}$', '$Q_0$', '$c_1$', '$c_2$', '$c_3$', '$\\tau_0$']
       min: [0.1, 1, 0, 0, 0, 0]
       max: [0.5, 10, 10, 10, 100, 1.5]
@@ -59,6 +59,10 @@ analyses:
     <<: *model_base
     observable_list:
       - 'jet__pt_'
+    # Optionally, exclude some observables which would otherwise be selected.
+    # eg. only want mid rapidity observables, so exclude the rapidity dependent jet RAA
+    #observable_exclude_list:
+    #  - "pt_y_atlas"
     plot_panel_shapes: [[3,3], [3,3], [3,3]]
 
 #-------------------------------------------
@@ -74,7 +78,7 @@ linear_weights: []
 covariance_function: 'matern'                  # squared_exponential, power_exponential, matern
 matern_nu: 1.5
 variance: 1                                    # overall variance
-noise: None                                    
+noise: None
 
 # Validation
 # We want to support the following:

@@ -4,7 +4,7 @@
 
 output_dir: 'output/20230227'
 
-initialize_observables: False
+initialize_observables: True
 fit_emulators: False
 run_mcmc: False
 plot: True
@@ -59,6 +59,9 @@ analyses:
     <<: *model_base
     observable_list:
       - 'jet__pt_'
+    observable_exclude_list:
+      # Exclude the ATLAS rapidity dependent, since we don't want to deal with it for now
+      - "pt_y_atlas"
     plot_panel_shapes: [[3,3], [3,3], [3,3]]
 
 #-------------------------------------------

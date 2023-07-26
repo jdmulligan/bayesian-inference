@@ -447,14 +447,21 @@ def _accept_observable(analysis_config, filename):
         return False
 
     # Check observable
-    found_observable = False
-    for observable_string in analysis_config['observable_list']:
-        if observable_string in filename:
-            found_observable = True
-    if not found_observable:
-        return False
+    # Select observables based on the input list, with the possibility of excluding some
+    # observables with additional selection strings (eg. remove one experiment from the
+    # observables for an exploratory analysis).
+    config_observable_list = analysis_config['observable_list']
+    config_observable_exclude_list = analysis_config.get("observable_exclude_list", [])
+    observable_in_include_list = any([observable_string in filename for observable_string in config_observable_list])
+    observable_in_exclude_list = any([exclude in filename for exclude in config_observable_exclude_list])
 
-    return True
+    found_observable = (observable_in_include_list and not observable_in_exclude_list)
+
+    # Helpful for cross checking when debugging
+    if observable_in_exclude_list:
+        logger.debug(f"Excluding observable '{filename}' due to exclude list. {found_observable=}")
+
+    return found_observable
 
 #---------------------------------------------------------------
 def _split_training_validation_indices(validation_indices, observable_table_dir, parameterization):
