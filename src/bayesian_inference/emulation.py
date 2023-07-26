@@ -73,6 +73,7 @@ def fit_emulators(config):
     Y_pca = pca.fit_transform(scaler.fit_transform(Y))
     Y_pca_truncated = Y_pca[:,:config.n_pc]    # Select PCs here
     Y_reconstructed_truncated = Y_pca_truncated.dot(pca.components_[:config.n_pc,:])
+    Y_reconstructed_truncated_unscaled = scaler.inverse_transform(Y_reconstructed_truncated)
     explained_variance_ratio = pca.explained_variance_ratio_
     print(f'  Variance explained by first {config.n_pc} components: {np.sum(explained_variance_ratio[:config.n_pc])}')
 
@@ -121,7 +122,9 @@ def fit_emulators(config):
     output_dict['PCA']['Y_pca'] = Y_pca
     output_dict['PCA']['Y_pca_truncated'] = Y_pca_truncated
     output_dict['PCA']['Y_reconstructed_truncated'] = Y_reconstructed_truncated
+    output_dict['PCA']['Y_reconstructed_truncated_unscaled'] = Y_reconstructed_truncated_unscaled
     output_dict['PCA']['pca'] = pca
+    output_dict['PCA']['scaler'] = scaler
     output_dict['emulators'] = emulators
     with open(config.emulation_outputfile, 'wb') as f:
 	    pickle.dump(output_dict, f)
@@ -149,9 +152,11 @@ def predict(parameters, results, config, validation_set=False):
         emulator_mean[:,i] = y_mean
         emulator_std[:,i] = y_std
 
-    # Reconstruct the physical space from the PCs
+    # Reconstruct the physical space from the PCs, and invert preprocessing
     pca = results['PCA']['pca']
-    emulator_mean_reconstructed = emulator_mean.dot(pca.components_[:config.n_pc,:])
+    scaler = results['PCA']['scaler']
+    emulator_mean_reconstructed_scaled = emulator_mean.dot(pca.components_[:config.n_pc,:])
+    emulator_mean_reconstructed = scaler.inverse_transform(emulator_mean_reconstructed_scaled)
 
     # TODO: propagate and return emulator_std
 

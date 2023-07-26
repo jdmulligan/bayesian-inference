@@ -85,12 +85,13 @@ def _plot_pca_reconstruction_error(results, plot_dir):
 
     pca = results['PCA']['pca']
     Y = results['PCA']['Y']
-    Y_pca = results['PCA']['Y_pca']
+    Y_pca = results['PCA']['Y_reconstructed_truncated_unscaled']
+    scaler = results['PCA']['scaler']
 
     n_pc_max = 30 # Y_pca.shape[1]
 
     x = range(n_pc_max)
-    y = [np.sum((Y - Y_pca[:,:n_pc].dot(pca.components_[:n_pc,:]))**2, axis=1).mean() for n_pc in x]
+    y = [np.sum((Y - scaler.inverse_transform(Y_pca[:,:n_pc].dot(pca.components_[:n_pc,:])))**2, axis=1).mean() for n_pc in x]
 
     # Alternately can call:
     # Y_reconstructed = pca.inverse_transform(Y_pca)
@@ -112,7 +113,7 @@ def _plot_pca_reconstruction_observables(results, config, plot_dir):
 
     # Get PCA results -- 2D arrays: (design_point_index, observable_bins)
     Y = results['PCA']['Y']
-    Y_reconstructed_truncated = results['PCA']['Y_reconstructed_truncated']
+    Y_reconstructed_truncated = results['PCA']['Y_reconstructed_truncated_unscaled']
     # Translate matrix of stacked observables to a dict of matrices per observable
     observables = data_IO.read_dict_from_h5(config.output_dir, 'observables.h5')
     Y_dict = data_IO.prediction_dict_from_matrix(Y, observables, config, validation_set=False)
@@ -156,7 +157,7 @@ def _plot_emulator_observables(results, config, plot_dir, validation_set=False):
         filename = f'emulator_observables_validation_design_point{design_point_index}'
     else:
         # Get PCA results -- 2D arrays: (design_point_index, observable_bins)
-        Y_reconstructed_truncated = results['PCA']['Y_reconstructed_truncated']
+        Y_reconstructed_truncated = results['PCA']['Y_reconstructed_truncated_unscaled']
         # Translate matrix of stacked observables to a dict of matrices per observable
         Y_dict_truncated_reconstructed = data_IO.prediction_dict_from_matrix(Y_reconstructed_truncated, observables, validation_set=validation_set)
 
