@@ -1,7 +1,14 @@
 # Python
 .venv*
 .pdm-python
+__pycache__/
 
 # VScode
 *.code-workspace
 .vscode/
+
+# Data
+data/
+output/
+
+

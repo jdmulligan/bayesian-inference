@@ -6,6 +6,7 @@ authors: J.Mulligan, R.Ehlers
 '''
 
 import os
+import logging
 import yaml
 
 from matplotlib import pyplot as plt
@@ -13,6 +14,9 @@ import seaborn as sns
 sns.set_context('paper', rc={'font.size':18,'axes.titlesize':18,'axes.labelsize':18})
 
 from bayesian_inference import data_IO
+
+logger = logging.getLogger(__name__)
+
 
 #---------------------------------------------------------------
 def plot_observable_panels(plot_list, labels, colors, design_point_index, config, plot_dir, filename):

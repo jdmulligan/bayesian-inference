@@ -13,6 +13,7 @@ Based in part on JETSCAPE/STAT code.
 '''
 
 import os
+import logging
 import yaml
 
 import numpy as np
@@ -23,6 +24,9 @@ import sklearn.gaussian_process as sklearn_gaussian_process
 
 from bayesian_inference import data_IO
 from bayesian_inference import common_base
+
+logger = logging.getLogger(__name__)
+
 
 ####################################################################################################################
 def fit_emulators(config):
@@ -39,14 +43,14 @@ def fit_emulators(config):
     if os.path.exists(config.emulation_outputfile):
         if config.force_retrain:
             os.remove(config.emulation_outputfile)
-            print(f'Removed {config.emulation_outputfile}')
+            logger.info(f'Removed {config.emulation_outputfile}')
         else:
-            print(f'Emulators already exist: {config.emulation_outputfile} (to force retrain, set force_retrain: True)')
+            logger.info(f'Emulators already exist: {config.emulation_outputfile} (to force retrain, set force_retrain: True)')
             return
 
     # Initialize predictions into a single 2D array: (design_point_index, observable_bins) i.e. (n_samples, n_features)
     # A consistent order of observables is enforced internally in data_IO
-    print(f'Doing PCA...')
+    logger.info(f'Doing PCA...')
     Y = data_IO.predictions_matrix_from_h5(config.output_dir, filename='observables.h5')
 
     # Use sklearn to:
@@ -75,7 +79,7 @@ def fit_emulators(config):
     Y_reconstructed_truncated = Y_pca_truncated.dot(pca.components_[:config.n_pc,:])
     Y_reconstructed_truncated_unscaled = scaler.inverse_transform(Y_reconstructed_truncated)
     explained_variance_ratio = pca.explained_variance_ratio_
-    print(f'  Variance explained by first {config.n_pc} components: {np.sum(explained_variance_ratio[:config.n_pc])}')
+    logger.info(f'  Variance explained by first {config.n_pc} components: {np.sum(explained_variance_ratio[:config.n_pc])}')
 
     # Get design
     design = data_IO.design_array_from_h5(config.output_dir, filename='observables.h5')
@@ -101,19 +105,19 @@ def fit_emulators(config):
     # Fit a GP (optimize the kernel hyperparameters) to map each design point to each of its PCs
     # Note that Z=(n_samples, n_components), so each PC corresponds to a row (i.e. a column of Z.T)
     alpha = 1.e-10
-    print()
-    print(f'Fitting GPs...')
-    print(f'  The design has {design.shape[1]} parameters')
+    logger.info("")
+    logger.info(f'Fitting GPs...')
+    logger.info(f'  The design has {design.shape[1]} parameters')
     emulators = [sklearn_gaussian_process.GaussianProcessRegressor(kernel=kernel,
                                                              alpha=alpha,
                                                              n_restarts_optimizer=config.n_restarts,
                                                              copy_X_train=False).fit(design, y) for y in Y_pca_truncated.T]
 
     # Print hyperparameters
-    print()
-    print('Kernel hyperparameters:')
-    [print(f'  {emulator.kernel_}') for emulator in emulators]
-    print()
+    logger.info("")
+    logger.info('Kernel hyperparameters:')
+    [logger.info(f'  {emulator.kernel_}') for emulator in emulators]
+    logger.info("")
 
     # Write all info we want to file
     output_dict = {}
