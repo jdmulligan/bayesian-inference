@@ -165,7 +165,7 @@ def write_dict_to_h5(results, output_dir, filename, verbose=True):
 
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
-    dicttoh5(results, os.path.join(output_dir, filename), overwrite_data=True)
+    dicttoh5(results, os.path.join(output_dir, filename), update_mode="modify")
 
     if verbose:
         logger.info('Done.')
