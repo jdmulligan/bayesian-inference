@@ -116,6 +116,8 @@ def initialize_observables_dict_from_tables(table_dir, analysis_config, paramete
                 with open(os.path.join(prediction_dir, filename_prediction_values)) as f:
                     for line in f.readlines():
                         if 'design_point' in line:
+                            # NOTE: 12 == len("design_point"), so this strips out the leading
+                            #       "design_point" text to extract the design point index
                             indices = set([int(s[12:]) for s in line.split('#')[1].split()])
                 training_indices_numpy = list(indices - set(validation_indices))
                 validation_indices_numpy = list(indices.intersection(set(validation_indices)))
