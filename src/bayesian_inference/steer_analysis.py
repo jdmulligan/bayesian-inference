@@ -7,6 +7,7 @@ Based in part on JETSCAPE/STAT code.
 '''
 
 import argparse
+import logging
 import os
 import sys
 import yaml
@@ -17,7 +18,10 @@ from bayesian_inference import mcmc
 from bayesian_inference import plot_emulation
 from bayesian_inference import plot_mcmc
 
-from bayesian_inference import common_base
+from bayesian_inference import common_base, helpers
+
+logger = logging.getLogger(__name__)
+
 
 ####################################################################################################################
 class SteerAnalysis(common_base.CommonBase):
@@ -31,13 +35,13 @@ class SteerAnalysis(common_base.CommonBase):
         self.config_file = config_file
         self.initialize()
 
-        print(self)
+        logger.info(self)
 
     #---------------------------------------------------------------
     # Initialize config
     #---------------------------------------------------------------
     def initialize(self):
-        print('Initializing class objects')
+        logger.info('Initializing class objects')
 
         with open(self.config_file, 'r') as stream:
             config = yaml.safe_load(stream)
@@ -70,9 +74,9 @@ class SteerAnalysis(common_base.CommonBase):
                 # Initialize design points, predictions, data, and uncertainties
                 # We store them in a dict and write/read it to HDF5
                 if self.initialize_observables:
-                    print()
-                    print('========================================================================')
-                    print(f'Initializing model: {analysis_name} ({parameterization} parameterization)...')
+                    logger.info("")
+                    logger.info('========================================================================')
+                    logger.info(f'Initializing model: {analysis_name} ({parameterization} parameterization)...')
                     observables = data_IO.initialize_observables_dict_from_tables(self.observable_table_dir,
                                                                                   analysis_config,
                                                                                   parameterization)
@@ -82,8 +86,8 @@ class SteerAnalysis(common_base.CommonBase):
 
                 # Fit emulators and write them to file
                 if self.fit_emulators:
-                    print('------------------------------------------------------------------------')
-                    print(f'Fitting emulators for {analysis_name}_{parameterization}...')
+                    logger.info('------------------------------------------------------------------------')
+                    logger.info(f'Fitting emulators for {analysis_name}_{parameterization}...')
                     emulation_config = emulation.EmulationConfig(analysis_name=analysis_name,
                                                                  parameterization=parameterization,
                                                                  analysis_config=analysis_config,
@@ -92,9 +96,9 @@ class SteerAnalysis(common_base.CommonBase):
 
                 # Run MCMC
                 if self.run_mcmc:
-                    print()
-                    print('------------------------------------------------------------------------')
-                    print(f'Running MCMC for {analysis_name}_{parameterization}...')
+                    logger.info("")
+                    logger.info('------------------------------------------------------------------------')
+                    logger.info(f'Running MCMC for {analysis_name}_{parameterization}...')
                     mcmc_config = mcmc.MCMCConfig(analysis_name=analysis_name,
                                                   parameterization=parameterization,
                                                   analysis_config=analysis_config,
@@ -108,40 +112,42 @@ class SteerAnalysis(common_base.CommonBase):
             for analysis_name,analysis_config in self.analyses.items():
                 for parameterization in analysis_config['parameterizations']:
 
-                    print('========================================================================')
-                    print(f'Plotting for {analysis_name} ({parameterization} parameterization)...')
-                    print()
+                    logger.info('========================================================================')
+                    logger.info(f'Plotting for {analysis_name} ({parameterization} parameterization)...')
+                    logger.info("")
 
-                    print('------------------------------------------------------------------------')
-                    print(f'Plotting emulators for {analysis_name}_{parameterization}...')
+                    logger.info('------------------------------------------------------------------------')
+                    logger.info(f'Plotting emulators for {analysis_name}_{parameterization}...')
                     emulation_config = emulation.EmulationConfig(analysis_name=analysis_name,
                                                                  parameterization=parameterization,
                                                                  analysis_config=analysis_config,
                                                                  config_file=self.config_file)
                     plot_emulation.plot(emulation_config)
-                    print(f'Done!')
-                    print()
+                    logger.info(f'Done!')
+                    logger.info("")
 
-                    print('------------------------------------------------------------------------')
-                    print(f'Plotting MCMC for {analysis_name}_{parameterization}...')
+                    logger.info('------------------------------------------------------------------------')
+                    logger.info(f'Plotting MCMC for {analysis_name}_{parameterization}...')
                     mcmc_config = mcmc.MCMCConfig(analysis_name=analysis_name,
                                                   parameterization=parameterization,
                                                   analysis_config=analysis_config,
                                                   config_file=self.config_file)
                     plot_mcmc.plot(mcmc_config)
-                    print(f'Done!')
-                    print()
+                    logger.info(f'Done!')
+                    logger.info("")
 
-                    print('------------------------------------------------------------------------')
-                    print(f'Plotting qhat results {analysis_name}_{parameterization}...')
-                    print(f'Done!')
-                    print()
+                    logger.info('------------------------------------------------------------------------')
+                    logger.info(f'Plotting qhat results {analysis_name}_{parameterization}...')
+                    logger.info(f'Done!')
+                    logger.info("")
 
             # Plots across multiple analyses
 
 
 ####################################################################################################################
 if __name__ == '__main__':
+    helpers.setup_logging(level=logging.INFO)
+
     parser = argparse.ArgumentParser(description='Jet Bayesian Analysis')
     parser.add_argument('-c', '--configFile',
                         help='Path of config file for analysis',
@@ -149,12 +155,12 @@ if __name__ == '__main__':
                         default='../config/hadron_jet_RAA.yaml', )
     args = parser.parse_args()
 
-    print('Configuring...')
-    print(f'  configFile: {args.configFile}')
+    logger.info('Configuring...')
+    logger.info(f'  configFile: {args.configFile}')
 
     # If invalid configFile is given, exit
     if not os.path.exists(args.configFile):
-        print(f'File {args.configFile} does not exist! Exiting!')
+        logger.info(f'File {args.configFile} does not exist! Exiting!')
         sys.exit(0)
 
     analysis = SteerAnalysis(config_file=args.configFile)

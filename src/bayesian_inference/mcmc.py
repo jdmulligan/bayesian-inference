@@ -26,6 +26,9 @@ from bayesian_inference import common_base
 from bayesian_inference import data_IO
 from bayesian_inference import emulation
 
+logger = logging.getLogger(__name__)
+
+
 ####################################################################################################################
 def run_mcmc(config):
     '''

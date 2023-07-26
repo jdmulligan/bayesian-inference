@@ -4,9 +4,9 @@ Module related to reading and writing of tables of observables into numpy arrays
 
 The main functionalities are:
  - initialize_observables_dict_from_tables() -- read design/prediction/data tables (.dat files) into nested dictionary of numpy arrays
- - read/write_dict_to_h5() -- read/write nested dict of numpy arrays to HDF5  
- - predictions_matrix_from_h5() -- construct prediction matrix (design_points, observable_bins) from observables.h5 
- - design_array_from_h5() -- read design points from observables.h5 
+ - read/write_dict_to_h5() -- read/write nested dict of numpy arrays to HDF5
+ - predictions_matrix_from_h5() -- construct prediction matrix (design_points, observable_bins) from observables.h5
+ - design_array_from_h5() -- read design points from observables.h5
  - observable_label_to_keys() -- convert observable string label to list of subobservables strings
  - sorted_observable_list_from_dict() -- get sorted list of observable_label keys, using fixed ordering convention that we enforce
 
@@ -14,11 +14,16 @@ authors: J.Mulligan, R.Ehlers
 '''
 
 import os
+import logging
 import sys
 from collections import defaultdict
 from operator import itemgetter
 import numpy as np
 from silx.io.dictdump import dicttoh5, h5todict
+
+
+logger = logging.getLogger(__name__)
+
 
 ####################################################################################################################
 def initialize_observables_dict_from_tables(table_dir, analysis_config, parameterization):
@@ -51,9 +56,9 @@ def initialize_observables_dict_from_tables(table_dir, analysis_config, paramete
            observable_label = f'{sqrts}__{system}__{observable_type}__{observable}__{subobservable}__{centrality}'
     :rtype dict
     '''
-    print('Including the following observables:')
+    logger.info('Including the following observables:')
 
-    # We will construct a dict containing all observables  
+    # We will construct a dict containing all observables
     observables = _recursive_defaultdict()
 
     # We separate out the validation indices specified in the config
@@ -61,7 +66,7 @@ def initialize_observables_dict_from_tables(table_dir, analysis_config, paramete
     validation_indices = range(validation_range[0], validation_range[1])
 
     #----------------------
-    # Read experimental data 
+    # Read experimental data
     data_dir = os.path.join(table_dir, 'Data')
     for filename in os.listdir(data_dir):
         if _accept_observable(analysis_config, filename):
@@ -80,11 +85,11 @@ def initialize_observables_dict_from_tables(table_dir, analysis_config, paramete
                 sys.exit(f'{filename} has value=0')
 
     #----------------------
-    # Read design points 
+    # Read design points
     design_dir = os.path.join(table_dir, 'Design')
     for filename in os.listdir(design_dir):
 
-        if _filename_to_labels(filename)[1] == parameterization: 
+        if _filename_to_labels(filename)[1] == parameterization:
             design_points = np.loadtxt(os.path.join(design_dir, filename), ndmin=2)
 
             # Separate training and validation sets into separate dicts
@@ -101,7 +106,7 @@ def initialize_observables_dict_from_tables(table_dir, analysis_config, paramete
             if _accept_observable(analysis_config, filename):
 
                 filename_prediction_values = filename
-                filename_prediction_errors = filename.replace('values', 'errors') 
+                filename_prediction_errors = filename.replace('values', 'errors')
                 observable_label, _ = _filename_to_labels(filename_prediction_values)
 
                 prediction_values = np.loadtxt(os.path.join(prediction_dir, filename_prediction_values), ndmin=2)
@@ -123,13 +128,13 @@ def initialize_observables_dict_from_tables(table_dir, analysis_config, paramete
 
                 # TODO: Do something about bins that have value=0?
                 if 0 in prediction_values:
-                    print(f'WARNING: {filename_prediction_values} has value=0 at design points {np.where(prediction_values == 0)[1]}')
+                    logger.info(f'WARNING: {filename_prediction_values} has value=0 at design points {np.where(prediction_values == 0)[1]}')
 
                 # Check that data and prediction have same observables with the same size
                 if observable_label not in observables['Data']:
                     data_keys = observables['Data'].keys()
                     sys.exit(f'{observable_label} not found in observables[Data]: {data_keys}')
-                
+
                 data_size = observables['Data'][observable_label]['y'].shape[0]
                 prediction_size = observables['Prediction'][observable_label]['y'].shape[0]
                 if data_size != prediction_size:
@@ -140,7 +145,7 @@ def initialize_observables_dict_from_tables(table_dir, analysis_config, paramete
 
     #----------------------
     # Print observables that we will use
-    [print(f'  {s}') for s in sorted(observables['Prediction'].keys())]
+    [logger.info(f'  {s}') for s in sorted(observables['Prediction'].keys())]
 
     return observables
 
@@ -155,16 +160,16 @@ def write_dict_to_h5(results, output_dir, filename, verbose=True):
     :param str filename: name of hdf5 file to create (will overwrite)
     '''
     if verbose:
-        print()
-        print(f'Writing results to {output_dir}/{filename}...')
+        logger.info("")
+        logger.info(f'Writing results to {output_dir}/{filename}...')
 
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     dicttoh5(results, os.path.join(output_dir, filename), overwrite_data=True)
 
     if verbose:
-        print('Done.')
-        print()
+        logger.info('Done.')
+        logger.info("")
 
 ####################################################################################################################
 def read_dict_from_h5(input_dir, filename, verbose=True):
@@ -176,27 +181,27 @@ def read_dict_from_h5(input_dir, filename, verbose=True):
     :param str filename: name of hdf5 file to read
     '''
     if verbose:
-        print()
-        print(f'Loading results from {input_dir}/{filename}...')
+        logger.info("")
+        logger.info(f'Loading results from {input_dir}/{filename}...')
 
     results = h5todict(os.path.join(input_dir, filename))
 
     if verbose:
-        print('Done.')
-        print()
+        logger.info('Done.')
+        logger.info("")
 
     return results
 
 ####################################################################################################################
 def predictions_matrix_from_h5(output_dir, filename, validation_set=False):
     '''
-    Initialize predictions from observables.h5 file into a single 2D array: 
+    Initialize predictions from observables.h5 file into a single 2D array:
 
     :param str output_dir: location of filename
     :param str filename: h5 filename (typically 'observables.h5')
     :return 2darray Y: matrix of predictions at all design points (design_point_index, observable_bins) i.e. (n_samples, n_features)
     '''
-    
+
     # Initialize observables dict from observables.h5 file
     observables = read_dict_from_h5(output_dir, filename, verbose=False)
 
@@ -209,7 +214,7 @@ def predictions_matrix_from_h5(output_dir, filename, validation_set=False):
     else:
         prediction_label = 'Prediction'
 
-    # Loop through sorted observables and concatenate them into a single 2D array: 
+    # Loop through sorted observables and concatenate them into a single 2D array:
     #   (design_point_index, observable_bins) i.e. (n_samples, n_features)
     for i,observable_label in enumerate(sorted_observable_list):
         values = observables[prediction_label][observable_label]['y'].T
@@ -217,7 +222,7 @@ def predictions_matrix_from_h5(output_dir, filename, validation_set=False):
             Y = values
         else:
             Y = np.concatenate([Y,values], axis=1)
-    print(f'  Total shape of {prediction_label} data (n_samples, n_features): {Y.shape}')
+    logger.info(f'  Total shape of {prediction_label} data (n_samples, n_features): {Y.shape}')
 
     return Y
 
@@ -263,20 +268,20 @@ def data_array_from_h5(output_dir, filename, observable_table_dir=None):
             assert np.allclose(data[observable_label]['xmax'], data_table[:,1])
             assert np.allclose(data[observable_label]['y'], data_table[:,2])
             assert np.allclose(data[observable_label]['y_err'] , data_table[:,3])
-    
+
     return data
 
 ####################################################################################################################
 def prediction_dict_from_matrix(Y, observables, config=None, validation_set=False):
     '''
-    Translate matrix of stacked observables to a dict of matrices per observable 
+    Translate matrix of stacked observables to a dict of matrices per observable
 
     :param ndarray Y: 2D array: (design_point_index, observable_bins)
-    :param dict observables: dict 
-    :param str observable_table_dir: (optional, only needed to check against table values) 
-    :param str parameterization: (optional, only needed to check against table values) 
-    :param str validation_range: (optional, only needed to check against table values) 
-    :param str validation_set: (optional, only needed to check against table values) 
+    :param dict observables: dict
+    :param str observable_table_dir: (optional, only needed to check against table values)
+    :param str parameterization: (optional, only needed to check against table values)
+    :param str validation_range: (optional, only needed to check against table values)
+    :param str validation_set: (optional, only needed to check against table values)
     :return dict[ndarray] Y_dict: dict with ndarray for each observable
     '''
 
@@ -342,12 +347,12 @@ def observable_label_to_keys(observable_label):
 ####################################################################################################################
 def sorted_observable_list_from_dict(observables):
     '''
-    Define a sorted list of observable_labels from the keys of the observables dict, to keep well-defined ordering in matrix 
+    Define a sorted list of observable_labels from the keys of the observables dict, to keep well-defined ordering in matrix
 
     :param dict observables: dictionary containing predictions/design/data
     :return list[str] sorted_observable_list: list of observable labels
     '''
-    
+
     # Sort observables, to keep well-defined ordering in matrix
     sorted_observable_list = _sort_observable_labels(list(observables['Prediction'].keys()))
     return sorted_observable_list
@@ -356,7 +361,7 @@ def sorted_observable_list_from_dict(observables):
 def _sort_observable_labels(unordered_observable_labels):
     '''
     Sort list of observable keys by observable_type, observable, subobservable, centrality, sqrts.
-    TODO: Instead of a fixed sorting, we may want to allow the user to specify list of sort 
+    TODO: Instead of a fixed sorting, we may want to allow the user to specify list of sort
           criteria to apply, e.g. list of regex to iteratively sort by.
 
     :param list[str] observable_labels: unordered list of observable_label keys
@@ -372,7 +377,7 @@ def _sort_observable_labels(unordered_observable_labels):
     # Sort by (in order): observable_type, observable, subobservable, centrality, sqrts
     sorted_observable_label_tuples = sorted(x, key=itemgetter(2,3,4,5,0))
 
-    # Reconstruct the observable_key 
+    # Reconstruct the observable_key
     sorted_observable_labels = ['__'.join(x) for x in sorted_observable_label_tuples]
 
     return sorted_observable_labels
@@ -407,7 +412,7 @@ def _filename_to_labels(filename):
 
         parameterization = filename_keys[1]
         observable_label = '__'.join(filename_keys[2:-1])
-    
+
     return observable_label, parameterization
 
 #---------------------------------------------------------------
@@ -458,7 +463,7 @@ def _split_training_validation_indices(validation_indices, observable_table_dir,
     :param str observable_table_dir: location of table dir
     :param str parameterization: qhat parameterization type
     '''
-        
+
     # Get training set or validation set
     design_table_dir = os.path.join(observable_table_dir, 'Design')
     design_filename = f'Design__{parameterization}.dat'

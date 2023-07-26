@@ -5,6 +5,7 @@ Module related to generate plots for MCMC
 authors: J.Mulligan, R.Ehlers
 '''
 
+import logging
 import os
 
 import numpy as np
@@ -14,6 +15,9 @@ import seaborn as sns
 sns.set_context('paper', rc={'font.size':18,'axes.titlesize':18,'axes.labelsize':18})
 
 from bayesian_inference import data_IO
+
+logger = logging.getLogger(__name__)
+
 
 ####################################################################################################################
 def plot(config):

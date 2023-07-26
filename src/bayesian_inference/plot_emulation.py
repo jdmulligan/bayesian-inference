@@ -6,6 +6,7 @@ authors: J.Mulligan, R.Ehlers
 '''
 
 import os
+import logging
 import yaml
 import pickle
 
@@ -19,6 +20,9 @@ from bayesian_inference import data_IO
 from bayesian_inference import emulation
 from bayesian_inference import plot_utils
 
+logger = logging.getLogger(__name__)
+
+
 ####################################################################################################################
 def plot(config):
     '''
@@ -30,7 +34,7 @@ def plot(config):
 
     # Check if emulator already exists
     if not os.path.exists(config.emulation_outputfile):
-        print(f'Emulator output does not exist: {config.emulation_outputfile}')
+        logger.info(f'Emulator output does not exist: {config.emulation_outputfile}')
         return
 
     # Get results from file
@@ -257,7 +261,7 @@ def _plot_emulator_residuals(results, config, plot_dir, validation_set=False):
 
     # Print out indices of points that deviate significantly
     # if np.abs(normalized_residual) > 3*stdev:
-    #     print('Index {} has poor  emulator validation...'.format(j))
+    #     logger.info('Index {} has poor  emulator validation...'.format(j))
 
     if validation_set:
         filename = 'emulator_residuals_validation'
