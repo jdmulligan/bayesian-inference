@@ -12,6 +12,8 @@ authors: J.Mulligan, R.Ehlers
 Based in part on JETSCAPE/STAT code.
 '''
 
+from __future__ import annotations
+
 import os
 import logging
 import yaml
@@ -29,10 +31,10 @@ logger = logging.getLogger(__name__)
 
 
 ####################################################################################################################
-def fit_emulators(config):
+def fit_emulators(config: EmulationConfig) -> None:
     '''
     Do PCA, fit emulators, and write to file.
-.
+
     The first config.n_pc principal components (PCs) are emulated by independent Gaussian processes (GPs)
     The emulators map design points to PCs; the output will need to be inverted from PCA space to physical space.
 
@@ -50,6 +52,7 @@ def fit_emulators(config):
 
     # Initialize predictions into a single 2D array: (design_point_index, observable_bins) i.e. (n_samples, n_features)
     # A consistent order of observables is enforced internally in data_IO
+    # NOTE: One sample corresponds to one design point, while one feature is one bin of one observable
     logger.info(f'Doing PCA...')
     Y = data_IO.predictions_matrix_from_h5(config.output_dir, filename='observables.h5')
 
@@ -77,8 +80,10 @@ def fit_emulators(config):
     # TODO: do we want whiten=True? (NOTE: beware that inverse_transform also undoes whitening)
     scaler = sklearn_preprocessing.StandardScaler()
     pca = sklearn_decomposition.PCA(svd_solver='full', whiten=False) # Include all PCs here, so we can access them later
+    # Scale data and perform PCA
     Y_pca = pca.fit_transform(scaler.fit_transform(Y))
     Y_pca_truncated = Y_pca[:,:config.n_pc]    # Select PCs here
+    # Invert PCA and undo the scaling
     Y_reconstructed_truncated = Y_pca_truncated.dot(pca.components_[:config.n_pc,:])
     Y_reconstructed_truncated_unscaled = scaler.inverse_transform(Y_reconstructed_truncated)
     explained_variance_ratio = pca.explained_variance_ratio_
@@ -88,31 +93,31 @@ def fit_emulators(config):
     design = data_IO.design_array_from_h5(config.output_dir, filename='observables.h5')
 
     # Define GP kernel (covariance function)
-    # TODO: abstract parameters / choices to config file
     min = np.array(config.analysis_config['parameters'][config.parameterization]['min'])
     max = np.array(config.analysis_config['parameters'][config.parameterization]['max'])
     length_scale = max - min
-    length_scale_bounds = (np.outer(length_scale, (0.1, 10)))
+    length_scale_bounds = (np.outer(length_scale, tuple(config.length_scale_bounds)))
     kernel_matern = sklearn_gaussian_process.kernels.Matern(length_scale=length_scale,
                                                             length_scale_bounds=length_scale_bounds,
-                                                            nu=1.5,
+                                                            nu=config.matern_nu,
                                                             )
-    noise0 = 0.5**2
-    noisemin = 0.01**2
-    noisemax = 1**2
-    kernel_noise = sklearn_gaussian_process.kernels.WhiteKernel(noise_level=noise0,
-                                                                noise_level_bounds=(noisemin, noisemax)
-                                                               )
-    kernel = (kernel_matern + kernel_noise)
+
+    # Potential addition of noise kernel
+    kernel = kernel_matern
+    if config.noise is not None:
+        kernel_noise = sklearn_gaussian_process.kernels.WhiteKernel(
+            noise_level=config.noise["args"]["noise_level"],
+            noise_level_bounds=config.noise["args"]["noise_level_bounds"],
+        )
+        kernel = (kernel_matern + kernel_noise)
 
     # Fit a GP (optimize the kernel hyperparameters) to map each design point to each of its PCs
     # Note that Z=(n_samples, n_components), so each PC corresponds to a row (i.e. a column of Z.T)
-    alpha = 1.e-10
     logger.info("")
     logger.info(f'Fitting GPs...')
     logger.info(f'  The design has {design.shape[1]} parameters')
     emulators = [sklearn_gaussian_process.GaussianProcessRegressor(kernel=kernel,
-                                                             alpha=alpha,
+                                                             alpha=config.alpha,
                                                              n_restarts_optimizer=config.n_restarts,
                                                              copy_X_train=False).fit(design, y) for y in Y_pca_truncated.T]
 
@@ -188,18 +193,41 @@ class EmulationConfig(common_base.CommonBase):
         with open(self.config_file, 'r') as stream:
             config = yaml.safe_load(stream)
 
+        # Observable inputs
         self.observable_table_dir = config['observable_table_dir']
         self.observable_config_dir = config['observable_config_dir']
-        self.force_retrain = config['force_retrain']
-        self.n_pc = config['n_pc']
-        self.n_restarts = config['n_restarts']
-        self.mean_function = config['mean_function']
-        self.constant = config['constant']
-        self.linear_weights = config['linear_weights']
-        self.covariance_function = config['covariance_function']
-        self.matern_nu = config['matern_nu']
-        self.variance = config['variance']
-        self.noise = config['noise']
 
+        ########################
+        # Emulator configuration
+        ########################
+        emulator_configuration = config["emulator_parameters"]
+        self.force_retrain = emulator_configuration['force_retrain']
+        self.n_pc = emulator_configuration['n_pc']
+        self.mean_function = emulator_configuration['mean_function']
+        self.constant = emulator_configuration['constant']
+        self.linear_weights = emulator_configuration['linear_weights']
+        self.covariance_function = emulator_configuration['covariance_function']
+        self.matern_nu = emulator_configuration['matern_nu']
+        self.variance = emulator_configuration['variance']
+        self.length_scale_bounds = emulator_configuration["length_scale_bounds"]
+
+        # Noise
+        self.noise = emulator_configuration['noise']
+        # Validation for noise configuration: Either None (null in yaml) or the noise configuration
+        if self.noise is not None:
+            # Check we have the appropriate keys
+            assert [k in self.noise.keys() for k in ["type", "args"]], "Noise configuration must have keys 'type' and 'args'"
+            if self.noise["type"] == "white":
+                # Validate arguments
+                # We don't want to do too much since we'll just be reinventing the wheel, but a bit can be helpful.
+                assert set(self.noise["args"]) == set(["noise_level", "noise_level_bounds"]), "Must provide arguments 'noise_level' and 'noise_level_bounds' for white noise kernel"
+            else:
+                raise ValueError("Unsupported noise kernel")
+
+        # GPR
+        self.n_restarts = emulator_configuration["GPR"]['n_restarts']
+        self.alpha = emulator_configuration["GPR"]["alpha"]
+
+        # Output options
         self.output_dir = os.path.join(config['output_dir'], f'{analysis_name}_{parameterization}')
         self.emulation_outputfile = os.path.join(self.output_dir, 'emulation.pkl')

@@ -69,18 +69,32 @@ analyses:
 
 #-------------------------------------------
 # Emulator parameters
-force_retrain: True
-n_pc: 4
-n_restarts: 50
+emulator_parameters:
+  force_retrain: True
+  n_pc: 4
 
-mean_function: 'constant'                      # constant, linear
-constant: 0.
-linear_weights: []
+  mean_function: 'constant'                      # constant, linear
+  constant: 0.
+  linear_weights: []
 
-covariance_function: 'matern'                  # squared_exponential, power_exponential, matern
-matern_nu: 1.5
-variance: 1                                    # overall variance
-noise: None
+  covariance_function: 'matern'                  # squared_exponential, power_exponential, matern
+  matern_nu: 1.5
+  variance: 1                                    # overall variance
+  length_scale_bounds: [0.1, 10]
+
+  # Disable noise with `null` (ie. `noise: null`)
+  noise:
+    type: "white"
+    args:
+      # NOTE: Can't raise to power in yaml, so you have to evaluate them by hand
+      noise_level: 0.25  # 0.5**2
+      noise_level_bounds: [0.0001, 1]  # [0.01**2, 1**2]
+
+  # Gaussian Process Regressor
+  GPR:
+    n_restarts: 50
+    alpha: 1.e-10
+
 
 # Validation
 # We want to support the following:
