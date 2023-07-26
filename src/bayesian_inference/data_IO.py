@@ -438,11 +438,20 @@ def _accept_observable(analysis_config, filename):
         return False
 
     # Check centrality
-    accepted_centrality = False
     centrality_min, centrality_max = centrality.split('-')
-    if int(centrality_min) >= analysis_config['centrality_range'][0]:
-        if int(centrality_max) <= analysis_config['centrality_range'][1]:
-            accepted_centrality = True
+    # Validation
+    # Provided a single centrality range - convert to a list of ranges
+    centrality_ranges = analysis_config['centrality_range']
+    if not isinstance(centrality_ranges[0], list):
+        centrality_ranges = [list(centrality_ranges)]
+
+    accepted_centrality = False
+    for (selected_cent_min, selected_cent_max) in centrality_ranges:
+        if int(centrality_min) >= selected_cent_min:
+            if int(centrality_max) <= selected_cent_max:
+                accepted_centrality = True
+                # Bail out - no need to keep looping if it's already accepted
+                break
     if not accepted_centrality:
         return False
 

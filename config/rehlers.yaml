@@ -33,7 +33,8 @@ analysis_base: &model_base
   model_name: 'MATTER+LBT'
   parameterizations: ['exponential']
   sqrts_list: [200, 2760, 5020]
-  centrality_range: [0, 10]
+  #centrality_range: [[0, 10], [30, 50]]
+  centrality_range: [[0, 10]]
   recoil_scheme: 'negative_recominber'
   parameters:
     exponential:

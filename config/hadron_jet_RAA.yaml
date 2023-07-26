@@ -34,6 +34,8 @@ analysis_base: &model_base
   parameterizations: ['exponential']
   sqrts_list: [200, 2760, 5020]
   centrality_range: [0,10]
+  # Can also be a list of centrality ranges. eg:
+  #centrality_range: [[0, 10], [30, 50]]
   recoil_scheme: 'negative_recominber'
   parameters:
     exponential:
