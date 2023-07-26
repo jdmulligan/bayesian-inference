@@ -30,7 +30,7 @@ def initialize_observables_dict_from_tables(table_dir, analysis_config, paramete
     Initialize from .dat files into a dictionary of numpy arrays
       - We loop through all observables in the table directory for the given model and parameterization
       - We include only those observables:
-         - That have sqrts,centrality specified in the analysis_config
+         - That have sqrts, centrality specified in the analysis_config
          - Whose filename contains a string from analysis_config observable_list
       - We also separate out the design/predictions with indices in the validation set
 
