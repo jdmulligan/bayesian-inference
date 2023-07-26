@@ -9,7 +9,6 @@ Based in part on JETSCAPE/STAT code.
 import argparse
 import logging
 import os
-import sys
 import yaml
 
 from bayesian_inference import data_IO
@@ -50,14 +49,17 @@ class SteerAnalysis(common_base.CommonBase):
         if not os.path.exists(self.output_dir):
             os.makedirs(self.output_dir)
 
+        # Data inputs
         self.observable_table_dir = config['observable_table_dir']
         self.observable_config_dir = config['observable_config_dir']
 
+        # Configure which functions to run
         self.initialize_observables = config['initialize_observables']
         self.fit_emulators = config['fit_emulators']
         self.run_mcmc = config['run_mcmc']
         self.plot = config['plot']
 
+        # Configuration of different analyses
         self.analyses = config['analyses']
 
     #---------------------------------------------------------------
@@ -160,8 +162,9 @@ if __name__ == '__main__':
 
     # If invalid configFile is given, exit
     if not os.path.exists(args.configFile):
-        logger.info(f'File {args.configFile} does not exist! Exiting!')
-        sys.exit(0)
+        msg = f'File {args.configFile} does not exist! Exiting!'
+        logger.info(msg)
+        raise ValueError(msg)
 
     analysis = SteerAnalysis(config_file=args.configFile)
     analysis.run_analysis()

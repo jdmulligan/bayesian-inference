@@ -15,7 +15,6 @@ authors: J.Mulligan, R.Ehlers
 
 import os
 import logging
-import sys
 from collections import defaultdict
 from operator import itemgetter
 import numpy as np
@@ -31,7 +30,7 @@ def initialize_observables_dict_from_tables(table_dir, analysis_config, paramete
     Initialize from .dat files into a dictionary of numpy arrays
       - We loop through all observables in the table directory for the given model and parameterization
       - We include only those observables:
-         - That have sqrts,centrality specified in the analysis_config
+         - That have sqrts, centrality specified in the analysis_config
          - Whose filename contains a string from analysis_config observable_list
       - We also separate out the design/predictions with indices in the validation set
 
@@ -82,7 +81,8 @@ def initialize_observables_dict_from_tables(table_dir, analysis_config, paramete
             observables['Data'][observable_label] = data_entry
 
             if 0 in data_entry['y']:
-                sys.exit(f'{filename} has value=0')
+                msg = f'{filename} has value=0'
+                raise ValueError(msg)
 
     #----------------------
     # Read design points
@@ -116,6 +116,8 @@ def initialize_observables_dict_from_tables(table_dir, analysis_config, paramete
                 with open(os.path.join(prediction_dir, filename_prediction_values)) as f:
                     for line in f.readlines():
                         if 'design_point' in line:
+                            # NOTE: 12 == len("design_point"), so this strips out the leading
+                            #       "design_point" text to extract the design point index
                             indices = set([int(s[12:]) for s in line.split('#')[1].split()])
                 training_indices_numpy = list(indices - set(validation_indices))
                 validation_indices_numpy = list(indices.intersection(set(validation_indices)))
@@ -133,12 +135,14 @@ def initialize_observables_dict_from_tables(table_dir, analysis_config, paramete
                 # Check that data and prediction have same observables with the same size
                 if observable_label not in observables['Data']:
                     data_keys = observables['Data'].keys()
-                    sys.exit(f'{observable_label} not found in observables[Data]: {data_keys}')
+                    msg = f'{observable_label} not found in observables[Data]: {data_keys}'
+                    raise ValueError(msg)
 
                 data_size = observables['Data'][observable_label]['y'].shape[0]
                 prediction_size = observables['Prediction'][observable_label]['y'].shape[0]
                 if data_size != prediction_size:
-                    sys.exit(f'({filename_prediction_values}) has different shape ({prediction_size}) than Data ({data_size}).')
+                    msg = f'({filename_prediction_values}) has different shape ({prediction_size}) than Data ({data_size}).'
+                    raise ValueError(msg)
 
     #----------------------
     # Construct covariance matrices
@@ -165,7 +169,7 @@ def write_dict_to_h5(results, output_dir, filename, verbose=True):
 
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
-    dicttoh5(results, os.path.join(output_dir, filename), overwrite_data=True)
+    dicttoh5(results, os.path.join(output_dir, filename), update_mode="modify")
 
     if verbose:
         logger.info('Done.')
@@ -436,23 +440,39 @@ def _accept_observable(analysis_config, filename):
         return False
 
     # Check centrality
-    accepted_centrality = False
     centrality_min, centrality_max = centrality.split('-')
-    if int(centrality_min) >= analysis_config['centrality_range'][0]:
-        if int(centrality_max) <= analysis_config['centrality_range'][1]:
-            accepted_centrality = True
+    # Validation
+    # Provided a single centrality range - convert to a list of ranges
+    centrality_ranges = analysis_config['centrality_range']
+    if not isinstance(centrality_ranges[0], list):
+        centrality_ranges = [list(centrality_ranges)]
+
+    accepted_centrality = False
+    for (selected_cent_min, selected_cent_max) in centrality_ranges:
+        if int(centrality_min) >= selected_cent_min:
+            if int(centrality_max) <= selected_cent_max:
+                accepted_centrality = True
+                # Bail out - no need to keep looping if it's already accepted
+                break
     if not accepted_centrality:
         return False
 
     # Check observable
-    found_observable = False
-    for observable_string in analysis_config['observable_list']:
-        if observable_string in filename:
-            found_observable = True
-    if not found_observable:
-        return False
+    # Select observables based on the input list, with the possibility of excluding some
+    # observables with additional selection strings (eg. remove one experiment from the
+    # observables for an exploratory analysis).
+    config_observable_list = analysis_config['observable_list']
+    config_observable_exclude_list = analysis_config.get("observable_exclude_list", [])
+    observable_in_include_list = any([observable_string in filename for observable_string in config_observable_list])
+    observable_in_exclude_list = any([exclude in filename for exclude in config_observable_exclude_list])
 
-    return True
+    found_observable = (observable_in_include_list and not observable_in_exclude_list)
+
+    # Helpful for cross checking when debugging
+    if observable_in_exclude_list:
+        logger.debug(f"Excluding observable '{filename}' due to exclude list. {found_observable=}")
+
+    return found_observable
 
 #---------------------------------------------------------------
 def _split_training_validation_indices(validation_indices, observable_table_dir, parameterization):
