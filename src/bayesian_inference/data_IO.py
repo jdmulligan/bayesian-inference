@@ -15,7 +15,6 @@ authors: J.Mulligan, R.Ehlers
 
 import os
 import logging
-import sys
 from collections import defaultdict
 from operator import itemgetter
 import numpy as np
@@ -82,7 +81,8 @@ def initialize_observables_dict_from_tables(table_dir, analysis_config, paramete
             observables['Data'][observable_label] = data_entry
 
             if 0 in data_entry['y']:
-                sys.exit(f'{filename} has value=0')
+                msg = f'{filename} has value=0'
+                raise ValueError(msg)
 
     #----------------------
     # Read design points
@@ -133,12 +133,14 @@ def initialize_observables_dict_from_tables(table_dir, analysis_config, paramete
                 # Check that data and prediction have same observables with the same size
                 if observable_label not in observables['Data']:
                     data_keys = observables['Data'].keys()
-                    sys.exit(f'{observable_label} not found in observables[Data]: {data_keys}')
+                    msg = f'{observable_label} not found in observables[Data]: {data_keys}'
+                    raise ValueError(msg)
 
                 data_size = observables['Data'][observable_label]['y'].shape[0]
                 prediction_size = observables['Prediction'][observable_label]['y'].shape[0]
                 if data_size != prediction_size:
-                    sys.exit(f'({filename_prediction_values}) has different shape ({prediction_size}) than Data ({data_size}).')
+                    msg = f'({filename_prediction_values}) has different shape ({prediction_size}) than Data ({data_size}).'
+                    raise ValueError(msg)
 
     #----------------------
     # Construct covariance matrices

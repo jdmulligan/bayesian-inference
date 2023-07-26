@@ -9,7 +9,6 @@ Based in part on JETSCAPE/STAT code.
 import argparse
 import logging
 import os
-import sys
 import yaml
 
 from bayesian_inference import data_IO
@@ -160,8 +159,9 @@ if __name__ == '__main__':
 
     # If invalid configFile is given, exit
     if not os.path.exists(args.configFile):
-        logger.info(f'File {args.configFile} does not exist! Exiting!')
-        sys.exit(0)
+        msg = f'File {args.configFile} does not exist! Exiting!'
+        logger.info(msg)
+        raise ValueError(msg)
 
     analysis = SteerAnalysis(config_file=args.configFile)
     analysis.run_analysis()
