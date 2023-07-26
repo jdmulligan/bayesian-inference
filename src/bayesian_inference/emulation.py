@@ -134,7 +134,7 @@ def predict(parameters, results, config, validation_set=False):
     :param ndarray[float] parameters: list of parameter values (e.g. [tau0, c1, c2, ...]), with shape (n_design_points, n_parameters)
     :param str results: dictionary that stores emulator
 
-    :return dict emulator_predicctions: dictionary of emulator predictions, with format emulator_predictions[observable_label]
+    :return dict emulator_predictions: dictionary of emulator predictions, with format emulator_predictions[observable_label]
     '''
 
     # The emulators are stored as a list (one for each PC)
