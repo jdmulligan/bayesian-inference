@@ -89,7 +89,7 @@ def _plot_pca_reconstruction_error(results, plot_dir):
 
     pca = results['PCA']['pca']
     Y = results['PCA']['Y']
-    Y_pca = results['PCA']['Y_reconstructed_truncated_unscaled']
+    Y_pca = results['PCA']['Y_pca']
     scaler = results['PCA']['scaler']
 
     n_pc_max = 30 # Y_pca.shape[1]
