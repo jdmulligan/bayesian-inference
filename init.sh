@@ -28,13 +28,13 @@ for i in "$@"; do
 done
 
 # Install separate venv for GPU and CPU (to allow to work on either machine, using same home directory)
-if [ ! -z ${INSTALL} ]; then
-    if lspci | grep -i 'nvidia' > /dev/null; then
-        VENV_DIR=".venv_gpu"
-    else
-        VENV_DIR=".venv_cpu"
-    fi
+if lspci | grep -i 'nvidia' > /dev/null; then
+    VENV_DIR=".venv_gpu"
+else
+    VENV_DIR=".venv_cpu"
+fi
 
+if [ ! -z ${INSTALL} ]; then
     if [ -d $VENV_DIR ]; then
         echo
         echo "Remove existing virtual environment..."
@@ -42,10 +42,11 @@ if [ ! -z ${INSTALL} ]; then
     fi
     echo
     echo "Create new virtual environment..."
+    echo "Using $VENV_DIR"
     python -m venv $VENV_DIR
+    pdm use $VENV_DIR/bin/python
     pdm install
 fi
 
 # Initialize python virtual environment for package management
 source $VENV_DIR/bin/activate
-
