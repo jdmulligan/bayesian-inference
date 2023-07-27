@@ -156,25 +156,25 @@ def predict(parameters, results, config, validation_set=False):
     emulators = results['emulators']
 
     # Get predictions (in PC space) from each emulator and concatenate them into a numpy array with shape (n_design_points, n_PCs)
-    emulator_mean = np.zeros((parameters.shape[0], config.n_pc))
+    emulator_central_value = np.zeros((parameters.shape[0], config.n_pc))
     emulator_std = np.zeros((parameters.shape[0], config.n_pc))
     for i,emulator in enumerate(emulators):
-        y_mean, y_std = emulator.predict(parameters, return_std=True)
-        #y_mean, y_cov = emulator.predict(parameters, return_cov=True)
-        emulator_mean[:,i] = y_mean
+        y_central_value, y_std = emulator.predict(parameters, return_std=True)
+        #y_central_value, y_cov = emulator.predict(parameters, return_cov=True)
+        emulator_central_value[:,i] = y_central_value
         emulator_std[:,i] = y_std
 
     # Reconstruct the physical space from the PCs, and invert preprocessing
     pca = results['PCA']['pca']
     scaler = results['PCA']['scaler']
-    emulator_mean_reconstructed_scaled = emulator_mean.dot(pca.components_[:config.n_pc,:])
-    emulator_mean_reconstructed = scaler.inverse_transform(emulator_mean_reconstructed_scaled)
+    emulator_central_value_reconstructed_scaled = emulator_central_value.dot(pca.components_[:config.n_pc,:])
+    emulator_central_value_reconstructed = scaler.inverse_transform(emulator_central_value_reconstructed_scaled)
 
     # TODO: propagate and return emulator_std
 
     # Construct dict of observables
     observables = data_IO.read_dict_from_h5(config.output_dir, 'observables.h5', verbose=False)
-    emulator_predictions = data_IO.prediction_dict_from_matrix(emulator_mean_reconstructed, observables, validation_set=validation_set)
+    emulator_predictions = data_IO.prediction_dict_from_matrix(emulator_central_value_reconstructed, observables, validation_set=validation_set)
 
     return emulator_predictions
 
