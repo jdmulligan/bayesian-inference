@@ -35,7 +35,7 @@ def plot_observable_panels(plot_list, labels, colors, design_point_index, config
     # Group observables into subplots, with shapes specified in config
     plot_panel_shapes = config.analysis_config['plot_panel_shapes']
     n_panels = sum(x[0]*x[1] for x in plot_panel_shapes)
-    assert len(sorted_observable_list) < n_panels, f'You specified {n_panels} panels, but have {len(sorted_observable_list)} observables'
+    assert len(sorted_observable_list) <= n_panels, f'You specified {n_panels} panels, but have {len(sorted_observable_list)} observables'
     i_plot = 0
     i_subplot = 0
     fig, axs = None, None
@@ -103,7 +103,7 @@ def plot_observable_panels(plot_list, labels, colors, design_point_index, config
 
         # Draw legend
         axs[row,col].legend(loc='upper right', title=observable_label,
-                            title_fontsize=fontsize, fontsize=fontsize, frameon=True)
+                            title_fontsize=fontsize, fontsize=fontsize, frameon=False)
 
         # Increment subplot, and save if done with plot
         i_subplot += 1

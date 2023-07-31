@@ -47,8 +47,8 @@ def plot(config):
         os.makedirs(plot_dir)
 
     # PCA plots
-    _plot_pca_explained_variance(results, plot_dir)
-    _plot_pca_reconstruction_error(results, plot_dir)
+    _plot_pca_explained_variance(results, plot_dir, config)
+    _plot_pca_reconstruction_error(results, plot_dir, config)
     _plot_pca_reconstruction_observables(results, config, plot_dir)
 
     # Emulator plots
@@ -59,13 +59,14 @@ def plot(config):
     _plot_emulator_residuals(results, config, plot_dir, validation_set=True)
 
 #---------------------------------------------------------------
-def _plot_pca_explained_variance(results, plot_dir):
+def _plot_pca_explained_variance(results, plot_dir, config):
     '''
     Plot fraction of explained variance as a function of number of principal components
     '''
 
     pca = results['PCA']['pca']
-    n_pc_max = 30 # results['PCA']['Y_pca'].shape[1]
+    n_pc_max = 30
+    n_pc_selected = config.n_pc
 
     x = range(n_pc_max)
     y = [np.sum(pca.explained_variance_ratio_[:n_pc]) for n_pc in x]
@@ -74,14 +75,15 @@ def _plot_pca_explained_variance(results, plot_dir):
     plt.xlabel('number of principal components', fontsize=16)
     plt.ylabel('fraction explained variance', fontsize=16)
     plt.grid(True)
-    #plt.xscale('log')
     plt.plot(x, y, linewidth=2, linestyle='-', alpha=1., color=sns.xkcd_rgb['dark sky blue'])
+    plt.plot([], [], ' ', label=f"n_pc = {n_pc_selected}")
+    plt.legend(frameon=False)
     plt.tight_layout()
     plt.savefig(os.path.join(plot_dir, 'PCA_explained_variance.pdf'))
     plt.close()
 
 #---------------------------------------------------------------
-def _plot_pca_reconstruction_error(results, plot_dir):
+def _plot_pca_reconstruction_error(results, plot_dir, config):
     '''
     Compute reconstruction error -- inverse transform and then compute residuals
     https://stackoverflow.com/questions/36566844/pca-projection-and-reconstruction-in-scikit-learn
@@ -92,7 +94,8 @@ def _plot_pca_reconstruction_error(results, plot_dir):
     Y_pca = results['PCA']['Y_pca']
     scaler = results['PCA']['scaler']
 
-    n_pc_max = 30 # Y_pca.shape[1]
+    n_pc_max = 30
+    n_pc_selected = config.n_pc
 
     x = range(n_pc_max)
     y = [np.sum((Y - scaler.inverse_transform(Y_pca[:,:n_pc].dot(pca.components_[:n_pc,:])))**2, axis=1).mean() for n_pc in x]
@@ -105,6 +108,8 @@ def _plot_pca_reconstruction_error(results, plot_dir):
     plt.ylabel('reconstruction error', fontsize=16)
     plt.grid(True)
     plt.plot(x, y, linewidth=2, linestyle='-', alpha=1., color=sns.xkcd_rgb['dark sky blue'])
+    plt.plot([], [], ' ', label=f"n_pc = {n_pc_selected}")
+    plt.legend(frameon=False)
     plt.tight_layout()
     plt.savefig(os.path.join(plot_dir, 'PCA_reconstruction_error.pdf'))
     plt.close()
