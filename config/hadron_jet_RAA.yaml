@@ -2,7 +2,7 @@
 #-------------------------------------------
 # General parameters
 
-output_dir: '/home/james/jetscape-docker/bayesian-inference/output/20230227'
+output_dir: '/home/james/jetscape-docker/bayesian-inference/output/20230726'
 
 initialize_observables: False
 fit_emulators: False
@@ -61,17 +61,27 @@ analyses:
     <<: *model_base
     observable_list:
       - 'jet__pt_'
-    # Optionally, exclude some observables which would otherwise be selected.
-    # eg. only want mid rapidity observables, so exclude the rapidity dependent jet RAA
-    #observable_exclude_list:
-    #  - "pt_y_atlas"
+    observable_exclude_list:
+      - "pt_y_atlas"
     plot_panel_shapes: [[3,3], [3,3], [3,3]]
+
+  analysis3:
+    <<: *model_base
+    observable_list:
+      - 'hadron__pt_'
+      - 'jet__pt_'
+      - 'jet__Dz_'
+      - 'chjet__zg_'
+      - 'chjet__tg_'
+    observable_exclude_list:
+      - "pt_y_atlas"
+    plot_panel_shapes: [[3,3], [3,3], [3,3], [3,3], [3,3], [3,3]]
 
 #-------------------------------------------
 # Emulator parameters
 emulator_parameters:
   force_retrain: True
-  n_pc: 4
+  n_pc: 20
 
   mean_function: 'constant'                      # constant, linear
   constant: 0.
