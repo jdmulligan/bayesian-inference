@@ -6,7 +6,7 @@ output_dir: '/home/james/jetscape-docker/bayesian-inference/output/20230726'
 
 initialize_observables: False
 fit_emulators: False
-run_mcmc: False
+run_mcmc: True
 plot: True
 
 debug_level: 0
@@ -105,26 +105,25 @@ emulator_parameters:
     n_restarts: 50
     alpha: 1.e-10
 
+  # Validation
+  # We want to support the following:
+  #  - k-fold cross-validation
+  #  - validation dataset
 
-# Validation
-# We want to support the following:
-#  - k-fold cross-validation
-#  - validation dataset
+  # Cross-validation
+  cross_validation: True
+  cross_validation_k: 5
 
-# Cross-validation
-cross_validation: True
-cross_validation_k: 5
-
-# TODO: Independent validation dataset
-independent_validation: False
+  # TODO: Independent validation dataset
+  independent_validation: False
 
 #-------------------------------------------
 # MCMC parameters
-n_walkers: 500
-n_burn_steps: 1000
-n_sampling_steps: 500
-
-n_logging_steps: 100
+mcmc_parameters:
+  n_walkers: 500
+  n_burn_steps: 1000
+  n_sampling_steps: 500
+  n_logging_steps: 100
 
 #-------------------------------------------
 # Closure test parameters

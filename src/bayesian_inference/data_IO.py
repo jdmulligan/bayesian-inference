@@ -353,12 +353,15 @@ def sorted_observable_list_from_dict(observables):
     '''
     Define a sorted list of observable_labels from the keys of the observables dict, to keep well-defined ordering in matrix
 
-    :param dict observables: dictionary containing predictions/design/data
+    :param dict observables: dictionary containing predictions/design/data (or any other dict with observable_labels as keys)
     :return list[str] sorted_observable_list: list of observable labels
     '''
 
     # Sort observables, to keep well-defined ordering in matrix
-    sorted_observable_list = _sort_observable_labels(list(observables['Prediction'].keys()))
+    if 'Prediction' in observables.keys():
+        sorted_observable_list = _sort_observable_labels(list(observables['Prediction'].keys()))
+    else:
+        sorted_observable_list = _sort_observable_labels(list(observables.keys()))
     return sorted_observable_list
 
 #---------------------------------------------------------------

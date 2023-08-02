@@ -16,6 +16,7 @@ import os
 import yaml
 import logging
 import os
+import pickle
 
 import emcee
 import numpy as np
@@ -35,7 +36,7 @@ def run_mcmc(config):
     Run MCMC to compute posterior
 
     Markov chain Monte Carlo model calibration using the `affine-invariant ensemble
-    sampler (emcee) <http://dfm.io/emcee>`_.
+    sampler (emcee) <http://dfm.io/emcee>`.
     '''
 
     # Get parameter names and min/max
@@ -44,6 +45,15 @@ def run_mcmc(config):
     max = config.analysis_config['parameters'][config.parameterization]['max']
     ndim = len(names)
 
+    # Load emulators
+    with open(config.emulation_outputfile, 'rb') as f:
+        emulators = pickle.load(f)
+
+    # Load experimental data into dict: data[observable_label]['xmin'/'xmax'/'y'/'y_err']
+    output_dir = config.output_dir
+    filename = 'observables.h5'
+    experimental_results = data_IO.data_array_from_h5(output_dir, filename, observable_table_dir=None)
+
     # TODO: If needed we can create a h5py dataset for compression/chunking
     #dset = f.create_dataset('chain', dtype='f8',
     #                        shape=(config.n_walkers, 0, ndim),
@@ -51,15 +61,20 @@ def run_mcmc(config):
     #                        maxshape=(config.n_walkers, None, ndim),
     #                        compression='lzf')
 
+    # Construct sampler (we create a dummy daughter class from emcee.EnsembleSampler, to add some logging info)
+    # Note: we pass the emulators and experimental data as args to the log_posterior function
     # TODO: Set pool parameter for parallelization
     #with Pool() as pool:
     #sampler = LoggingEnsembleSampler(config.n_walkers, self.ndim, _log_posterior, pool=pool)
-    sampler = LoggingEnsembleSampler(config.n_walkers, ndim, _log_posterior, args=[min, max])
+    sampler = LoggingEnsembleSampler(config.n_walkers, ndim, _log_posterior, args=[min, max, config, emulators, experimental_results])
 
-    # Run first half of burn-in starting from random positions.
+    # Generate random starting positions for each walker
+    random_pos = np.random.uniform(min, max, (config.n_walkers, ndim))
+
+    # Run first half of burn-in
     logging.info('Starting initial burn-in...')
     nburn0 = config.n_burn_steps // 2
-    sampler.run_mcmc(_random_pos(config.n_walkers), nburn0, n_logging_steps=config.n_logging_steps)
+    sampler.run_mcmc(random_pos, nburn0, n_logging_steps=config.n_logging_steps)
 
     # Reposition walkers to the most likely points in the chain, then run the second half of burn-in.
     # This significantly accelerates burn-in and helps prevent stuck walkers.
@@ -87,8 +102,7 @@ def run_mcmc(config):
 ####################################################################################################################
 def credible_interval(samples, confidence=0.9):
     """
-    Compute the highest-posterior density (HPD) credible interval (default 90%)
-    for an array of samples.
+    Compute the highest-posterior density (HPD) credible interval (default 90%) for an array of samples.
     """
     # number of intervals to compute
     nci = int((1 - confidence)*samples.size)
@@ -103,89 +117,98 @@ def credible_interval(samples, confidence=0.9):
     return cil[ihpd], cih[ihpd]
 
 #---------------------------------------------------------------
-def _log_posterior(self, X, min, max, extra_std_prior_scale=0.05, model_sys_error=False):
+def _log_posterior(X, min, max, config, emulators, experimental_results):
     """
-    Evaluate the posterior at `X`.
+    Function to evaluate the log-posterior for a given set of input parameters.
 
-    `extra_std_prior_scale` is the scale parameter for the prior
-    distribution on the model sys error parameter:
+    This function is called by https://emcee.readthedocs.io/en/stable/user/sampler/
 
-        prior ~ sigma^2 * exp(-sigma/scale)
-
-    This model sys error parameter is not by default implemented.
+    :X: input ndarray of parameter space values
+    :min: list of minimum boundaries for each emulator parameter
+    :max: list of maximum boundaries for each emulator parameter
+    :config: configuration object
+    :emulators: dict of emulators
+    :experimental_results: dict of experimental results
     """
+
+    # Convert to 2darray of shape (n_samples, n_parameters)
     X = np.array(X, copy=False, ndmin=2)
 
-    lp = np.zeros(X.shape[0])
+    # Initialize log-posterior array, which we will populate and return
+    log_posterior = np.zeros(X.shape[0])
 
+    # Check if any samples are outside the parameter bounds, and set log-posterior to -inf for those
     inside = np.all((X > min) & (X < max), axis=1)
-    lp[~inside] = -np.inf
+    log_posterior[~inside] = -np.inf
 
-    nsamples = np.count_nonzero(inside)
+    # Evaluate log-posterior for samples inside parameter bounds
+    n_samples = np.count_nonzero(inside)
+    if n_samples > 0:
 
-    if nsamples > 0:
-        if model_sys_error:
-            extra_std = X[inside, -1]
-        else:
-            extra_std = 0.0
+        # Compute emulator prediction
+        # returns dictionary of emulator predictions, with format emulator_predictions[observable_label]
+        emulator_predictions = emulation.predict(X[inside], emulators, config)
 
-        pred = _predict(X[inside], return_cov=True, extra_std=extra_std)
+        # Count the number of bins that we have, and construct arrays to store the difference between
+        # emulator prediction and experimental data, and the covariance matrix
+        sorted_observable_list = data_IO.sorted_observable_list_from_dict(experimental_results)
+        n_data_points = 0
+        for observable_label in sorted_observable_list:
+            n_data_points += len(experimental_results[observable_label]['y'])
 
-        # allocate difference (model - expt) and covariance arrays
-        nobs = self._expt_y.size
-        dY = np.empty((nsamples, nobs))
-        cov = np.empty((nsamples, nobs, nobs))
+        # Loop through sorted list of observables and compute:
+        #  - Difference between emulator prediction and experimental data for each bin
+        #  - Covariance matrix
+        dY = np.empty((n_samples, n_data_points))
+        covariance_matrix = np.empty((n_samples, n_data_points, n_data_points))
+        i_data_point = 0
+        for observable_label in sorted_observable_list:
 
-        model_Y, model_cov = pred
+            #-------------------------
+            # Get experimental data
+            # TODO: include covariance matrix
+            data_y = experimental_results[observable_label]['y']
+            data_y_err = experimental_results[observable_label]['y_err']
 
-        # copy predictive mean and covariance into allocated arrays
-        for obs1, subobs1, slc1 in self._slices:
-            dY[:, slc1] = model_Y[obs1][subobs1]
-            for obs2, subobs2, slc2 in self._slices:
-                cov[:, slc1, slc2] = model_cov[(obs1, subobs1), (obs2, subobs2)]
+            #-------------------------
+            # Get emulator prediction
+            # TODO: include covariance matrix
+            emulator_prediction = emulator_predictions[observable_label]
 
-        # subtract expt data from model data
-        dY -= self._expt_y
+            # Check that emulator prediction has same length as experimental data
+            assert data_y.shape[0] == emulator_prediction.shape[1]
 
-        # add expt cov to model cov
-        cov += self._expt_cov
+            #-------------------------
+            # Compute difference (using broadcasting to subtract each data point from each emulator prediction)
+            dY[:,i_data_point:i_data_point+data_y.shape[0]] = emulator_prediction - data_y
 
-        # compute log likelihood at each point
-        lp[inside] += list(map(_mvn_loglike, dY, cov))
+            #-------------------------
+            # Fill covariance array
+            # TODO: We want to add data covariance and emulator covariance.
+            #       Currently we only include uncorrelated data uncertainty, and no emulator covariance.
+            covariance_matrix[:,i_data_point:i_data_point+data_y.shape[0],i_data_point:i_data_point+data_y.shape[0]] = np.diag(data_y_err)
 
-        # add prior for extra_std (model sys error)
-        if model_sys_error:
-            lp[inside] += 2*np.log(extra_std) - extra_std/extra_std_prior_scale
+            # Increment data point counter
+            i_data_point += data_y.shape[0]
 
-    return lp
+        # Check that we have iterated through the appropriate number of data points
+        assert i_data_point == n_data_points
+
+        # Compute log likelihood at each point in the sample
+        log_posterior[inside] += list(map(_loglikelihood, dY, covariance_matrix))
+
+    return log_posterior
 
 #---------------------------------------------------------------
-def _predict(self, X, **kwargs):
-    """
-    Call each system emulator to predict model output at X.
-
-    """
-
-    emulator_predictions = emulation.predict(X, results, config, validation_set=validation_set)
-
-    return {
-        sys: emulator.Emulator.from_cache(sys, self.workdir).predict(
-            X[:, ],#[n] + self._common_indices],
-            **kwargs
-        )
-        for n, sys in enumerate(self.systems)
-    }
-
-#---------------------------------------------------------------
-def _mvn_loglike(y, cov):
+def _loglikelihood(y, cov):
     """
     Evaluate the multivariate-normal log-likelihood for difference vector `y`
     and covariance matrix `cov`:
 
         log_p = -1/2*[(y^T).(C^-1).y + log(det(C))] + const.
 
-    The likelihood is NOT NORMALIZED, since this does not affect MCMC.  The
-    normalization const = -n/2*log(2*pi), where n is the dimensionality.
+    The likelihood is NOT NORMALIZED, since this does not affect MCMC.  
+    The normalization const = -n/2*log(2*pi), where n is the dimensionality.
 
     Arguments `y` and `cov` MUST be np.arrays with dtype == float64 and shapes
     (n) and (n, n), respectively.  These requirements are NOT CHECKED.
@@ -221,22 +244,19 @@ def _mvn_loglike(y, cov):
 
     return -.5*np.dot(y, alpha) - np.log(L.diagonal()).sum()
 
-#---------------------------------------------------------------
-def _random_pos(self, n=1):
-    """
-    Generate `n` random positions in parameter space.
-    """
-    return np.random.uniform(self.min, self.max, (n, self.ndim))
-
 ####################################################################################################################
 class LoggingEnsembleSampler(emcee.EnsembleSampler):
+    '''
+    Add some logging to the emcee.EnsembleSampler class.
+    Inherit from: https://emcee.readthedocs.io/en/stable/user/sampler/
+    '''
 
     #---------------------------------------------------------------
     def run_mcmc(self, X0, n_sampling_steps, n_logging_steps=100, **kwargs):
         """
         Run MCMC with logging every 'logging_steps' steps (default: log every 100 steps).
         """
-        logging.info(f'running {self.k} walkers for {n_sampling_steps} steps')
+        logging.info(f'running {self.nwalkers} walkers for {n_sampling_steps} steps')
         for n, result in enumerate(self.sample(X0, iterations=n_sampling_steps, **kwargs), start=1):
             if n % n_logging_steps == 0 or n == n_sampling_steps:
                 af = self.acceptance_fraction
@@ -261,10 +281,15 @@ class MCMCConfig(common_base.CommonBase):
 
         self.observable_table_dir = config['observable_table_dir']
         self.observable_config_dir = config['observable_config_dir']
-        self.n_walkers = config['n_walkers']
-        self.n_burn_steps = config['n_burn_steps']
-        self.n_sampling_steps = config['n_sampling_steps']
-        self.n_logging_steps = config['n_logging_steps']
+
+        emulator_configuration = config["emulator_parameters"]
+        self.n_pc = emulator_configuration['n_pc']
+
+        mcmc_configuration = config["mcmc_parameters"]
+        self.n_walkers = mcmc_configuration['n_walkers']
+        self.n_burn_steps = mcmc_configuration['n_burn_steps']
+        self.n_sampling_steps = mcmc_configuration['n_sampling_steps']
+        self.n_logging_steps = mcmc_configuration['n_logging_steps']
 
         self.output_dir = os.path.join(config['output_dir'], f'{analysis_name}_{parameterization}')
         self.emulation_outputfile = os.path.join(self.output_dir, 'emulation.pkl')
