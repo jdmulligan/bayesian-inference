@@ -72,32 +72,32 @@ def run_mcmc(config):
     random_pos = np.random.uniform(min, max, (config.n_walkers, ndim))
 
     # Run first half of burn-in
-    logging.info('Starting initial burn-in...')
+    logger.info('Starting initial burn-in...')
     nburn0 = config.n_burn_steps // 2
     sampler.run_mcmc(random_pos, nburn0, n_logging_steps=config.n_logging_steps)
 
     # Reposition walkers to the most likely points in the chain, then run the second half of burn-in.
     # This significantly accelerates burn-in and helps prevent stuck walkers.
-    logging.info('Resampling walker positions...')
+    logger.info('Resampling walker positions...')
     X0 = sampler.flatchain[np.unique(sampler.flatlnprobability, return_index=True)[1][-config.n_walkers:]]
     sampler.reset()
     X0 = sampler.run_mcmc(X0, config.n_burn_steps - nburn0, n_logging_steps=config.n_logging_steps, storechain=False)[0]
     sampler.reset()
-    logging.info('Burn-in complete.')
+    logger.info('Burn-in complete.')
 
     # Production samples
-    logging.info('Starting production...')
+    logger.info('Starting production...')
     sampler.run_mcmc(X0, config.n_sampling_steps, n_logging_steps=config.n_logging_steps)
 
     # Write to file
-    logging.info('Writing chain to file...')
+    logger.info('Writing chain to file...')
     output_dict = {}
     output_dict['chain'] = sampler.chain
     filename = os.path.join(config.output_dir, 'mcmc_chain.h5')
     data_IO.write_dict_to_h5(output_dict, filename, verbose=True)
     #dset.resize(dset.shape[1] + config.n_sampling_steps, 1)
     #dset[:, -config.n_sampling_steps:, :] = sampler.chain
-    logging.info('Done.')
+    logger.info('Done.')
 
 ####################################################################################################################
 def credible_interval(samples, confidence=0.9):
@@ -207,7 +207,7 @@ def _loglikelihood(y, cov):
 
         log_p = -1/2*[(y^T).(C^-1).y + log(det(C))] + const.
 
-    The likelihood is NOT NORMALIZED, since this does not affect MCMC.  
+    The likelihood is NOT NORMALIZED, since this does not affect MCMC.
     The normalization const = -n/2*log(2*pi), where n is the dimensionality.
 
     Arguments `y` and `cov` MUST be np.arrays with dtype == float64 and shapes
@@ -256,11 +256,11 @@ class LoggingEnsembleSampler(emcee.EnsembleSampler):
         """
         Run MCMC with logging every 'logging_steps' steps (default: log every 100 steps).
         """
-        logging.info(f'running {self.nwalkers} walkers for {n_sampling_steps} steps')
+        logger.info(f'running {self.nwalkers} walkers for {n_sampling_steps} steps')
         for n, result in enumerate(self.sample(X0, iterations=n_sampling_steps, **kwargs), start=1):
             if n % n_logging_steps == 0 or n == n_sampling_steps:
                 af = self.acceptance_fraction
-                logging.info(f'step {n}: acceptance fraction: mean {af.mean()}, std {af.std()}, min {af.min()}, max {af.max()}')
+                logger.info(f'step {n}: acceptance fraction: mean {af.mean()}, std {af.std()}, min {af.min()}, max {af.max()}')
 
         return result
 
