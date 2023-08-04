@@ -65,11 +65,23 @@ analyses:
       - "pt_y_atlas"
     plot_panel_shapes: [[3,3], [3,3], [3,3]]
 
+  analysis3:
+    <<: *model_base
+    observable_list:
+      - 'hadron__pt_'
+      - 'jet__pt_'
+      - 'jet__Dz_'
+      - 'chjet__zg_'
+      - 'chjet__tg_'
+    observable_exclude_list:
+      - "pt_y_atlas"
+    plot_panel_shapes: [[3,3], [3,3], [3,3], [3,3], [3,3], [3,3]]
+
 #-------------------------------------------
 # Emulator parameters
 emulator_parameters:
   force_retrain: True
-  n_pc: 4
+  n_pc: 20
 
   mean_function: 'constant'                      # constant, linear
   constant: 0.
@@ -93,25 +105,20 @@ emulator_parameters:
     n_restarts: 50
     alpha: 1.e-10
 
-# Validation
-# We want to support the following:
-#  - k-fold cross-validation
-#  - validation dataset
+  # Cross-validation
+  cross_validation: True
+  cross_validation_k: 5
 
-# Cross-validation
-cross_validation: True
-cross_validation_k: 5
-
-# TODO: Independent validation dataset
-independent_validation: False
+  # TODO: Independent validation dataset
+  independent_validation: False
 
 #-------------------------------------------
 # MCMC parameters
-n_walkers: 500
-n_burn_steps: 1000
-n_sampling_steps: 500
-
-n_logging_steps: 100
+mcmc_parameters:
+  n_walkers: 500
+  n_burn_steps: 1000
+  n_sampling_steps: 500
+  n_logging_steps: 100
 
 #-------------------------------------------
 # Closure test parameters
