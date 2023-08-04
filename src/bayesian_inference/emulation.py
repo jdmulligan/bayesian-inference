@@ -17,6 +17,7 @@ from __future__ import annotations
 import os
 import logging
 import yaml
+from typing import Any
 
 import numpy as np
 import pickle
@@ -93,8 +94,8 @@ def fit_emulators(config: EmulationConfig) -> None:
     design = data_IO.design_array_from_h5(config.output_dir, filename='observables.h5')
 
     # Define GP kernel (covariance function)
-    min = np.array(config.analysis_config['parameters'][config.parameterization]['min'])
-    max = np.array(config.analysis_config['parameters'][config.parameterization]['max'])
+    min = np.array(config.analysis_config['parametrization'][config.parameterization]['min'])
+    max = np.array(config.analysis_config['parametrization'][config.parameterization]['max'])
     length_scale = max - min
     length_scale_bounds = (np.outer(length_scale, tuple(config.length_scale_bounds)))
     kernel_matern = sklearn_gaussian_process.kernels.Matern(length_scale=length_scale,
@@ -124,11 +125,11 @@ def fit_emulators(config: EmulationConfig) -> None:
     # Print hyperparameters
     logger.info("")
     logger.info('Kernel hyperparameters:')
-    [logger.info(f'  {emulator.kernel_}') for emulator in emulators]
+    [logger.info(f'  {emulator.kernel_}') for emulator in emulators]  # type: ignore[func-returns-value]
     logger.info("")
 
     # Write all info we want to file
-    output_dict = {}
+    output_dict: dict[str, Any] = {}
     output_dict['PCA'] = {}
     output_dict['PCA']['Y'] = Y
     output_dict['PCA']['Y_pca'] = Y_pca
@@ -200,7 +201,7 @@ class EmulationConfig(common_base.CommonBase):
         ########################
         # Emulator configuration
         ########################
-        emulator_configuration = config["emulator_parameters"]
+        emulator_configuration = self.analysis_config["parameters"]["emulator"]
         self.force_retrain = emulator_configuration['force_retrain']
         self.n_pc = emulator_configuration['n_pc']
         self.mean_function = emulator_configuration['mean_function']
