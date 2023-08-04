@@ -68,44 +68,66 @@ class SteerAnalysis(common_base.CommonBase):
     def run_analysis(self):
 
         # Loop through each analysis
-        for analysis_name, analysis_config in self.analyses.items():
+        with helpers.progress_bar() as progress:
+            analysis_task = progress.add_task("[deep_sky_blue1]Running analysis...", total=len(self.analyses))
 
-            # Loop through the parameterizations
-            for parameterization in analysis_config['parameterizations']:
+            for analysis_name, analysis_config in self.analyses.items():
 
-                # Initialize design points, predictions, data, and uncertainties
-                # We store them in a dict and write/read it to HDF5
-                if self.initialize_observables:
-                    logger.info("")
-                    logger.info('========================================================================')
-                    logger.info(f'Initializing model: {analysis_name} ({parameterization} parameterization)...')
-                    observables = data_IO.initialize_observables_dict_from_tables(self.observable_table_dir,
-                                                                                  analysis_config,
-                                                                                  parameterization)
-                    data_IO.write_dict_to_h5(observables,
-                                             os.path.join(self.output_dir, f'{analysis_name}_{parameterization}'),
-                                             filename='observables.h5')
+                # Loop through the parameterizations
+                parametrization_task = progress.add_task("[deep_sky_blue2]Parametrization", total=len(analysis_config['parameterizations']))
+                for parameterization in analysis_config['parameterizations']:
 
-                # Fit emulators and write them to file
-                if self.fit_emulators:
-                    logger.info('------------------------------------------------------------------------')
-                    logger.info(f'Fitting emulators for {analysis_name}_{parameterization}...')
-                    emulation_config = emulation.EmulationConfig(analysis_name=analysis_name,
-                                                                 parameterization=parameterization,
-                                                                 analysis_config=analysis_config,
-                                                                 config_file=self.config_file)
-                    emulation.fit_emulators(emulation_config)
+                    # Initialize design points, predictions, data, and uncertainties
+                    # We store them in a dict and write/read it to HDF5
+                    if self.initialize_observables:
+                        # Just indicate that it's working
+                        initialization_task = progress.add_task("[deep_sky_blue4]Initializing...", total=None)
+                        progress.start_task(initialization_task)
+                        logger.info("")
+                        logger.info('========================================================================')
+                        logger.info(f'Initializing model: {analysis_name} ({parameterization} parameterization)...')
+                        observables = data_IO.initialize_observables_dict_from_tables(self.observable_table_dir,
+                                                                                    analysis_config,
+                                                                                    parameterization)
+                        data_IO.write_dict_to_h5(observables,
+                                                os.path.join(self.output_dir, f'{analysis_name}_{parameterization}'),
+                                                filename='observables.h5')
+                        progress.update(initialization_task, advance=100, visible=False)
 
-                # Run MCMC
-                if self.run_mcmc:
-                    logger.info("")
-                    logger.info('------------------------------------------------------------------------')
-                    logger.info(f'Running MCMC for {analysis_name}_{parameterization}...')
-                    mcmc_config = mcmc.MCMCConfig(analysis_name=analysis_name,
-                                                  parameterization=parameterization,
-                                                  analysis_config=analysis_config,
-                                                  config_file=self.config_file)
-                    mcmc.run_mcmc(mcmc_config)
+                    # Fit emulators and write them to file
+                    if self.fit_emulators:
+                        # Just indicate that it's working
+                        emulation_task = progress.add_task("[deep_sky_blue4]Emulating...", total=None)
+                        progress.start_task(emulation_task)
+                        logger.info('------------------------------------------------------------------------')
+                        logger.info(f'Fitting emulators for {analysis_name}_{parameterization}...')
+                        emulation_config = emulation.EmulationConfig(analysis_name=analysis_name,
+                                                                    parameterization=parameterization,
+                                                                    analysis_config=analysis_config,
+                                                                    config_file=self.config_file)
+                        emulation.fit_emulators(emulation_config)
+                        progress.update(emulation_task, advance=100, visible=False)
+
+                    # Run MCMC
+                    if self.run_mcmc:
+                        # Just indicate that it's working
+                        mcmc_task = progress.add_task("[deep_sky_blue4]Running MCMC...", total=None)
+                        progress.start_task(mcmc_task)
+                        logger.info("")
+                        logger.info('------------------------------------------------------------------------')
+                        logger.info(f'Running MCMC for {analysis_name}_{parameterization}...')
+                        mcmc_config = mcmc.MCMCConfig(analysis_name=analysis_name,
+                                                    parameterization=parameterization,
+                                                    analysis_config=analysis_config,
+                                                    config_file=self.config_file)
+                        mcmc.run_mcmc(mcmc_config)
+                        progress.update(mcmc_task, advance=100, visible=False)
+
+                    progress.update(parametrization_task, advance=1)
+                # Hide once we're done!
+                progress.update(parametrization_task, visible=False)
+
+                progress.update(analysis_task, advance=1)
 
         # Plot
         if self.plot:
