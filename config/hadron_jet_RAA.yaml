@@ -19,6 +19,62 @@ observable_table_dir: '/rstorage/jetscape/STAT-Bayesian/Analysis1/20230116/table
 observable_config_dir: '/home/james/jetscape-docker/JETSCAPE-analysis/config'
 
 #-------------------------------------------
+# Default parameter settings
+parameters:
+  #-------------------------------------------
+  # Emulator parameters
+  emulator_parameters: &default_emulator_parameters
+    force_retrain: True
+    n_pc: 20
+
+    mean_function: 'constant'                      # constant, linear
+    constant: 0.
+    linear_weights: []
+
+    covariance_function: 'matern'                  # squared_exponential, power_exponential, matern
+    matern_nu: 1.5
+    variance: 1                                    # overall variance
+    length_scale_bounds: [0.1, 10]
+
+    # Disable noise with `null` (ie. `noise: null`)
+    noise:
+      type: "white"
+      args:
+        # NOTE: Can't raise to power in yaml, so you have to evaluate them by hand
+        noise_level: 0.25  # 0.5**2
+        noise_level_bounds: [0.0001, 1]  # [0.01**2, 1**2]
+
+    # Gaussian Process Regressor
+    GPR:
+      n_restarts: 50
+      alpha: 1.e-10
+
+    # Validation
+    # We want to support the following:
+    #  - k-fold cross-validation
+    #  - validation dataset
+
+    # Cross-validation
+    cross_validation: True
+    cross_validation_k: 5
+
+    # TODO: Independent validation dataset
+    independent_validation: False
+
+  #-------------------------------------------
+  # MCMC parameters
+  mcmc_parameters: &default_mcmc_parameters
+    n_walkers: 500
+    n_burn_steps: 1000
+    n_sampling_steps: 500
+    n_logging_steps: 100
+
+  #-------------------------------------------
+  # Closure test parameters
+  closure: &default_closure_parameters
+    confidence: [0.9, 0.6]
+
+#-------------------------------------------
 # Specify observables
 # We want to allow to configure the analysis to only use various subsets of observables
 #   (e.g. jet/hadron/substructure observables, sqrts, centrality, ...)
@@ -52,12 +108,26 @@ analysis_base: &model_base
 analyses:
 
   analysis1:
+    parameters:
+      emulator:
+        <<: *default_emulator_parameters
+      mcmc:
+        <<: *default_mcmc_parameters
+      closure:
+        <<: *default_closure_parameters
     <<: *model_base
     observable_list:
       - 'hadron__pt_'
     plot_panel_shapes: [[3,3], [3,3]]
 
   analysis2:
+    parameters:
+      emulator:
+        <<: *default_emulator_parameters
+      mcmc:
+        <<: *default_mcmc_parameters
+      closure:
+        <<: *default_closure_parameters
     <<: *model_base
     observable_list:
       - 'jet__pt_'
@@ -66,6 +136,13 @@ analyses:
     plot_panel_shapes: [[3,3], [3,3], [3,3]]
 
   analysis3:
+    parameters:
+      emulator:
+        <<: *default_emulator_parameters
+      mcmc:
+        <<: *default_mcmc_parameters
+      closure:
+        <<: *default_closure_parameters
     <<: *model_base
     observable_list:
       - 'hadron__pt_'
@@ -76,55 +153,3 @@ analyses:
     observable_exclude_list:
       - "pt_y_atlas"
     plot_panel_shapes: [[3,3], [3,3], [3,3], [3,3], [3,3], [3,3]]
-
-#-------------------------------------------
-# Emulator parameters
-emulator_parameters:
-  force_retrain: True
-  n_pc: 20
-
-  mean_function: 'constant'                      # constant, linear
-  constant: 0.
-  linear_weights: []
-
-  covariance_function: 'matern'                  # squared_exponential, power_exponential, matern
-  matern_nu: 1.5
-  variance: 1                                    # overall variance
-  length_scale_bounds: [0.1, 10]
-
-  # Disable noise with `null` (ie. `noise: null`)
-  noise:
-    type: "white"
-    args:
-      # NOTE: Can't raise to power in yaml, so you have to evaluate them by hand
-      noise_level: 0.25  # 0.5**2
-      noise_level_bounds: [0.0001, 1]  # [0.01**2, 1**2]
-
-  # Gaussian Process Regressor
-  GPR:
-    n_restarts: 50
-    alpha: 1.e-10
-
-  # Validation
-  # We want to support the following:
-  #  - k-fold cross-validation
-  #  - validation dataset
-
-  # Cross-validation
-  cross_validation: True
-  cross_validation_k: 5
-
-  # TODO: Independent validation dataset
-  independent_validation: False
-
-#-------------------------------------------
-# MCMC parameters
-mcmc_parameters:
-  n_walkers: 500
-  n_burn_steps: 1000
-  n_sampling_steps: 500
-  n_logging_steps: 100
-
-#-------------------------------------------
-# Closure test parameters
-confidence: [0.9, 0.6]

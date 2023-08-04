@@ -282,10 +282,10 @@ class MCMCConfig(common_base.CommonBase):
         self.observable_table_dir = config['observable_table_dir']
         self.observable_config_dir = config['observable_config_dir']
 
-        emulator_configuration = config["emulator_parameters"]
+        emulator_configuration = analysis_config["parameters"]["emulator"]
         self.n_pc = emulator_configuration['n_pc']
 
-        mcmc_configuration = config["mcmc_parameters"]
+        mcmc_configuration = analysis_config["parameters"]["mcmc"]
         self.n_walkers = mcmc_configuration['n_walkers']
         self.n_burn_steps = mcmc_configuration['n_burn_steps']
         self.n_sampling_steps = mcmc_configuration['n_sampling_steps']

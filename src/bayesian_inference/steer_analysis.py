@@ -68,7 +68,7 @@ class SteerAnalysis(common_base.CommonBase):
     def run_analysis(self):
 
         # Loop through each analysis
-        for analysis_name,analysis_config in self.analyses.items():
+        for analysis_name, analysis_config in self.analyses.items():
 
             # Loop through the parameterizations
             for parameterization in analysis_config['parameterizations']:
