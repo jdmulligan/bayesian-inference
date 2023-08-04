@@ -4,7 +4,7 @@
 
 output_dir: 'output/20230804'
 
-initialize_observables: False
+initialize_observables: True
 fit_emulators: True
 run_mcmc: False
 plot: True
@@ -87,7 +87,7 @@ analysis_base: &model_base
   #centrality_range: [[0, 10], [30, 50]]
   centrality_range: [[0, 10]]
   recoil_scheme: 'negative_recominber'
-  parameters:
+  parametrization:
     exponential:
       names: ['$\\alpha_S^{\\rm{fix}}$', '$Q_0$', '$c_1$', '$c_2$', '$c_3$', '$\\tau_0$']
       min: [0.1, 1, 0, 0, 0, 0]

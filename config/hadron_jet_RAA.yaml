@@ -93,7 +93,7 @@ analysis_base: &model_base
   # Can also be a list of centrality ranges. eg:
   #centrality_range: [[0, 10], [30, 50]]
   recoil_scheme: 'negative_recominber'
-  parameters:
+  parametrization:
     exponential:
       names: ['$\\alpha_S^{\\rm{fix}}$', '$Q_0$', '$c_1$', '$c_2$', '$c_3$', '$\\tau_0$']
       min: [0.1, 1, 0, 0, 0, 0]

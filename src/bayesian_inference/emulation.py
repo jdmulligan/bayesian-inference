@@ -94,8 +94,8 @@ def fit_emulators(config: EmulationConfig) -> None:
     design = data_IO.design_array_from_h5(config.output_dir, filename='observables.h5')
 
     # Define GP kernel (covariance function)
-    min = np.array(config.analysis_config['parameters'][config.parameterization]['min'])
-    max = np.array(config.analysis_config['parameters'][config.parameterization]['max'])
+    min = np.array(config.analysis_config['parametrization'][config.parameterization]['min'])
+    max = np.array(config.analysis_config['parametrization'][config.parameterization]['max'])
     length_scale = max - min
     length_scale_bounds = (np.outer(length_scale, tuple(config.length_scale_bounds)))
     kernel_matern = sklearn_gaussian_process.kernels.Matern(length_scale=length_scale,
