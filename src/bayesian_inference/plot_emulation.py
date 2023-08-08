@@ -6,9 +6,10 @@ authors: J.Mulligan, R.Ehlers
 '''
 
 import os
+import itertools
 import logging
-import yaml
 import pickle
+import yaml
 
 import numpy as np
 
@@ -49,6 +50,7 @@ def plot(config):
     # PCA plots
     _plot_pca_explained_variance(results, plot_dir, config)
     _plot_pca_reconstruction_error(results, plot_dir, config)
+    _plot_pca_reconstruction_error_by_feature(results, plot_dir, config)
     _plot_pca_reconstruction_observables(results, config, plot_dir)
 
     # Emulator plots
@@ -113,6 +115,79 @@ def _plot_pca_reconstruction_error(results, plot_dir, config):
     plt.tight_layout()
     plt.savefig(os.path.join(plot_dir, 'PCA_reconstruction_error.pdf'))
     plt.close()
+
+
+def _plot_pca_reconstruction_error_by_feature(results, plot_dir, config):
+    """ Plot reconstruction (ie. truncated PCA) - nominal vs feature as a function of n_pc.
+
+    Here, features are the point by point observables. We'll plot a separate figure per PC.
+
+    Expect to see big bumps at a few points corresponding to those which are poorly reconstructed in the truncated PCA.
+    """
+    # Select all design points
+    selected_design_point = slice(None, None, sum)
+    # or just one
+    #selected_design_point = 0
+    n_pc_max = 30
+    n_pc_per_figure = 5
+
+    pca = results['PCA']['pca']
+    Y = results['PCA']['Y']
+    Y_pca = results['PCA']['Y_pca']
+    scaler = results['PCA']['scaler']
+
+    colors = [sns.xkcd_rgb['dark sky blue'], sns.xkcd_rgb['denim blue'], sns.xkcd_rgb['light blue'], sns.xkcd_rgb['pale red'], sns.xkcd_rgb['medium green']]
+
+    for n_chunk in range(1, n_pc_max, n_pc_per_figure):
+        n_pc_range = list(range(n_chunk, n_chunk + n_pc_per_figure))
+        # Split into groups of n_pcs for readability
+        fig, ax = plt.subplots(figsize=(10, 6))
+        ax.set_title(f'PCA: reconstruction error n_pc={"-".join([str(n_pc_range[0]), str(n_pc_range[-1])])}', fontsize=14)
+        ax.set_xlabel('PCA feature', fontsize=16)
+        ax.set_ylabel('reconstruction error', fontsize=16)
+        ax.grid(True)
+
+        for i, n_pc in enumerate(n_pc_range):
+            # Need to invert PCA and undo the scaling
+            feature_diff_at_fixed_n_pc = Y - scaler.inverse_transform(Y_pca[:, :n_pc].dot(pca.components_[:n_pc,:]))
+            x = np.arange(0, feature_diff_at_fixed_n_pc.shape[1])
+
+            if isinstance(selected_design_point, slice) and selected_design_point.step is sum:
+                # Normalize per n_pc
+                y = np.sum(np.abs(feature_diff_at_fixed_n_pc), axis=0) / feature_diff_at_fixed_n_pc.shape[0]
+            else:
+                y = np.abs(feature_diff_at_fixed_n_pc[selected_design_point, :])
+
+            ax.plot(
+                x,
+                y,
+                linewidth=2,
+                linestyle='-',
+                alpha=1.,
+                color=colors[n_pc % n_pc_per_figure],
+                label=f"n_pc = {n_pc}",
+                zorder=3 + i,
+            )
+
+        ax.legend(frameon=False, loc="upper right", fontsize=14)
+        fig.tight_layout()
+        selected_design_point_str = ""
+        if not isinstance(selected_design_point, slice):
+            selected_design_point_str = str(selected_design_point)
+        elif selected_design_point.step is sum:
+            selected_design_point_str = "s_all"
+        else:
+            start, stop = selected_design_point.start, selected_design_point.stop
+            if start is None:
+                start = 0
+            if stop is None:
+                stop = feature_diff_at_fixed_n_pc.shape[-1]
+            selected_design_point_str = f"s_{start}_{stop}"
+
+        _path = os.path.join(plot_dir, f'PCA_reconstruction_error__design_point_{selected_design_point_str}__n_pc_{"_".join([str(n_pc_range[0]), str(n_pc_range[-1])])}.pdf')
+        fig.savefig(_path)
+        plt.close(fig)
+
 
 #---------------------------------------------------------------
 def _plot_pca_reconstruction_observables(results, config, plot_dir):
