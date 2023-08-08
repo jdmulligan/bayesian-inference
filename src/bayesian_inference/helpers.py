@@ -70,16 +70,14 @@ def progress_bar() -> rich.progress.Progress:
         # `*Progress.get_default_columns()`
         # However, I wanted a wider BarColumn, so I coped the definitions and modified the width
         rich.progress.TextColumn("[progress.description]{task.description}"),
-        rich.progress.BarColumn(bar_width=60),
+        rich.progress.BarColumn(bar_width=None),
         rich.progress.TaskProgressColumn(),
         rich.progress.TimeRemainingColumn(),
         rich.progress.MofNCompleteColumn(),
         "Elapsed:",
         rich.progress.TimeElapsedColumn(),
         console=rich_console,
-        # Refresh relatively slowly and estimate speed over a long period since our tasks
-        # are usually rather long running
-        refresh_per_second=1, speed_estimate_period=600,
+        refresh_per_second=1, speed_estimate_period=30,
         expand=True,
     )
 
