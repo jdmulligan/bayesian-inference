@@ -55,7 +55,7 @@ def fit_emulators(config: EmulationConfig) -> dict[str, Any]:
     # A consistent order of observables is enforced internally in data_IO
     # NOTE: One sample corresponds to one design point, while one feature is one bin of one observable
     logger.info(f'Doing PCA...')
-    Y = data_IO.predictions_matrix_from_h5(config.output_dir, filename='observables.h5')
+    Y = data_IO.predictions_matrix_from_h5(config.output_dir, filename='observables.h5', observable_filter=config.observable_filter)
 
     # Use sklearn to:
     #  - Center and scale each feature (and later invert)
@@ -163,12 +163,12 @@ def predict(parameters, results, config, validation_set=False):
     :param str results: dictionary that stores emulator
 
     :return dict emulator_predictions: dictionary containing matrices of central values and covariance
-    
+
     Note: One can easily construct a dict of predictions with format emulator_predictions[observable_label]
           from the returned matrix as follows (useful for plotting / troubleshooting):
               observables = data_IO.read_dict_from_h5(config.output_dir, 'observables.h5', verbose=False)
-              emulator_predictions = data_IO.observable_dict_from_matrix(emulator_central_value_reconstructed, 
-                                                                         observables, 
+              emulator_predictions = data_IO.observable_dict_from_matrix(emulator_central_value_reconstructed,
+                                                                         observables,
                                                                          cov=emulator_cov_reconstructed,
                                                                          validation_set=validation_set)
     '''
@@ -201,7 +201,7 @@ def predict(parameters, results, config, validation_set=False):
     # Note that for a vector f = Ax, the covariance matrix of f is C_f = A C_x A^T.
     #   (see https://en.wikipedia.org/wiki/Propagation_of_uncertainty)
     #   (Note also that even if C_x is diagonal, C_f will not be)
-    # In our case, we have Y[i].T = S*Y_PCA[i].T for each point i in parameter space, where 
+    # In our case, we have Y[i].T = S*Y_PCA[i].T for each point i in parameter space, where
     #    Y[i].T is a column vector of features -- shape (n_features,)
     #    Y_PCA[i].T is a column vector of corresponding PCs -- shape (n_pc,)
     #    S is the transfer matrix described above -- shape (n_features, n_pc)
@@ -225,7 +225,7 @@ def predict(parameters, results, config, validation_set=False):
     # TODO: include predictive variance due to truncated PCs (also propagated as above)
     #np.sum(pca.explained_variance_[config.n_pc:])
 
-    # Return the stacked matrices: 
+    # Return the stacked matrices:
     #   Central values: (n_samples, n_features)
     #   Covariances: (n_samples, n_features, n_features)
     emulator_predictions = {}
@@ -286,6 +286,17 @@ class EmulationConfig(common_base.CommonBase):
         # GPR
         self.n_restarts = emulator_configuration["GPR"]['n_restarts']
         self.alpha = emulator_configuration["GPR"]["alpha"]
+
+        # Observable list
+        # None implies a convention of accepting all available data
+        self.observable_filter = None
+        observable_list = emulator_configuration.get("observable_list", [])
+        observable_exclude_list = emulator_configuration.get("observable_exclude_list", [])
+        if observable_list or observable_exclude_list:
+            self.observable_filter = data_IO.ObservableFilter(
+                include_list=observable_list,
+                exclude_list=observable_exclude_list,
+            )
 
         # Output options
         self.output_dir = os.path.join(config['output_dir'], f'{analysis_name}_{parameterization}')
