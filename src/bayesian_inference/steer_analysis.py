@@ -107,11 +107,21 @@ class SteerAnalysis(common_base.CommonBase):
                         progress.start_task(emulation_task)
                         logger.info('------------------------------------------------------------------------')
                         logger.info(f'Fitting emulators for {analysis_name}_{parameterization}...')
-                        emulation_config = emulation.EmulationConfig(analysis_name=analysis_name,
-                                                                    parameterization=parameterization,
-                                                                    analysis_config=analysis_config,
-                                                                    config_file=self.config_file)
-                        emulation.fit_emulators(emulation_config)
+                        emulator_groups_output = {}
+                        emulator_groups_config = {}
+                        for emulation_group_config_name in analysis_config["parameters"]["emulator"]:
+                            emulator_groups_config[emulation_group_config_name] = emulation.EmulationConfig(
+                                analysis_name=analysis_name,
+                                parameterization=parameterization,
+                                analysis_config=analysis_config,
+                                config_file=self.config_file,
+                                emulation_config_name=emulation_group_config_name,
+                            )
+                            emulator_groups_output[emulation_group_config_name] = emulation.fit_emulators(emulator_groups_config[emulation_group_config_name])
+
+                        for emulator_config, emulator_output in zip(emulator_groups_config.values(), emulator_groups_output.values()):
+                            emulation.write_emulators(emulator_config=emulator_config, emulator_output=emulator_output)
+
                         progress.update(emulation_task, advance=100, visible=False)
 
                     # Run MCMC

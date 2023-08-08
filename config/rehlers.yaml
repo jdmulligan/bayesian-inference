@@ -4,7 +4,7 @@
 
 output_dir: 'output/20230804'
 
-initialize_observables: False
+initialize_observables: True
 fit_emulators: True
 run_mcmc: False
 run_closure_tests: False
@@ -110,7 +110,15 @@ analyses:
   analysis1:
     parameters:
       emulator:
-        <<: *default_emulator_parameters
+        fluctuating:
+          <<: *default_emulator_parameters
+          observable_list:
+          - "hadron__pt_*_2760"
+        stable:
+          <<: *default_emulator_parameters
+          observable_list:
+          - "hadron__pt_*_200"
+          - "hadron__pt_*_5020"
       mcmc:
         <<: *default_mcmc_parameters
       closure:
@@ -132,7 +140,6 @@ analyses:
     observable_list:
       - 'jet__pt_'
     observable_exclude_list:
-      # Exclude the ATLAS rapidity dependent, since we don't want to deal with it for now
       - "pt_y_atlas"
     plot_panel_shapes: [[3,3], [3,3], [3,3]]
 

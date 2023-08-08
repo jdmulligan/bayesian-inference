@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 
 ####################################################################################################################
-def fit_emulators(config: EmulationConfig) -> None:
+def fit_emulators(config: EmulationConfig) -> dict[str, Any]:
     '''
     Do PCA, fit emulators, and write to file.
 
@@ -145,8 +145,14 @@ def fit_emulators(config: EmulationConfig) -> None:
     output_dict['PCA']['pca'] = pca
     output_dict['PCA']['scaler'] = scaler
     output_dict['emulators'] = emulators
+
+    return output_dict
+
+
+def write_emulators(config: EmulationConfig, output_dict: dict[str, Any]) -> None:
     with open(config.emulation_outputfile, 'wb') as f:
 	    pickle.dump(output_dict, f)
+
 
 ####################################################################################################################
 def predict(parameters, results, config, validation_set=False):
@@ -234,7 +240,7 @@ class EmulationConfig(common_base.CommonBase):
     #---------------------------------------------------------------
     # Constructor
     #---------------------------------------------------------------
-    def __init__(self, analysis_name='', parameterization='', analysis_config='', config_file='', **kwargs):
+    def __init__(self, analysis_name='', parameterization='', analysis_config='', config_file='', emulator_name: str | None = None, **kwargs):
 
         self.parameterization = parameterization
         self.analysis_config = analysis_config
@@ -250,7 +256,10 @@ class EmulationConfig(common_base.CommonBase):
         ########################
         # Emulator configuration
         ########################
-        emulator_configuration = self.analysis_config["parameters"]["emulator"]
+        if emulator_name is None:
+            emulator_configuration = self.analysis_config["parameters"]["emulator"]
+        else:
+            emulator_configuration = self.analysis_config["parameters"]["emulator"][emulator_name]
         self.force_retrain = emulator_configuration['force_retrain']
         self.n_pc = emulator_configuration['n_pc']
         self.mean_function = emulator_configuration['mean_function']
@@ -280,4 +289,7 @@ class EmulationConfig(common_base.CommonBase):
 
         # Output options
         self.output_dir = os.path.join(config['output_dir'], f'{analysis_name}_{parameterization}')
-        self.emulation_outputfile = os.path.join(self.output_dir, 'emulation.pkl')
+        emulation_outputfile_name = 'emulation.pkl'
+        if emulator_name is not None:
+            emulation_outputfile_name = f'emulation_{emulator_name}.pkl'
+        self.emulation_outputfile = os.path.join(self.output_dir, emulation_outputfile_name)
