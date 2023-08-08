@@ -160,7 +160,7 @@ def _plot_pca_reconstruction_error_by_feature(results, plot_dir, config):
                 zorder=3 + i,
             )
 
-        ax.legend(frameon=False)
+        ax.legend(frameon=False, loc="lower right", fontsize=14)
         fig.tight_layout()
         _path = os.path.join(plot_dir, f'PCA_reconstruction_error_design_point_{selected_design_point}_n_pc_{"-".join([str(n_pc_range[0]), str(n_pc_range[-1])])}.pdf')
         fig.savefig(_path)
