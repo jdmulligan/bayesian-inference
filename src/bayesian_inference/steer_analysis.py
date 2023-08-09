@@ -66,6 +66,9 @@ class SteerAnalysis(common_base.CommonBase):
     # Main function
     #---------------------------------------------------------------
     def run_analysis(self):
+        # Add logging to file
+        _root_log = logging.getLogger()
+        _root_log.addHandler(logging.FileHandler(os.path.join(self.output_dir, 'steer_analysis.log'), 'w'))
 
         # Loop through each analysis
         with helpers.progress_bar() as progress:
