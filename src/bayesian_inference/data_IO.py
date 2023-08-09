@@ -8,7 +8,9 @@ The main functionalities are:
  - predictions_matrix_from_h5() -- construct prediction matrix (design_points, observable_bins) from observables.h5
  - design_array_from_h5() -- read design points from observables.h5
  - data_array_from_h5() -- read data points from observables.h5
+ - data_dict_from_h5() -- read data points from observables.h5
  - observable_dict_from_matrix() -- translate matrix of stacked observables to a dict of matrices per observable
+ - observable_matrix_from_dict() -- translate dict of observable arrays to a stacked matrix
  - observable_label_to_keys() -- convert observable string label to list of subobservables strings
  - sorted_observable_list_from_dict() -- get sorted list of observable_label keys, using fixed ordering convention that we enforce
 
@@ -251,13 +253,13 @@ def design_array_from_h5(output_dir, filename, validation_set=False):
     return design
 
 ####################################################################################################################
-def data_array_from_h5(output_dir, filename, observable_table_dir=None):
+def data_dict_from_h5(output_dir, filename, observable_table_dir=None):
     '''
-    Initialize data array from observables.h5 file
+    Initialize data dict from observables.h5 file
 
     :param str output_dir: location of filename
     :param str filename: h5 filename (typically 'observables.h5')
-    :return 2darray data: arrays of data points (columns of data[observable_label]: xmin xmax y y_err)
+    :return dict data: dict of arrays of data points (columns of data[observable_label]: xmin xmax y y_err)
     '''
 
     # Initialize observables dict from observables.h5 file
@@ -274,6 +276,39 @@ def data_array_from_h5(output_dir, filename, observable_table_dir=None):
             assert np.allclose(data[observable_label]['xmax'], data_table[:,1])
             assert np.allclose(data[observable_label]['y'], data_table[:,2])
             assert np.allclose(data[observable_label]['y_err'] , data_table[:,3])
+
+    return data
+
+####################################################################################################################
+def data_array_from_h5(output_dir, filename, observable_table_dir=None):
+    '''
+    Initialize data array from observables.h5 file
+
+    :param str output_dir: location of filename
+    :param str filename: h5 filename (typically 'observables.h5')
+    :return 2darray data: arrays of data points (n_features,)
+    '''
+
+    # Initialize observables dict from observables.h5 file
+    observables = read_dict_from_h5(output_dir, filename, verbose=False)
+    data_dict = observables['Data']
+
+    # Sort observables, to keep well-defined ordering in matrix
+    sorted_observable_list = sorted_observable_list_from_dict(observables)
+
+    # Loop through sorted observables and concatenate them into a single array:
+    #   (design_point_index, observable_bins) i.e. (n_samples, n_features)
+    data = {}
+    for i,observable_label in enumerate(sorted_observable_list):
+        y_values = data_dict[observable_label]['y'].T
+        y_err_values = data_dict[observable_label]['y_err'].T
+        if i==0:
+            data['y'] = y_values
+            data['y_err'] = y_err_values
+        else:
+            data['y'] = np.concatenate([data['y'],y_values])
+            data['y_err'] = np.concatenate([data['y_err'],y_err_values])
+    logger.info(f"  Total shape of Data (n_features,): {data['y'].shape}")
 
     return data
 

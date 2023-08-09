@@ -40,64 +40,68 @@ def run_mcmc(config):
     '''
 
     # Get parameter names and min/max
-    names = config.analysis_config['parameters'][config.parameterization]['names']
-    min = config.analysis_config['parameters'][config.parameterization]['min']
-    max = config.analysis_config['parameters'][config.parameterization]['max']
+    names = config.analysis_config['parametrization'][config.parameterization]['names']
+    min = config.analysis_config['parametrization'][config.parameterization]['min']
+    max = config.analysis_config['parametrization'][config.parameterization]['max']
     ndim = len(names)
 
     # Load emulators
     with open(config.emulation_outputfile, 'rb') as f:
         emulators = pickle.load(f)
 
-    # Load experimental data into dict: data[observable_label]['xmin'/'xmax'/'y'/'y_err']
+    # Load experimental data into arrays: experimental_results['y'/'y_err'] (n_features,)
     output_dir = config.output_dir
     filename = 'observables.h5'
     experimental_results = data_IO.data_array_from_h5(output_dir, filename, observable_table_dir=None)
 
-    # TODO: If needed we can create a h5py dataset for compression/chunking
-    #dset = f.create_dataset('chain', dtype='f8',
-    #                        shape=(config.n_walkers, 0, ndim),
-    #                        chunks=(config.n_walkers, 1, ndim),
-    #                        maxshape=(config.n_walkers, None, ndim),
-    #                        compression='lzf')
+    # TODO: By default the chain will be stored in memory as a numpy array
+    #       If needed we can create a h5py dataset for compression/chunking
 
-    # Construct sampler (we create a dummy daughter class from emcee.EnsembleSampler, to add some logging info)
-    # Note: we pass the emulators and experimental data as args to the log_posterior function
-    # TODO: Set pool parameter for parallelization
-    #with Pool() as pool:
-    #sampler = LoggingEnsembleSampler(config.n_walkers, self.ndim, _log_posterior, pool=pool)
-    sampler = LoggingEnsembleSampler(config.n_walkers, ndim, _log_posterior, args=[min, max, config, emulators, experimental_results])
+    # We can use multiprocessing in emcee to parallelize the independent walkers
+    with Pool() as pool:
 
-    # Generate random starting positions for each walker
-    random_pos = np.random.uniform(min, max, (config.n_walkers, ndim))
+        # Construct sampler (we create a dummy daughter class from emcee.EnsembleSampler, to add some logging info)
+        # Note: we pass the emulators and experimental data as args to the log_posterior function
+        logger.info('Initializing sampler...')
+        sampler = LoggingEnsembleSampler(config.n_walkers, ndim, _log_posterior, 
+                                        args=[min, max, config, emulators, experimental_results],
+                                        pool=pool)
 
-    # Run first half of burn-in
-    logger.info('Starting initial burn-in...')
-    nburn0 = config.n_burn_steps // 2
-    sampler.run_mcmc(random_pos, nburn0, n_logging_steps=config.n_logging_steps)
+        # Generate random starting positions for each walker
+        random_pos = np.random.uniform(min, max, (config.n_walkers, ndim))
 
-    # Reposition walkers to the most likely points in the chain, then run the second half of burn-in.
-    # This significantly accelerates burn-in and helps prevent stuck walkers.
-    logger.info('Resampling walker positions...')
-    X0 = sampler.flatchain[np.unique(sampler.flatlnprobability, return_index=True)[1][-config.n_walkers:]]
-    sampler.reset()
-    X0 = sampler.run_mcmc(X0, config.n_burn_steps - nburn0, n_logging_steps=config.n_logging_steps, storechain=False)[0]
-    sampler.reset()
-    logger.info('Burn-in complete.')
+        # Run first half of burn-in
+        logger.info(f'Parallelizing over {pool._processes} processes...')
+        logger.info('Starting initial burn-in...')
+        nburn0 = config.n_burn_steps // 2
+        sampler.run_mcmc(random_pos, nburn0, n_logging_steps=config.n_logging_steps)
 
-    # Production samples
-    logger.info('Starting production...')
-    sampler.run_mcmc(X0, config.n_sampling_steps, n_logging_steps=config.n_logging_steps)
+        # Reposition walkers to the most likely points in the chain, then run the second half of burn-in.
+        # This significantly accelerates burn-in and helps prevent stuck walkers.
+        logger.info('Resampling walker positions...')
+        X0 = sampler.flatchain[np.unique(sampler.flatlnprobability, return_index=True)[1][-config.n_walkers:]]
+        sampler.reset()
+        X0 = sampler.run_mcmc(X0, config.n_burn_steps - nburn0, n_logging_steps=config.n_logging_steps)[0]
+        sampler.reset()
+        logger.info('Burn-in complete.')
 
-    # Write to file
-    logger.info('Writing chain to file...')
-    output_dict = {}
-    output_dict['chain'] = sampler.chain
-    filename = os.path.join(config.output_dir, 'mcmc_chain.h5')
-    data_IO.write_dict_to_h5(output_dict, filename, verbose=True)
-    #dset.resize(dset.shape[1] + config.n_sampling_steps, 1)
-    #dset[:, -config.n_sampling_steps:, :] = sampler.chain
-    logger.info('Done.')
+        # Production samples
+        logger.info('Starting production...')
+        sampler.run_mcmc(X0, config.n_sampling_steps, n_logging_steps=config.n_logging_steps)
+
+        # Write to file
+        logger.info('Writing chain to file...')
+        output_dict = {}
+        output_dict['chain'] = sampler.get_chain()
+        output_dict['acceptance_fraction'] = sampler.acceptance_fraction
+        output_dict['log_prob'] = sampler.get_log_prob()
+        try:
+            output_dict['autocorrelation_time'] = sampler.get_autocorr_time()
+        except Exception as e:
+            output_dict['autocorrelation_time'] = None
+            print(f"Could not compute autocorrelation time: {str(e)}")
+        data_IO.write_dict_to_h5(output_dict, config.output_dir, 'mcmc.h5', verbose=True)
+        logger.info('Done.')
 
 ####################################################################################################################
 def credible_interval(samples, confidence=0.9):
@@ -128,7 +132,7 @@ def _log_posterior(X, min, max, config, emulators, experimental_results):
     :max: list of maximum boundaries for each emulator parameter
     :config: configuration object
     :emulators: dict of emulators
-    :experimental_results: dict of experimental results
+    :experimental_results: arrays of experimental results
     """
 
     # Convert to 2darray of shape (n_samples, n_parameters)
@@ -143,56 +147,30 @@ def _log_posterior(X, min, max, config, emulators, experimental_results):
 
     # Evaluate log-posterior for samples inside parameter bounds
     n_samples = np.count_nonzero(inside)
+    n_features = experimental_results['y'].shape[0]
     if n_samples > 0:
 
+        # Get experimental data
+        data_y = experimental_results['y']
+        data_y_err = experimental_results['y_err']
+
         # Compute emulator prediction
-        # returns dictionary of emulator predictions, with format emulator_predictions[observable_label]
+        # Returns dict of matrices of emulator predictions:
+        #     emulator_predictions['central_value'] -- (n_samples, n_features)
+        #     emulator_predictions['cov'] -- (n_samples, n_features, n_features)
         emulator_predictions = emulation.predict(X[inside], emulators, config)
 
-        # Count the number of bins that we have, and construct arrays to store the difference between
-        # emulator prediction and experimental data, and the covariance matrix
-        sorted_observable_list = data_IO.sorted_observable_list_from_dict(experimental_results)
-        n_data_points = 0
-        for observable_label in sorted_observable_list:
-            n_data_points += len(experimental_results[observable_label]['y'])
+        # Construct array to store the difference between emulator prediction and experimental data
+        # (using broadcasting to subtract each data point from each emulator prediction)
+        assert data_y.shape[0] == emulator_predictions['central_value'].shape[1]
+        dY = emulator_predictions['central_value'] - data_y
 
-        # Loop through sorted list of observables and compute:
-        #  - Difference between emulator prediction and experimental data for each bin
-        #  - Covariance matrix
-        dY = np.empty((n_samples, n_data_points))
-        covariance_matrix = np.empty((n_samples, n_data_points, n_data_points))
-        i_data_point = 0
-        for observable_label in sorted_observable_list:
-
-            #-------------------------
-            # Get experimental data
-            # TODO: include covariance matrix
-            data_y = experimental_results[observable_label]['y']
-            data_y_err = experimental_results[observable_label]['y_err']
-
-            #-------------------------
-            # Get emulator prediction
-            # TODO: include covariance matrix
-            emulator_prediction = emulator_predictions[observable_label]
-
-            # Check that emulator prediction has same length as experimental data
-            assert data_y.shape[0] == emulator_prediction.shape[1]
-
-            #-------------------------
-            # Compute difference (using broadcasting to subtract each data point from each emulator prediction)
-            dY[:,i_data_point:i_data_point+data_y.shape[0]] = emulator_prediction - data_y
-
-            #-------------------------
-            # Fill covariance array
-            # TODO: We want to add data covariance and emulator covariance.
-            #       Currently we only include uncorrelated data uncertainty, and no emulator covariance.
-            covariance_matrix[:,i_data_point:i_data_point+data_y.shape[0],i_data_point:i_data_point+data_y.shape[0]] = np.diag(data_y_err)
-
-            # Increment data point counter
-            i_data_point += data_y.shape[0]
-
-        # Check that we have iterated through the appropriate number of data points
-        assert i_data_point == n_data_points
+        # Construct the covariance matrix
+        # TODO: include full experimental data covariance matrix -- currently we only include uncorrelated data uncertainty
+        #-------------------------
+        covariance_matrix = np.zeros((n_samples, n_features, n_features))
+        covariance_matrix += emulator_predictions['cov']
+        covariance_matrix += np.diag(data_y_err**2)
 
         # Compute log likelihood at each point in the sample
         log_posterior[inside] += list(map(_loglikelihood, dY, covariance_matrix))
@@ -256,11 +234,11 @@ class LoggingEnsembleSampler(emcee.EnsembleSampler):
         """
         Run MCMC with logging every 'logging_steps' steps (default: log every 100 steps).
         """
-        logger.info(f'running {self.nwalkers} walkers for {n_sampling_steps} steps')
+        logger.info(f'  running {self.nwalkers} walkers for {n_sampling_steps} steps')
         for n, result in enumerate(self.sample(X0, iterations=n_sampling_steps, **kwargs), start=1):
             if n % n_logging_steps == 0 or n == n_sampling_steps:
                 af = self.acceptance_fraction
-                logger.info(f'step {n}: acceptance fraction: mean {af.mean()}, std {af.std()}, min {af.min()}, max {af.max()}')
+                logger.info(f'  step {n}: acceptance fraction: mean {af.mean()}, std {af.std()}, min {af.min()}, max {af.max()}')
 
         return result
 

@@ -29,7 +29,7 @@ def plot_observable_panels(plot_list, labels, colors, design_point_index, config
     sorted_observable_list = data_IO.sorted_observable_list_from_dict(observables)
 
     # Get data (Note: this is where the bin values are stored)
-    data = data_IO.data_array_from_h5(config.output_dir, filename='observables.h5',
+    data = data_IO.data_dict_from_h5(config.output_dir, filename='observables.h5',
                                       observable_table_dir=config.observable_table_dir)
 
     # Group observables into subplots, with shapes specified in config
