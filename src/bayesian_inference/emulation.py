@@ -59,7 +59,11 @@ def fit_emulators(config: EmulationConfig) -> None:
 
     # Use sklearn to:
     #  - Center and scale each feature (and later invert)
-    #  - Perform SVD-based PCA to reduce to config.n_pc features
+    #  - Perform PCA to reduce to config.n_pc features.
+    #      This amounts to finding the matrix S that diagonalizes the covariance matrix C = Y.T*Y = S*D^2*S.T
+    #      Or equivalently the right singular vectors S.T in the SVD decomposition of Y: Y = U*D*S.T
+    #      Given S, we can transform from feature space to PCA space with: Y_PCA = Y*S
+    #               and from PCA space to feature space with: Y = Y_PCA*S.T
     #
     # The input Y is a 2D array of format (n_samples, n_features).
     #
@@ -67,6 +71,8 @@ def fit_emulators(config: EmulationConfig) -> None:
     #   which is equivalent to:
     #     Y_pca = Y.dot(pca.components_.T), where:
     #       pca.components_ are the principal axes, sorted by decreasing explained variance -- shape (n_components, n_features)
+    #     In the notation above, pca.components_ = S.T, i.e.
+    #       the rows of pca.components_ are the sorted eigenvectors of the covariance matrix of the scaled features.
     #
     # We can invert this back to the original feature space by: pca.inverse_transform(Y_pca),
     #   which is equivalent to:
@@ -147,35 +153,78 @@ def predict(parameters, results, config, validation_set=False):
     '''
     Construct dictionary of emulator predictions for each observable
 
-    :param ndarray[float] parameters: list of parameter values (e.g. [tau0, c1, c2, ...]), with shape (n_design_points, n_parameters)
+    :param ndarray[float] parameters: list of parameter values (e.g. [tau0, c1, c2, ...]), with shape (n_samples, n_parameters)
     :param str results: dictionary that stores emulator
 
-    :return dict emulator_predictions: dictionary of emulator predictions, with format emulator_predictions[observable_label]
+    :return dict emulator_predictions: dictionary containing matrices of central values and covariance
+    
+    Note: One can easily construct a dict of predictions with format emulator_predictions[observable_label]
+          from the returned matrix as follows (useful for plotting / troubleshooting):
+              observables = data_IO.read_dict_from_h5(config.output_dir, 'observables.h5', verbose=False)
+              emulator_predictions = data_IO.observable_dict_from_matrix(emulator_central_value_reconstructed, 
+                                                                         observables, 
+                                                                         cov=emulator_cov_reconstructed,
+                                                                         validation_set=validation_set)
     '''
 
     # The emulators are stored as a list (one for each PC)
     emulators = results['emulators']
 
-    # Get predictions (in PC space) from each emulator and concatenate them into a numpy array with shape (n_design_points, n_PCs)
-    emulator_central_value = np.zeros((parameters.shape[0], config.n_pc))
-    emulator_std = np.zeros((parameters.shape[0], config.n_pc))
+    # Get predictions (in PC space) from each emulator and concatenate them into a numpy array with shape (n_samples, n_PCs)
+    # Note: we just get the std rather than cov, since we are interested in the predictive uncertainty
+    #       of a given point, not the correlation between different sample points.
+    n_samples = parameters.shape[0]
+    emulator_central_value = np.zeros((n_samples, config.n_pc))
+    emulator_variance = np.zeros((n_samples, config.n_pc))
     for i,emulator in enumerate(emulators):
-        y_central_value, y_std = emulator.predict(parameters, return_std=True)
-        #y_central_value, y_cov = emulator.predict(parameters, return_cov=True)
+        y_central_value, y_std = emulator.predict(parameters, return_std=True) # Alternately: return_cov=True
         emulator_central_value[:,i] = y_central_value
-        emulator_std[:,i] = y_std
+        emulator_variance[:,i] = y_std**2
+    # Construct (diagonal) covariance matrix from the variances, for use in uncertainty propagation
+    emulator_cov = np.apply_along_axis(np.diagflat, 1, emulator_variance)
+    assert emulator_cov.shape == (n_samples, config.n_pc, config.n_pc)
 
-    # Reconstruct the physical space from the PCs, and invert preprocessing
+    # Reconstruct the physical space from the PCs, and invert preprocessing.
+    # Note we use array broadcasting to calculate over all samples.
     pca = results['PCA']['pca']
     scaler = results['PCA']['scaler']
     emulator_central_value_reconstructed_scaled = emulator_central_value.dot(pca.components_[:config.n_pc,:])
     emulator_central_value_reconstructed = scaler.inverse_transform(emulator_central_value_reconstructed_scaled)
 
-    # TODO: propagate and return emulator_std
+    # Propagate uncertainty through the linear transformation back to feature space.
+    # Note that for a vector f = Ax, the covariance matrix of f is C_f = A C_x A^T.
+    #   (see https://en.wikipedia.org/wiki/Propagation_of_uncertainty)
+    #   (Note also that even if C_x is diagonal, C_f will not be)
+    # In our case, we have Y[i].T = S*Y_PCA[i].T for each point i in parameter space, where 
+    #    Y[i].T is a column vector of features -- shape (n_features,)
+    #    Y_PCA[i].T is a column vector of corresponding PCs -- shape (n_pc,)
+    #    S is the transfer matrix described above -- shape (n_features, n_pc)
+    # So C_Y[i] = S * C_Y_PCA[i] * S^T.
+    # Note: should be equivalent to: https://github.com/jdmulligan/STAT/blob/master/src/emulator.py#L145
+    # TODO: one can make this faster with broadcasting/einsum
+    n_features = pca.components_.shape[1]
+    S = pca.components_.T[:,:config.n_pc]
+    emulator_cov_reconstructed_scaled = np.zeros((n_samples, n_features, n_features))
+    for i_sample in range(n_samples):
+        emulator_cov_reconstructed_scaled[i_sample] = S.dot(emulator_cov[i_sample].dot(S.T))
+    assert emulator_cov_reconstructed_scaled.shape == (n_samples, n_features, n_features)
 
-    # Construct dict of observables
-    observables = data_IO.read_dict_from_h5(config.output_dir, 'observables.h5', verbose=False)
-    emulator_predictions = data_IO.prediction_dict_from_matrix(emulator_central_value_reconstructed, observables, validation_set=validation_set)
+    # Propagate uncertainty: inverse preprocessing
+    # We only need to undo the unit variance scaling, since the shift does not affect the covariance matrix.
+    # We can do this by computing a outer product (i.e. product of each pairwise scaling),
+    #   and multiple each element of the covariance matrix by this.
+    scale_factors = scaler.scale_
+    emulator_cov_reconstructed = emulator_cov_reconstructed_scaled*np.outer(scale_factors, scale_factors)
+
+    # TODO: include predictive variance due to truncated PCs (also propagated as above)
+    #np.sum(pca.explained_variance_[config.n_pc:])
+
+    # Return the stacked matrices: 
+    #   Central values: (n_samples, n_features)
+    #   Covariances: (n_samples, n_features, n_features)
+    emulator_predictions = {}
+    emulator_predictions['central_value'] = emulator_central_value_reconstructed
+    emulator_predictions['cov'] = emulator_cov_reconstructed
 
     return emulator_predictions
 

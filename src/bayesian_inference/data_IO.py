@@ -7,6 +7,8 @@ The main functionalities are:
  - read/write_dict_to_h5() -- read/write nested dict of numpy arrays to HDF5
  - predictions_matrix_from_h5() -- construct prediction matrix (design_points, observable_bins) from observables.h5
  - design_array_from_h5() -- read design points from observables.h5
+ - data_array_from_h5() -- read data points from observables.h5
+ - observable_dict_from_matrix() -- translate matrix of stacked observables to a dict of matrices per observable
  - observable_label_to_keys() -- convert observable string label to list of subobservables strings
  - sorted_observable_list_from_dict() -- get sorted list of observable_label keys, using fixed ordering convention that we enforce
 
@@ -276,12 +278,13 @@ def data_array_from_h5(output_dir, filename, observable_table_dir=None):
     return data
 
 ####################################################################################################################
-def prediction_dict_from_matrix(Y, observables, config=None, validation_set=False):
+def observable_dict_from_matrix(Y, observables, cov=np.array([]), config=None, validation_set=False):
     '''
     Translate matrix of stacked observables to a dict of matrices per observable
 
-    :param ndarray Y: 2D array: (design_point_index, observable_bins)
+    :param ndarray Y: 2D array: (n_samples, n_features)
     :param dict observables: dict
+    :param ndarray cov: covariance matrix (n_samples, n_features, n_features)
     :param str observable_table_dir: (optional, only needed to check against table values)
     :param str parameterization: (optional, only needed to check against table values)
     :param str validation_range: (optional, only needed to check against table values)
@@ -290,17 +293,29 @@ def prediction_dict_from_matrix(Y, observables, config=None, validation_set=Fals
     '''
 
     Y_dict = {}
+    Y_dict['central_value'] = {}
+    if cov.any():
+        Y_dict['std'] = {}
 
-    # Loop through sorted list of observables
-    sorted_observable_list = sorted_observable_list_from_dict(observables)
-    current_bin = 0
     if validation_set:
         prediction_key = 'Prediction_validation'
     else:
         prediction_key = 'Prediction'
+
+    # Loop through sorted list of observables and populate predictions into Y_dict
+    # Also store variances (ignore off-diagonal terms here, for plotting purposes)
+    #   (Note that in general there will be significant covariances between observables, induced by the PCA)
+    sorted_observable_list = sorted_observable_list_from_dict(observables)
+    current_bin = 0
     for observable_label in sorted_observable_list:
         n_bins = observables[prediction_key][observable_label]['y'].shape[0]
-        Y_dict[observable_label] = Y[:,current_bin:current_bin+n_bins]
+        Y_dict['central_value'][observable_label] = Y[:,current_bin:current_bin+n_bins]
+
+        if cov.any():
+            Y_dict['std'][observable_label] = np.sqrt(np.diagonal(cov[:,current_bin:current_bin+n_bins,current_bin:current_bin+n_bins],
+                                                                       axis1=1, axis2=2))
+            assert Y_dict['central_value'][observable_label].shape == Y_dict['std'][observable_label].shape
+
         current_bin += n_bins
 
     # Check that the total number of bins is correct
@@ -323,8 +338,8 @@ def prediction_dict_from_matrix(Y, observables, config=None, validation_set=Fals
             prediction_table_filename = f'Prediction__{config.parameterization}__{observable_label}__values.dat'
             prediction_table = np.loadtxt(os.path.join(prediction_table_dir, prediction_table_filename), ndmin=2)
             prediction_table_selected = np.take(prediction_table, indices_numpy, axis=1).T
-            assert np.allclose(Y_dict[observable_label], prediction_table_selected), \
-                               f'{observable_label} (design point 0) \n prediction: {Y_dict[observable_label][0,:]} \n prediction (table): {prediction_table_selected[0,:]}'
+            assert np.allclose(Y_dict['central_value'][observable_label], prediction_table_selected), \
+                               f"{observable_label} (design point 0) \n prediction: {Y_dict['central_value'][observable_label][0,:]} \n prediction (table): {prediction_table_selected[0,:]}"
 
     return Y_dict
 
