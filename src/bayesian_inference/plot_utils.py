@@ -9,6 +9,8 @@ import os
 import logging
 import yaml
 
+import numpy as np
+
 from matplotlib import pyplot as plt
 import seaborn as sns
 sns.set_context('paper', rc={'font.size':18,'axes.titlesize':18,'axes.labelsize':18})
@@ -113,6 +115,43 @@ def plot_observable_panels(plot_list, labels, colors, design_point_index, config
 
             plt.savefig(os.path.join(plot_dir, f'{filename}__{i_plot}.pdf'))
             plt.close()
+
+#---------------------------------------------------------------
+# Function to plot 1D histograms
+#---------------------------------------------------------------
+#-------------------------------------------------------------------------------------------
+def plot_histogram_1d(x_list=[], label_list=[],
+                      density=False, bins=np.array([]), logy=False,
+                      xlabel='', ylabel='', xfontsize=12, yfontsize=16, 
+                      outputfile=''):
+    '''
+    Plot 1D histograms from arrays of values (i.e. bin the values together)
+
+    :param list x_list: List of numpy arrays to plot
+    :param list label_list: List of labels for each array
+    '''
+    if not bins.any():
+        bins = np.linspace(np.amin(x_list[0]), np.amax(x_list[0]), 50)
+
+    for i,x in enumerate(x_list):
+        plt.hist(x,
+                 bins,
+                 histtype='step',
+                 density=density,
+                 label = label_list[i],
+                 linewidth=2,
+                 linestyle='-',
+                 alpha=0.5,
+                 log=logy)
+    
+    legend = plt.legend(loc='best', fontsize=10, frameon=False)
+
+    plt.xlabel(xlabel, fontsize=xfontsize)
+    plt.ylabel(ylabel, fontsize=yfontsize)
+
+    plt.tight_layout()
+    plt.savefig(outputfile)
+    plt.close()
 
 #-------------------------------------------------------------------------------------------
 def latex_from_tlatex(s):

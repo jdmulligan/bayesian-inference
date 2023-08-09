@@ -101,6 +101,14 @@ def run_mcmc(config):
             output_dict['autocorrelation_time'] = None
             print(f"Could not compute autocorrelation time: {str(e)}")
         data_IO.write_dict_to_h5(output_dict, config.output_dir, 'mcmc.h5', verbose=True)
+
+        # Save the sampler to file as well, in case we want to access it later
+        #   e.g. sampler.get_chain(discard=n_burn_steps, thin=thin, flat=True)
+        # Note that currently we use sampler.reset() to discard the burn-in and reposition
+        #   the walkers (and free memory), but it prevents us from plotting the burn-in samples.
+        with open(config.sampler_outputfile, 'wb') as f:
+            pickle.dump(sampler, f)
+
         logger.info('Done.')
 
 ####################################################################################################################
@@ -259,7 +267,7 @@ class MCMCConfig(common_base.CommonBase):
 
         self.observable_table_dir = config['observable_table_dir']
         self.observable_config_dir = config['observable_config_dir']
-
+ 
         emulator_configuration = analysis_config["parameters"]["emulator"]
         self.n_pc = emulator_configuration['n_pc']
 
@@ -271,3 +279,10 @@ class MCMCConfig(common_base.CommonBase):
 
         self.output_dir = os.path.join(config['output_dir'], f'{analysis_name}_{parameterization}')
         self.emulation_outputfile = os.path.join(self.output_dir, 'emulation.pkl')
+        self.mcmc_outputfile = os.path.join(self.output_dir, 'mcmc.h5')
+        self.mcmc_outputfilename = 'mcmc.h5'
+        self.sampler_outputfile = os.path.join(self.output_dir, 'mcmc_sampler.pkl')
+
+        # Update formatting of parameter names for plotting
+        unformatted_names = self.analysis_config['parametrization'][self.parameterization]['names']
+        self.analysis_config['parametrization'][self.parameterization]['names'] = [rf'{s}' for s in unformatted_names]

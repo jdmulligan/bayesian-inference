@@ -43,7 +43,7 @@ def plot(config):
         results = pickle.load(f)
 
     # Plot output dir
-    plot_dir = os.path.join(config.output_dir, 'plot')
+    plot_dir = os.path.join(config.output_dir, 'plot_emulation')
     if not os.path.exists(plot_dir):
         os.makedirs(plot_dir)
 
