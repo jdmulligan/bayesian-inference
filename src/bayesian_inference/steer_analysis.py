@@ -16,6 +16,7 @@ from bayesian_inference import emulation
 from bayesian_inference import mcmc
 from bayesian_inference import plot_emulation
 from bayesian_inference import plot_mcmc
+from bayesian_inference import plot_qhat
 
 from bayesian_inference import common_base, helpers
 
@@ -165,6 +166,7 @@ class SteerAnalysis(common_base.CommonBase):
 
                     logger.info('------------------------------------------------------------------------')
                     logger.info(f'Plotting qhat results {analysis_name}_{parameterization}...')
+                    plot_qhat.plot(mcmc_config)
                     logger.info(f'Done!')
                     logger.info("")
 
