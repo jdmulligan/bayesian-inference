@@ -6,7 +6,7 @@ output_dir: '/home/james/jetscape-docker/bayesian-inference/output/20230726'
 
 initialize_observables: False
 fit_emulators: False
-run_mcmc: True
+run_mcmc: False
 plot: True
 
 debug_level: 0
@@ -64,15 +64,15 @@ parameters:
   #-------------------------------------------
   # MCMC parameters
   mcmc_parameters: &default_mcmc_parameters
-    n_walkers: 500
+    n_walkers: 100
     n_burn_steps: 1000
-    n_sampling_steps: 500
+    n_sampling_steps: 5000
     n_logging_steps: 100
 
   #-------------------------------------------
   # Closure test parameters
   closure: &default_closure_parameters
-    confidence: [0.9, 0.6]
+    confidence: 0.9
 
 #-------------------------------------------
 # Specify observables
@@ -95,11 +95,11 @@ analysis_base: &model_base
   recoil_scheme: 'negative_recominber'
   parametrization:
     exponential:
-      names: ['$\\alpha_S^{\\rm{fix}}$', '$Q_0$', '$c_1$', '$c_2$', '$c_3$', '$\\tau_0$']
+      names: ['$\alpha_S^{\rm{fix}}$', '$Q_0$', '$c_1$', '$c_2$', '$c_3$', '$\tau_0$']
       min: [0.1, 1, 0, 0, 0, 0]
       max: [0.5, 10, 10, 10, 100, 1.5]
     binomial:
-      names: ['$\\alpha_S^{\\rm{fix}}$', '$Q_0$', '$c_1$', '$c_2$', '$a$', '$b$', '$\\tau_0$']
+      names: ['$\alpha_S^{\rm{fix}}$', '$Q_0$', '$c_1$', '$c_2$', '$a$', '$b$', '$\tau_0$']
       min: [0.1, 1, 0, 0, -10, -10, 0]
       max: [0.5, 10, 10, 10, 100, 100, 1.5]
   alpha: 0.2

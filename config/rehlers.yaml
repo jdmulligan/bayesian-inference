@@ -89,11 +89,11 @@ analysis_base: &model_base
   recoil_scheme: 'negative_recominber'
   parametrization:
     exponential:
-      names: ['$\\alpha_S^{\\rm{fix}}$', '$Q_0$', '$c_1$', '$c_2$', '$c_3$', '$\\tau_0$']
+      names: ['$\alpha_S^{\rm{fix}}$', '$Q_0$', '$c_1$', '$c_2$', '$c_3$', '$\tau_0$']
       min: [0.1, 1, 0, 0, 0, 0]
       max: [0.5, 10, 10, 10, 100, 1.5]
     binomial:
-      names: ['$\\alpha_S^{\\rm{fix}}$', '$Q_0$', '$c_1$', '$c_2$', '$a$', '$b$', '$\\tau_0$']
+      names: ['$\alpha_S^{\rm{fix}}$', '$Q_0$', '$c_1$', '$c_2$', '$a$', '$b$', '$\tau_0$']
       min: [0.1, 1, 0, 0, -10, -10, 0]
       max: [0.5, 10, 10, 10, 100, 100, 1.5]
   alpha: 0.2

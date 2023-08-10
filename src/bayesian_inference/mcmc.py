@@ -99,7 +99,7 @@ def run_mcmc(config):
             output_dict['autocorrelation_time'] = sampler.get_autocorr_time()
         except Exception as e:
             output_dict['autocorrelation_time'] = None
-            print(f"Could not compute autocorrelation time: {str(e)}")
+            logger.info(f"Could not compute autocorrelation time: {str(e)}")
         data_IO.write_dict_to_h5(output_dict, config.output_dir, 'mcmc.h5', verbose=True)
 
         # Save the sampler to file as well, in case we want to access it later

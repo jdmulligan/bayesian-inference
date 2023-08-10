@@ -46,12 +46,11 @@ def plot(config):
 
     # Check that results match config file
     chain = results['chain']
-    n_walkers, n_sampling_steps, n_dim = chain.shape
-    logger.info(chain.shape)
+    n_sampling_steps, n_walkers, n_dim = chain.shape
     logger.info(f'Plotting MCMC results for chain with n_walkers={n_walkers}, n_sampling_steps={n_sampling_steps}, n_dim={n_dim}')
     logger.info(f'Chain is of size: {os.path.getsize(config.mcmc_outputfile)/(1024*1024):.1f} MB')
-    assert chain.shape[0] == config.n_walkers
-    assert chain.shape[1] == config.n_sampling_steps
+    assert chain.shape[0] == config.n_sampling_steps
+    assert chain.shape[1] == config.n_walkers
     assert chain.shape[2] == len(config.analysis_config['parametrization'][config.parameterization]['names'])
 
     # MCMC plots
@@ -91,11 +90,11 @@ def _plot_log_posterior(log_posterior, plot_dir, config):
         - The walkers are not getting stuck in some part of phase space
         - There is not a multi-model posterior (which MCMC can struggle with)
 
-    :param 1darray log_prob: log probability at each step for each walker -- shape (n_walkers, n_steps)
+    :param 1darray log_prob: log probability at each step for each walker -- shape (n_steps, n_walkers)
     '''
 
-    n_walkers = log_posterior.shape[0]
-    n_steps = log_posterior.shape[1]
+    n_steps = log_posterior.shape[0]
+    n_walkers = log_posterior.shape[1]
 
     # Plot heatmap: log posterior for each walker as a function of step number
     plt.figure(figsize=(10, 6))
@@ -108,27 +107,31 @@ def _plot_log_posterior(log_posterior, plot_dir, config):
     plt.close()
 
     # Plot mean and stdev of each walker as a function of step number
-    mean_log_posterior = log_posterior.mean(axis=0)    
-    std_log_posterior = log_posterior.std(axis=0)
+    mean_log_posterior = log_posterior.mean(axis=1)    
+    std_log_posterior = log_posterior.std(axis=1)
     plt.figure(figsize=(10, 6))
-    plt.plot(mean_log_posterior, label='Mean and stdev over walkers')
+    plt.plot(mean_log_posterior, label='mean over walkers')
     plt.fill_between(range(n_steps), mean_log_posterior - std_log_posterior, 
-                                     mean_log_posterior + std_log_posterior, alpha=0.3)
+                                     mean_log_posterior + std_log_posterior, 
+                                     alpha=0.3, label='std over walkers')
     plt.xlabel('Step Number')
     plt.ylabel('Log Posterior (unnormalized)')
+    plt.legend()
     outputfile = os.path.join(plot_dir, 'log_posterior_1D_steps.pdf')
     plt.savefig(outputfile)
     plt.close()
 
     # Plot mean and stdev of each step number as a function of walkers
-    mean_log_posterior = log_posterior.mean(axis=1)    
-    std_log_posterior = log_posterior.std(axis=1)
+    mean_log_posterior = log_posterior.mean(axis=0)    
+    std_log_posterior = log_posterior.std(axis=0)
     plt.figure(figsize=(10, 6))
-    plt.plot(mean_log_posterior, label='Mean and stdev over walkers')
+    plt.plot(mean_log_posterior, label='mean over steps')
     plt.fill_between(range(n_walkers), mean_log_posterior - std_log_posterior, 
-                                       mean_log_posterior + std_log_posterior, alpha=0.3)
+                                       mean_log_posterior + std_log_posterior,
+                                       alpha=0.3, label='std over steps')
     plt.xlabel('Walker')
     plt.ylabel('Log Posterior (unnormalized)')
+    plt.legend()
     outputfile = os.path.join(plot_dir, 'log_posterior_1D_walkers.pdf')
     plt.savefig(outputfile)
     plt.close()
@@ -164,11 +167,13 @@ def _plot_autocorrelation_time(results, plot_dir, config):
     
     # For each walker, use emcee to compute the autocorrelation time for each parameter
     chain = results['chain']
-    n_walkers, _, n_dim = chain.shape
+    _, n_walkers, n_dim = chain.shape
     autocorrelation_time_parameters = np.zeros((n_walkers, n_dim))
-    for i in range(config.n_walkers):
-        autocorrelation_time_parameters[i] = emcee.autocorr.integrated_time(chain[i]) 
-    print(autocorrelation_time_parameters)
+    for i in range(n_walkers):
+        try:
+            autocorrelation_time_parameters[i] = emcee.autocorr.integrated_time(chain[:,i,:]) 
+        except emcee.autocorr.AutocorrError as e:
+            logger.info(f"Autocorrelation time could not be computed for walker {i}: {e}")
 
     # Compute the mean and stdev over all walkers
     mean_autocorrelation_time_parameters = autocorrelation_time_parameters.mean(axis=0)    
@@ -176,10 +181,12 @@ def _plot_autocorrelation_time(results, plot_dir, config):
 
     # Also compute the autocorrelation time for the log posterior
     log_posterior = results['log_prob']
-    n_walkers = log_posterior.shape[0]
     autocorrelation_time_posterior = np.zeros((n_walkers, 1))
-    for i in range(config.n_walkers):
-        autocorrelation_time_posterior[i] = emcee.autocorr.integrated_time(log_posterior[i]) 
+    for i in range(n_walkers):
+        try:
+            autocorrelation_time_posterior[i] = emcee.autocorr.integrated_time(log_posterior[:,i]) 
+        except emcee.autocorr.AutocorrError as e:
+            logger.info(f"Autocorrelation time could not be computed for log_posterior: {e}")
     mean_autocorrelation_time_posterior = autocorrelation_time_posterior.mean(axis=0)    
     std_autocorrelation_time_posterior = autocorrelation_time_posterior.std(axis=0)
 
@@ -220,12 +227,12 @@ def _plot_posterior_pairplot(chain, plot_dir, config, holdout_test = False, hold
     Plot posterior pairplot
     Optionally, we can also display the holdout point (if holdout_test = True)
 
-    :param 3darray chain: positions of walkers at each step -- shape (n_walkers, n_steps, n_dim)
+    :param 3darray chain: positions of walkers at each step -- shape (n_steps, n_walkers, n_dim)
     :param bool holdout_test (optional): whether to display holdout point
     :param 1darray holdout_point (optional): point to display
     '''
 
-    # Flatten chain to shape (n_walkers*n_steps, n_dim)
+    # Flatten chain to shape (n_steps*n_walkers, n_dim)
     samples = chain.reshape((chain.shape[0]*chain.shape[1], chain.shape[2]))
 
     # Construct dataframe of samples
@@ -234,8 +241,8 @@ def _plot_posterior_pairplot(chain, plot_dir, config, holdout_test = False, hold
 
     # Plot posterior pairplot
     g = sns.pairplot(df, diag_kind='kde', 
-                     plot_kws={'alpha':0.1, 's':1, 'color':sns.xkcd_rgb['medium green']}, 
-                     diag_kws={'color':sns.xkcd_rgb['denim blue'], 'fill':True})
+                     plot_kws={'alpha':0.1, 's':1, 'color':sns.xkcd_rgb['light blue']}, 
+                     diag_kws={'color':'blue', 'fill':True})
     
     # Rasterize the scatter points but not the diagonal, to keep file size small
     for i, row_axes in enumerate(g.axes):
