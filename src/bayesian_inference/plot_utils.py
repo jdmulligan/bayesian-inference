@@ -21,7 +21,8 @@ logger = logging.getLogger(__name__)
 
 
 #---------------------------------------------------------------
-def plot_observable_panels(plot_list, labels, colors, design_point_index, config, plot_dir, filename):
+def plot_observable_panels(plot_list, labels, colors, columns, config, plot_dir, filename,
+                           linewidth=2):
     '''
     Plot observables before and after PCA -- for fixed n_pc
     '''
@@ -57,7 +58,7 @@ def plot_observable_panels(plot_list, labels, colors, design_point_index, config
         ytitle = latex_from_tlatex(plot_block['ytitle_AA'])
 
         color_data = sns.xkcd_rgb['almost black']
-        linewidth = 2
+        linewidth = linewidth
         alpha = 0.7
 
         # Get bins
@@ -91,9 +92,14 @@ def plot_observable_panels(plot_list, labels, colors, design_point_index, config
 
         # Draw predictions
         for i_prediction,_ in enumerate(plot_list):
-            axs[row,col].plot(x, plot_list[i_prediction][observable_label][design_point_index],
-                              label=labels[i_prediction], color=colors[i_prediction],
-                              linewidth=linewidth, alpha=alpha)
+            for i_col in range(len(columns)):  
+                if i_col == 0:
+                    label = label=labels[i_prediction]
+                else:
+                    label = None
+                axs[row,col].plot(x, plot_list[i_prediction][observable_label][columns[i_col]],
+                                  label=label, color=colors[i_prediction],
+                                  linewidth=linewidth, alpha=alpha)
 
         # Draw data
         axs[row,col].errorbar(x, data_y, xerr=xerr, yerr=data_y_err,

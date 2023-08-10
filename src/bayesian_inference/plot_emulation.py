@@ -210,7 +210,7 @@ def _plot_pca_reconstruction_observables(results, config, plot_dir):
 
     design_point_index = 0
     filename = f'PCA_observables__design_point{design_point_index}'
-    plot_utils.plot_observable_panels(plot_list, labels, colors, design_point_index, config, plot_dir, filename)
+    plot_utils.plot_observable_panels(plot_list, labels, colors, [design_point_index], config, plot_dir, filename)
 
 #-------------------------------------------------------------------------------------------
 def _plot_emulator_observables(results, config, plot_dir, validation_set=False):
@@ -252,7 +252,7 @@ def _plot_emulator_observables(results, config, plot_dir, validation_set=False):
         labels = [r'JETSCAPE', r'JETSCAPE (reconstructed)', r'Emulator']
         colors = [sns.xkcd_rgb['dark sky blue'], sns.xkcd_rgb['denim blue'], sns.xkcd_rgb['light blue']]
         filename = f'emulator_observables_training__design_point{design_point_index}'
-    plot_utils.plot_observable_panels(plot_list, labels, colors, design_point_index, config, plot_dir, filename)
+    plot_utils.plot_observable_panels(plot_list, labels, colors, [design_point_index], config, plot_dir, filename)
 
 #-------------------------------------------------------------------------------------------
 def _plot_emulator_residuals(results, config, plot_dir, validation_set=False):

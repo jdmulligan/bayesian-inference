@@ -7,6 +7,7 @@ authors: J.Mulligan, R.Ehlers
 
 import logging
 import os
+import pickle
 
 import numpy as np
 import pandas as pd
@@ -19,6 +20,8 @@ import seaborn as sns
 sns.set_context('paper', rc={'font.size':18,'axes.titlesize':18,'axes.labelsize':18})
 
 from bayesian_inference import data_IO
+from bayesian_inference import plot_utils
+from bayesian_inference import emulation
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +61,13 @@ def plot(config):
     _plot_log_posterior(results['log_prob'], plot_dir, config)
     _plot_autocorrelation_time(results, plot_dir, config)
     _plot_posterior_pairplot(chain, plot_dir, config)
+
+    # Posterior vs. Design observables
+    design = data_IO.design_array_from_h5(config.output_dir, filename='observables.h5')
+    _plot_design_pairplot(design, plot_dir, config)
+    _plot_design_observables(design, plot_dir, config)
+    _plot_posterior_observables(chain, plot_dir, config)
+
 
 #---------------------------------------------------------------
 def _plot_acceptance_fraction(acceptance_fraction, plot_dir, config):
@@ -272,8 +282,87 @@ def _plot_posterior_pairplot(chain, plot_dir, config, holdout_test = False, hold
                 if i != j: # Off diagonal, draw the holdout point
                     ax.scatter(holdout_point[j], holdout_point[i], color=sns.xkcd_rgb['almost black'])
 
-    plt.savefig(f'{plot_dir}/posterior_pairplot.pdf')
+    plt.savefig(f'{plot_dir}/pairplot_posterior.pdf')
     plt.close('all')
 
     if holdout_test:
         return theta_closure
+    
+#---------------------------------------------------------------
+def _plot_design_pairplot(design, plot_dir, config):
+    '''
+    Plot design pairplot
+
+    :param 2darray design: positions of walkers at each step -- shape (n_design_points, n_dim)
+    '''
+
+    # Construct dataframe of design points
+    names = [rf'{s}' for s in config.analysis_config['parametrization'][config.parameterization]['names']]
+    df = pd.DataFrame(design, columns=names)
+
+    # Take log of c1,c2,c3 since it is their log that is uniformly distributed
+    for col in df.columns:
+        if 'c_' in col:
+            df[col] = np.log(df[col])
+            df.rename(columns={col: col.replace('c_','\mathrm{ln}c_')}, inplace=True)
+
+    # Plot posterior pairplot
+    sns.pairplot(df, diag_kind='hist', 
+                 plot_kws={'alpha':0.7, 's':3, 'color':'blue'}, 
+                 diag_kws={'color':'blue', 'fill':True, 'bins':20})
+
+    plt.savefig(f'{plot_dir}/pairplot_design.pdf')
+    plt.close('all')
+
+#---------------------------------------------------------------
+def _plot_design_observables(design, plot_dir, config):
+    '''
+    Plot observables at design points
+
+    :param 2darray design: positions of walkers at each step -- shape (n_design_points, n_dim)
+    '''
+
+    # Get observables
+    observables = data_IO.read_dict_from_h5(config.output_dir, 'observables.h5', verbose=False)
+
+    # Get JETSCAPE predictions
+    Y = data_IO.predictions_matrix_from_h5(config.output_dir, filename='observables.h5')
+    # Translate matrix of stacked observables to a dict of matrices per observable
+    Y_dict = data_IO.observable_dict_from_matrix(Y, observables, config=config)
+
+    # Plot
+    columns = np.arange(design.shape[0])
+    plot_list = [Y_dict['central_value']]
+    labels = ['JETSCAPE (design)']
+    colors = [sns.xkcd_rgb['dark sky blue']]
+    filename = f'observables_design.pdf'
+    plot_utils.plot_observable_panels(plot_list, labels, colors, columns, config, plot_dir, filename, linewidth=1)
+
+#---------------------------------------------------------------
+def _plot_posterior_observables(chain, plot_dir, config, n_samples=200):
+    '''
+    Plot (emulated) observables at samples of posterior
+
+    :param 3darray chain: positions of walkers at each step -- shape (n_steps, n_walkers, n_dim)
+    :param int n_samples: number of posterior samples to plot
+    '''
+        
+    # Flatten chain to shape (n_steps*n_walkers, n_dim), and sample parameters without replacement
+    posterior = chain.reshape((chain.shape[0]*chain.shape[1], chain.shape[2]))
+    idx = np.random.choice(posterior.shape[0], size=n_samples, replace=False)
+    posterior_samples = posterior[idx,:]
+
+    # Get emulator predictions at these points
+    observables = data_IO.read_dict_from_h5(config.output_dir, 'observables.h5', verbose=False)
+    with open(config.emulation_outputfile, 'rb') as f:
+        results = pickle.load(f)
+    emulator_predictions = emulation.predict(posterior_samples, results, config)
+    emulator_predictions_dict = data_IO.observable_dict_from_matrix(emulator_predictions['central_value'], 
+                                                                    observables)
+    # Plot
+    columns = np.arange(posterior_samples.shape[0])
+    plot_list = [emulator_predictions_dict['central_value']]
+    labels = ['JETSCAPE (posterior)']
+    colors = [sns.xkcd_rgb['dark sky blue']]
+    filename = f'observables_posterior.pdf'
+    plot_utils.plot_observable_panels(plot_list, labels, colors, columns, config, plot_dir, filename, linewidth=1)

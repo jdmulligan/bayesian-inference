@@ -181,6 +181,8 @@ def _log_posterior(X, min, max, config, emulators, experimental_results):
         covariance_matrix += np.diag(data_y_err**2)
 
         # Compute log likelihood at each point in the sample
+        # We take constant priors, so the log-likelihood is just the log-posterior
+        # (since above we set the log-posterior to -inf for samples outside the parameter bounds)
         log_posterior[inside] += list(map(_loglikelihood, dY, covariance_matrix))
 
     return log_posterior
