@@ -42,6 +42,7 @@ dev = [
     "mypy >=0.931",
     "ipython >=8.0",
     "ipykernel >=6.15.1",
+    "pytest>=7.4.0",
 ]
 
 [tool.hatch]
