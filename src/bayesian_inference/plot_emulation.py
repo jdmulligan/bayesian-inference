@@ -32,34 +32,33 @@ def plot(config):
 
     :param EmulationConfig config: we take an instance of EmulationConfig as an argument to keep track of config info.
     '''
+    emulation_results = {}
+    for emulation_group_name, emulation_group_config in config.emulation_groups_config.items():
+        # Check if emulator already exists
+        if not os.path.exists(config.emulation_outputfile):
+            logger.info(f'Emulator output does not exist: {config.emulation_outputfile}')
+            continue
+        emulation_results[emulation_group_name] = emulation.read_emulators(emulation_group_config)
 
-    # Check if emulator already exists
-    if not os.path.exists(config.emulation_outputfile):
-        logger.info(f'Emulator output does not exist: {config.emulation_outputfile}')
-        return
+        # Plot output dir
+        plot_dir = os.path.join(config.output_dir, f'plot_emulation_{emulation_group_name}')
+        if not os.path.exists(plot_dir):
+            os.makedirs(plot_dir)
 
-    # Get results from file
-    with open(config.emulation_outputfile, 'rb') as f:
-        results = pickle.load(f)
+        # PCA plots
+        results = emulation_results[emulation_group_name]
+        _plot_pca_explained_variance(results, plot_dir, emulation_group_config)
+        _plot_pca_reconstruction_error(results, plot_dir, emulation_group_config)
+        _plot_pca_reconstruction_error_by_feature(results, plot_dir, emulation_group_config)
+        _plot_pca_reconstruction_observables(results, emulation_group_config, plot_dir)
 
-    # Plot output dir
-    plot_dir = os.path.join(config.output_dir, 'plot_emulation')
-    if not os.path.exists(plot_dir):
-        os.makedirs(plot_dir)
+        # Emulator plots
+        # TODO: validation_set doesn't do anything here yet because predict() doesn't use the validation_set argument!
+        _plot_emulator_observables(results, emulation_group_config, plot_dir, validation_set=False)
+        _plot_emulator_observables(results, emulation_group_config, plot_dir, validation_set=True)
 
-    # PCA plots
-    _plot_pca_explained_variance(results, plot_dir, config)
-    _plot_pca_reconstruction_error(results, plot_dir, config)
-    _plot_pca_reconstruction_error_by_feature(results, plot_dir, config)
-    _plot_pca_reconstruction_observables(results, config, plot_dir)
-
-    # Emulator plots
-    # TODO: validation_set doesn't do anything here yet because predict() doesn't use the validation_set argument!
-    _plot_emulator_observables(results, config, plot_dir, validation_set=False)
-    _plot_emulator_observables(results, config, plot_dir, validation_set=True)
-
-    _plot_emulator_residuals(results, config, plot_dir, validation_set=False)
-    _plot_emulator_residuals(results, config, plot_dir, validation_set=True)
+        _plot_emulator_residuals(results, emulation_group_config, plot_dir, validation_set=False)
+        _plot_emulator_residuals(results, emulation_group_config, plot_dir, validation_set=True)
 
 #---------------------------------------------------------------
 def _plot_pca_explained_variance(results, plot_dir, config):

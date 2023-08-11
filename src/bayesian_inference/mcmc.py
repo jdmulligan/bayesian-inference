@@ -169,7 +169,7 @@ def _log_posterior(X, min, max, emulation_config, emulation_results, experimenta
     :param min list of minimum boundaries for each emulator parameter
     :param max list of maximum boundaries for each emulator parameter
     :param config emulation_configuration object
-    :param emulators dict of emulators
+    :param emulation_results dict of emulation groups
     :param experimental_results arrays of experimental results
     """
 

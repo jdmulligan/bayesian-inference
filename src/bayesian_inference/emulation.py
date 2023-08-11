@@ -214,6 +214,7 @@ def predict(parameters: npt.NDArray[np.float64], emulation_config: EmulationConf
     if not merge_predictions_over_groups:
         return predict_output
 
+    # TODO: Would it be better to reorder the emulation group output here to match the observable order??
     # Merge predictions over groups
     # Note that we don't care about the keys of predict_output (which are just the emulation group names),
     # but rather the keys stored in the predict_single results, which are "central_values" and "cov".
