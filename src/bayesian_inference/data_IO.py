@@ -452,21 +452,18 @@ def sorted_observable_list_from_dict(observables, observable_filter: ObservableF
     :param ObservableFilter observable_filter: (optional) filter to apply to the observables
     :return list[str] sorted_observable_list: list of observable labels
     '''
+    observable_keys = list(observables.keys())
+    if 'Prediction' in observables.keys():
+        observable_keys = list(observables['Prediction'].keys())
 
     if observable_filter is not None:
         # Filter the observables based on the provided filter
-        observables = {
-            key: value
-            for key, value in observables.items()
-            if observable_filter.accept_observable(observable_name=key)
-        }
+        observable_keys = [
+            k for k in observable_keys if observable_filter.accept_observable(observable_name=k)
+        ]
 
     # Sort observables, to keep well-defined ordering in matrix
-    if 'Prediction' in observables.keys():
-        sorted_observable_list = _sort_observable_labels(list(observables['Prediction'].keys()))
-    else:
-        sorted_observable_list = _sort_observable_labels(list(observables.keys()))
-    return sorted_observable_list
+    return _sort_observable_labels(observable_keys)
 
 #---------------------------------------------------------------
 def _sort_observable_labels(unordered_observable_labels):
@@ -534,11 +531,8 @@ class ObservableFilter:
     def accept_observable(self, observable_name: str) -> bool:
         """Accept observable from the provided list(s)
 
-        Args:
-            observable_name: Name of the observable to possibly accept.
-
-        Returns:
-            True if the observable should be accepted.
+        :param str observable_name: Name of the observable to possibly accept.
+        :return: bool True if the observable should be accepted.
         """
         # Select observables based on the input list, with the possibility of excluding some
         # observables with additional selection strings (eg. remove one experiment from the
@@ -560,8 +554,13 @@ class ObservableFilter:
         found_observable = (
             (observable_in_include_list_no_glob or observable_in_include_list_glob)
             and not
-            ( observable_in_exclude_list_no_glob or observable_in_exclude_list_glob)
+            (observable_in_exclude_list_no_glob or observable_in_exclude_list_glob)
         )
+
+        #logger.debug(
+        #    f"'{observable_name}': {found_observable=},"
+        #    f" {observable_in_include_list_no_glob=}, {observable_in_include_list_glob=}, {observable_in_exclude_list_no_glob=}, {observable_in_exclude_list_glob=}"
+        #)
 
         # Helpful for cross checking when debugging
         if observable_in_exclude_list_no_glob or observable_in_exclude_list_glob:

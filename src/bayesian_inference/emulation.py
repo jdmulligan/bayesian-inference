@@ -220,6 +220,7 @@ def predict(parameters: npt.NDArray[np.float64],
     # Now, we want to merge predictions over groups
     # First, we need to figure out how observables map to the emulator groups
     # NOTE: We take the last emulation_group_config from the above loop to get the output dir since it's the same across all groups
+    #       (however, the emulator filename is most likely different, so be careful!)
     all_observables = data_IO.predictions_matrix_from_h5(emulation_group_config.output_dir, filename='observables.h5')
     emulation_group_prediction_observable_dict = {}
     # FIXME: This doesn't seem terribly efficient. Can we store this mapping somehow?
@@ -376,7 +377,7 @@ class EmulationGroupConfig(common_base.CommonBase):
     #---------------------------------------------------------------
     # Constructor
     #---------------------------------------------------------------
-    def __init__(self, analysis_name='', parameterization='', analysis_config='', config_file='', emulator_name: str | None = None, **kwargs):
+    def __init__(self, analysis_name='', parameterization='', analysis_config='', config_file='', emulation_group_name: str | None = None):
 
         self.analysis_name = analysis_name
         self.parameterization = parameterization
@@ -393,10 +394,10 @@ class EmulationGroupConfig(common_base.CommonBase):
         ########################
         # Emulator configuration
         ########################
-        if emulator_name is None:
+        if emulation_group_name is None:
             emulator_configuration = self.analysis_config["parameters"]["emulators"]
         else:
-            emulator_configuration = self.analysis_config["parameters"]["emulators"][emulator_name]
+            emulator_configuration = self.analysis_config["parameters"]["emulators"][emulation_group_name]
         self.force_retrain = emulator_configuration['force_retrain']
         self.n_pc = emulator_configuration['n_pc']
         self.mean_function = emulator_configuration['mean_function']
@@ -438,8 +439,8 @@ class EmulationGroupConfig(common_base.CommonBase):
         # Output options
         self.output_dir = os.path.join(config['output_dir'], f'{analysis_name}_{parameterization}')
         emulation_outputfile_name = 'emulation.pkl'
-        if emulator_name is not None:
-            emulation_outputfile_name = f'emulation_{emulator_name}.pkl'
+        if emulation_group_name is not None:
+            emulation_outputfile_name = f'emulation_{emulation_group_name}.pkl'
         self.emulation_outputfile = os.path.join(self.output_dir, emulation_outputfile_name)
 
 @attrs.define
@@ -470,7 +471,7 @@ class EmulationConfig(common_base.CommonBase):
                 parameterization=c.parameterization,
                 analysis_config=c.analysis_config,
                 config_file=c.config_file,
-                emulation_group_config_name=k,
+                emulation_group_name=k,
             )
             for k in c.analysis_config["parameters"]["emulators"]
         }

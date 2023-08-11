@@ -113,12 +113,12 @@ analyses:
         fluctuating:
           <<: *default_emulator_parameters
           observable_list:
-          - "_2760_*_hadron__pt_"
+          - "2760_*_hadron__pt_"
         stable:
           <<: *default_emulator_parameters
           observable_list:
-          - "_200_*_hadron__pt_"
-          - "_5020_*_hadron__pt_"
+          - "200_*_hadron__pt_"
+          - "5020_*_hadron__pt_"
       mcmc:
         <<: *default_mcmc_parameters
       closure:
