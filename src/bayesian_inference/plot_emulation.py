@@ -54,6 +54,7 @@ def plot(config):
     _plot_pca_reconstruction_observables(results, config, plot_dir)
 
     # Emulator plots
+    # TODO: validation_set doesn't do anything here yet because predict() doesn't use the validation_set argument!
     _plot_emulator_observables(results, config, plot_dir, validation_set=False)
     _plot_emulator_observables(results, config, plot_dir, validation_set=True)
 
@@ -231,8 +232,8 @@ def _plot_emulator_observables(results, config, plot_dir, validation_set=False):
 
     # Get emulator predictions
     emulator_predictions = emulation.predict(design, results, config, validation_set=validation_set)
-    emulator_predictions_dict = data_IO.observable_dict_from_matrix(emulator_predictions['central_value'], 
-                                                                    observables, 
+    emulator_predictions_dict = data_IO.observable_dict_from_matrix(emulator_predictions['central_value'],
+                                                                    observables,
                                                                     validation_set=validation_set)
 
     # Plot
@@ -273,8 +274,8 @@ def _plot_emulator_residuals(results, config, plot_dir, validation_set=False):
 
     # Get emulator predictions
     emulator_predictions = emulation.predict(design, results, config, validation_set=validation_set)
-    emulator_predictions_dict = data_IO.observable_dict_from_matrix(emulator_predictions['central_value'], 
-                                                                    observables, 
+    emulator_predictions_dict = data_IO.observable_dict_from_matrix(emulator_predictions['central_value'],
+                                                                    observables,
                                                                     cov=emulator_predictions['cov'],
                                                                     validation_set=validation_set)
 

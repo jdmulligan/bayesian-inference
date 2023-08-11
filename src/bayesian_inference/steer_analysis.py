@@ -107,7 +107,7 @@ class SteerAnalysis(common_base.CommonBase):
                         progress.start_task(emulation_task)
                         logger.info('------------------------------------------------------------------------')
                         logger.info(f'Fitting emulators for {analysis_name}_{parameterization}...')
-                        emulation_config = emulation.EmulationConfig(
+                        emulation_config = emulation.EmulationConfig.from_config_file(
                             analysis_name=analysis_name,
                             parameterization=parameterization,
                             analysis_config=analysis_config,

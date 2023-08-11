@@ -186,12 +186,12 @@ def write_emulators(config: EmulationGroupConfig, output_dict: dict[str, Any]) -
 
 
 ####################################################################################################################
-def predict(parameters: npt.NDArray[np.float64], emulator_config: EmulationConfig, validation_set: bool = False, merge_predictions_over_groups: bool = True, emulation_group_results: dict[str, dict[str, Any]] | None = None):
+def predict(parameters: npt.NDArray[np.float64], emulation_config: EmulationConfig, validation_set: bool = False, merge_predictions_over_groups: bool = True, emulation_group_results: dict[str, dict[str, Any]] | None = None):
     """
     Construct dictionary of emulator predictions for each observable
 
     :param ndarray[float] parameters: list of parameter values (e.g. [tau0, c1, c2, ...]), with shape (n_samples, n_parameters)
-    :param EmulationConfig emulator_config: configuration object for the overall emulator (including all groups)
+    :param EmulationConfig emulation_config: configuration object for the overall emulator (including all groups)
     :param bool validation_set: whether to use the validation set (True) or the training set (False)
     :param bool merge_predictions_over_groups: whether to merge predictions over emulation groups (True)
                                                or return a dictionary of predictions for each group (False). Default: True
@@ -201,7 +201,7 @@ def predict(parameters: npt.NDArray[np.float64], emulator_config: EmulationConfi
     if emulation_group_results is None:
         emulation_group_results = {}
     predict_output = {}
-    for emulation_group_name, emulation_group_config in emulator_config.emulation_groups_config.items():
+    for emulation_group_name, emulation_group_config in emulation_config.emulation_groups_config.items():
         emulation_group_result = emulation_group_results.get(emulation_group_name, read_emulators(emulation_group_config))
         predict_output[emulation_group_name] = predict_emulation_group(
             parameters=parameters,
@@ -321,6 +321,7 @@ class EmulationGroupConfig(common_base.CommonBase):
     #---------------------------------------------------------------
     def __init__(self, analysis_name='', parameterization='', analysis_config='', config_file='', emulator_name: str | None = None, **kwargs):
 
+        self.analysis_name = analysis_name
         self.parameterization = parameterization
         self.analysis_config = analysis_config
         self.config_file = config_file
