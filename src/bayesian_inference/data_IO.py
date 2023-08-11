@@ -136,7 +136,7 @@ def initialize_observables_dict_from_tables(table_dir, analysis_config, paramete
 
                 # TODO: Do something about bins that have value=0?
                 if 0 in prediction_values:
-                    logger.info(f'WARNING: {filename_prediction_values} has value=0 at design points {np.where(prediction_values == 0)[1]}')
+                    logger.warning(f'{filename_prediction_values} has value=0 at design points {np.where(prediction_values == 0)[1]}')
 
                 # Check that data and prediction have same observables with the same size
                 if observable_label not in observables['Data']:

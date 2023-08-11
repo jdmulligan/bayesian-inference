@@ -50,7 +50,7 @@ def plot(config):
 #---------------------------------------------------------------[]
 def plot_qhat(posterior, plot_dir, config, E=0, T=0, cred_level=0., n_samples=5000, n_x=50, target_design_point=np.array([])):
     '''
-    Plot qhat credible interval from posterior samples, 
+    Plot qhat credible interval from posterior samples,
     as a function of either E or T (with the other held fixed)
 
     :param 2darray posterior: posterior samples -- shape (n_walkers*n_steps, n_params)
@@ -65,7 +65,7 @@ def plot_qhat(posterior, plot_dir, config, E=0, T=0, cred_level=0., n_samples=50
     # Sample posterior parameters without replacement
     if posterior.shape[0] < n_samples:
         n_samples = posterior.shape[0]
-        logger.info(f'WARNING Not enough posterior samples to plot {n_samples} samples, using {n_samples} instead')
+        logger.warning(f'Not enough posterior samples to plot {n_samples} samples, using {n_samples} instead')
     idx = np.random.choice(posterior.shape[0], size=n_samples, replace=False)
     posterior_samples = posterior[idx,:]
 
@@ -76,14 +76,14 @@ def plot_qhat(posterior, plot_dir, config, E=0, T=0, cred_level=0., n_samples=50
         suffix = f'E{E}'
         label = f'E = {E} GeV'
         x_array = np.linspace(0.16, 0.5, n_x)
-        qhat_posteriors = np.array([qhat(posterior_samples, config, T=T, E=E) for T in x_array])           
+        qhat_posteriors = np.array([qhat(posterior_samples, config, T=T, E=E) for T in x_array])
     elif T:
         xlabel = 'E (GeV)'
         suffix = f'T{T}'
         label = f'T = {T} GeV'
         x_array = np.linspace(5, 200, n_x)
         qhat_posteriors = np.array([qhat(posterior_samples, config, T=T, E=E) for E in x_array])
-    
+
     # Get mean qhat values for each T or E
     qhat_mean = np.mean(qhat_posteriors, axis=1)
     plt.plot(x_array, qhat_mean, sns.xkcd_rgb['denim blue'],
@@ -103,7 +103,7 @@ def plot_qhat(posterior, plot_dir, config, E=0, T=0, cred_level=0., n_samples=50
                      label=f'{int(cred_level*100)}% Credible Interval')
 
     # If closure test: Plot truth qhat value
-    # We will return a dict of info needed for plotting closure plots, including a 
+    # We will return a dict of info needed for plotting closure plots, including a
     #   boolean array (as a fcn of T or E) of whether the truth value is contained within credible region
     if target_design_point.any():
         if E:
@@ -112,7 +112,7 @@ def plot_qhat(posterior, plot_dir, config, E=0, T=0, cred_level=0., n_samples=50
             qhat_truth = [qhat(target_design_point, config, T=T, E=E) for E in x_array]
         plt.plot(x_array, qhat_truth, sns.xkcd_rgb['pale red'],
                 linewidth=2., label='Target')
-            
+
         qhat_closure = {}
         qhat_closure['qhat_closure_array'] = np.array([((qhat_truth[i] < credible_up[i]) and (qhat_truth[i] > credible_low[i])) for i,_ in enumerate(x_array)]).squeeze()
         qhat_closure['qhat_mean'] = qhat_mean
@@ -143,7 +143,7 @@ def qhat(posterior_samples, config, T=0, E=0) -> float:
     if config.parameterization == "exponential":
 
         alpha_s_fix = posterior_samples[:,0]
-        active_flavor = 3       
+        active_flavor = 3
         C_a = 3.0  # Extracted from JetScapeConstants
 
         # From GeneralQhatFunction
