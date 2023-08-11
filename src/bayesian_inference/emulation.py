@@ -186,20 +186,26 @@ def write_emulators(config: EmulationGroupConfig, output_dict: dict[str, Any]) -
 
 
 ####################################################################################################################
-def predict(parameters: npt.NDArray[np.float64], emulator_config: EmulationConfig, validation_set: bool = False, merge_predictions_over_groups: bool = True):
+def predict(parameters: npt.NDArray[np.float64], emulator_config: EmulationConfig, validation_set: bool = False, merge_predictions_over_groups: bool = True, emulation_group_results: dict[str, dict[str, Any]] | None = None):
     """
     Construct dictionary of emulator predictions for each observable
 
     :param ndarray[float] parameters: list of parameter values (e.g. [tau0, c1, c2, ...]), with shape (n_samples, n_parameters)
-
+    :param EmulationConfig emulator_config: configuration object for the overall emulator (including all groups)
+    :param bool validation_set: whether to use the validation set (True) or the training set (False)
+    :param bool merge_predictions_over_groups: whether to merge predictions over emulation groups (True)
+                                               or return a dictionary of predictions for each group (False). Default: True
+    :param dict emulator_group_results: dictionary containing results from each emulation group. If None, read from file.
     :return dict emulator_predictions: dictionary containing matrices of central values and covariance
     """
+    if emulation_group_results is None:
+        emulation_group_results = {}
     predict_output = {}
     for emulation_group_name, emulation_group_config in emulator_config.emulation_groups_config.items():
-        emulator_results = read_emulators(emulation_group_config)
+        emulation_group_result = emulation_group_results.get(emulation_group_name, read_emulators(emulation_group_config))
         predict_output[emulation_group_name] = predict_emulation_group(
             parameters=parameters,
-            results=emulator_results,
+            results=emulation_group_result,
             config=emulation_group_config,
             validation_set=validation_set,
         )
