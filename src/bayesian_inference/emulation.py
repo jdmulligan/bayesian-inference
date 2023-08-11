@@ -116,8 +116,8 @@ def fit_emulator_group(config: EmulationGroupConfig) -> dict[str, Any]:
     design = data_IO.design_array_from_h5(config.output_dir, filename='observables.h5')
 
     # Define GP kernel (covariance function)
-    min = np.array(config.analysis_config['parametrization'][config.parameterization]['min'])
-    max = np.array(config.analysis_config['parametrization'][config.parameterization]['max'])
+    min = np.array(config.analysis_config['parameterization'][config.parameterization]['min'])
+    max = np.array(config.analysis_config['parameterization'][config.parameterization]['max'])
     length_scale = max - min
     length_scale_bounds = (np.outer(length_scale, tuple(config.length_scale_bounds)))
     kernel_matern = sklearn_gaussian_process.kernels.Matern(length_scale=length_scale,
@@ -445,7 +445,7 @@ class EmulationGroupConfig(common_base.CommonBase):
 @attrs.define
 class EmulationConfig(common_base.CommonBase):
     analysis_name: str
-    parametrization: str
+    parameterization: str
     config_file: Path = attrs.field(converter=Path)
     analysis_config: dict[str, Any] = attrs.field(factory=dict)
     emulation_groups_config: dict[str, EmulationGroupConfig] = attrs.field(factory=dict)
@@ -456,10 +456,10 @@ class EmulationConfig(common_base.CommonBase):
             self.config = yaml.safe_load(stream)
 
     @classmethod
-    def from_config_file(cls, analysis_name: str, parametrization: str, config_file: Path, analysis_config: dict[str, Any]):
+    def from_config_file(cls, analysis_name: str, parameterization: str, config_file: Path, analysis_config: dict[str, Any]):
         c = cls(
             analysis_name=analysis_name,
-            parametrization=parametrization,
+            parameterization=parameterization,
             config_file=config_file,
             analysis_config=analysis_config,
         )
@@ -467,7 +467,7 @@ class EmulationConfig(common_base.CommonBase):
         c.emulation_groups_config = {
             k: EmulationGroupConfig(
                 analysis_name=c.analysis_name,
-                parameterization=c.parametrization,
+                parameterization=c.parameterization,
                 analysis_config=c.analysis_config,
                 config_file=c.config_file,
                 emulation_group_config_name=k,

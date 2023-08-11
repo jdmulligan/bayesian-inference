@@ -45,9 +45,9 @@ def run_mcmc(config, closure_index=-1):
     '''
 
     # Get parameter names and min/max
-    names = config.analysis_config['parametrization'][config.parameterization]['names']
-    min = config.analysis_config['parametrization'][config.parameterization]['min']
-    max = config.analysis_config['parametrization'][config.parameterization]['max']
+    names = config.analysis_config['parameterization'][config.parameterization]['names']
+    min = config.analysis_config['parameterization'][config.parameterization]['min']
+    max = config.analysis_config['parameterization'][config.parameterization]['max']
     ndim = len(names)
 
     # Load emulators
@@ -323,5 +323,5 @@ class MCMCConfig(common_base.CommonBase):
         self.sampler_outputfile = os.path.join(self.mcmc_output_dir, 'mcmc_sampler.pkl')
 
         # Update formatting of parameter names for plotting
-        unformatted_names = self.analysis_config['parametrization'][self.parameterization]['names']
-        self.analysis_config['parametrization'][self.parameterization]['names'] = [rf'{s}' for s in unformatted_names]
+        unformatted_names = self.analysis_config['parameterization'][self.parameterization]['names']
+        self.analysis_config['parameterization'][self.parameterization]['names'] = [rf'{s}' for s in unformatted_names]

@@ -54,7 +54,7 @@ def plot(config):
     logger.info(f'Chain is of size: {os.path.getsize(config.mcmc_outputfile)/(1024*1024):.1f} MB')
     assert chain.shape[0] == config.n_sampling_steps
     assert chain.shape[1] == config.n_walkers
-    assert chain.shape[2] == len(config.analysis_config['parametrization'][config.parameterization]['names'])
+    assert chain.shape[2] == len(config.analysis_config['parameterization'][config.parameterization]['names'])
 
     # MCMC plots
     _plot_acceptance_fraction(results['acceptance_fraction'], plot_dir, config)
@@ -208,7 +208,7 @@ def _plot_autocorrelation_time(results, plot_dir, config):
 
     # Bar plot
     plt.figure(figsize=(10, 6))
-    parameter_names = config.analysis_config['parametrization'][config.parameterization]['names']
+    parameter_names = config.analysis_config['parameterization'][config.parameterization]['names']
     labels = parameter_names + ['log_posterior']
     plt.bar(labels, mean_autocorrelation_time, yerr=std_autocorrelation_time)
     plt.ylabel('Autocorrelation time')
@@ -246,7 +246,7 @@ def _plot_posterior_pairplot(chain, plot_dir, config, holdout_test = False, hold
     samples = chain.reshape((chain.shape[0]*chain.shape[1], chain.shape[2]))
 
     # Construct dataframe of samples
-    names = [rf'{s}' for s in config.analysis_config['parametrization'][config.parameterization]['names']]
+    names = [rf'{s}' for s in config.analysis_config['parameterization'][config.parameterization]['names']]
     df = pd.DataFrame(samples, columns=names)
 
     # Plot posterior pairplot
@@ -297,7 +297,7 @@ def _plot_design_pairplot(design, plot_dir, config):
     '''
 
     # Construct dataframe of design points
-    names = [rf'{s}' for s in config.analysis_config['parametrization'][config.parameterization]['names']]
+    names = [rf'{s}' for s in config.analysis_config['parameterization'][config.parameterization]['names']]
     df = pd.DataFrame(design, columns=names)
 
     # Take log of c1,c2,c3 since it is their log that is uniformly distributed

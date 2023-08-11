@@ -80,7 +80,7 @@ class SteerAnalysis(common_base.CommonBase):
             for analysis_name, analysis_config in self.analyses.items():
 
                 # Loop through the parameterizations
-                parametrization_task = progress.add_task("[deep_sky_blue2]Parametrization", total=len(analysis_config['parameterizations']))
+                parameterization_task = progress.add_task("[deep_sky_blue2]parameterization", total=len(analysis_config['parameterizations']))
                 for parameterization in analysis_config['parameterizations']:
 
                     # Initialize design points, predictions, data, and uncertainties
@@ -109,7 +109,7 @@ class SteerAnalysis(common_base.CommonBase):
                         logger.info(f'Fitting emulators for {analysis_name}_{parameterization}...')
                         emulation_config = emulation.EmulationConfig.from_config_file(
                             analysis_name=analysis_name,
-                            parametrization=parameterization,
+                            parameterization=parameterization,
                             analysis_config=analysis_config,
                             config_file=self.config_file,
                         )
@@ -151,9 +151,9 @@ class SteerAnalysis(common_base.CommonBase):
                             progress.update(closure_test_task, advance=1)
                         progress.update(closure_test_task, visible=False)
 
-                    progress.update(parametrization_task, advance=1)
+                    progress.update(parameterization_task, advance=1)
                 # Hide once we're done!
-                progress.update(parametrization_task, visible=False)
+                progress.update(parameterization_task, visible=False)
 
                 progress.update(analysis_task, advance=1)
 
