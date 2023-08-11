@@ -47,10 +47,11 @@ def plot(config):
 
         # PCA plots
         results = emulation_results[emulation_group_name]
-        _plot_pca_explained_variance(results, plot_dir, emulation_group_config)
         _plot_pca_reconstruction_error(results, plot_dir, emulation_group_config)
-        _plot_pca_reconstruction_error_by_feature(results, plot_dir, emulation_group_config)
         _plot_pca_reconstruction_observables(results, emulation_group_config, plot_dir)
+        # TODO: These deserve to be a global plot. Also nice to have for the group
+        _plot_pca_explained_variance(results, plot_dir, emulation_group_config)
+        _plot_pca_reconstruction_error_by_feature(results, plot_dir, emulation_group_config)
 
         # Emulator plots
         # TODO: validation_set doesn't do anything here yet because predict() doesn't use the validation_set argument!

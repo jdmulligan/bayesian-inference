@@ -57,6 +57,7 @@ def run_mcmc(config, closure_index=-1):
         analysis_config=config.analysis_config,
         config_file=config.config_file,
     )
+    # TODO: Move loading into emulation module
     emulation_results = {}
     for emulation_group_name, emulation_group_config in emulation_config.emulation_groups_config.items():
         emulation_results[emulation_group_name] = emulation.read_emulators(emulation_group_config)

@@ -124,8 +124,9 @@ analyses:
       closure:
         <<: *default_closure_parameters
     <<: *model_base
-    observable_list:
-      - 'hadron__pt_'
+    # TODO: Derive this from the lists in the emulation groups
+    #observable_list:
+    #  - 'hadron__pt_'
     plot_panel_shapes: [[3,3], [3,3]]
 
   analysis2:

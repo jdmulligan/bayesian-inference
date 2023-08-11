@@ -348,7 +348,7 @@ def observable_dict_from_matrix(Y, observables, cov=np.array([]), config=None, v
     :return dict[ndarray] Y_dict: dict with ndarray for each observable
     '''
 
-    Y_dict = {}
+    Y_dict: dict[str, dict[str, npt.NDArray]] = {}
     Y_dict['central_value'] = {}
     if cov.any():
         Y_dict['std'] = {}
