@@ -17,9 +17,12 @@ from __future__ import annotations
 import os
 import logging
 import yaml
+from pathlib import Path
 from typing import Any
 
+import attrs
 import numpy as np
+import numpy.typing as npt
 import pickle
 import sklearn.preprocessing as sklearn_preprocessing
 import sklearn.decomposition as sklearn_decomposition
@@ -32,9 +35,22 @@ logger = logging.getLogger(__name__)
 
 
 ####################################################################################################################
-def fit_emulators(config: EmulationConfig) -> dict[str, Any]:
+def fit_emulators(emulation_config: EmulationConfig) -> None:
+    """ Do PCA, fit emulators, and write to file.
+
+    :param EmulationConfig config: Configuration for the emulators, including all groups.
+    """
+    emulator_groups_output = {}
+    for emulation_group_name, emulation_group_config in emulation_config.emulation_groups_config.items():
+        emulator_groups_output[emulation_group_name] = fit_emulator_group(emulation_group_config)
+    for emulation_group_config, emulation_group_output in zip(emulation_config.emulation_groups_config.values(), emulator_groups_output.values()):
+        write_emulators(config=emulation_group_config, output_dict=emulation_group_output)
+
+
+####################################################################################################################
+def fit_emulator_group(config: EmulationGroupConfig) -> dict[str, Any]:
     '''
-    Do PCA, fit emulators, and write to file.
+    Do PCA, fit emulators, and write to file for an individual emulation group.
 
     The first config.n_pc principal components (PCs) are emulated by independent Gaussian processes (GPs)
     The emulators map design points to PCs; the output will need to be inverted from PCA space to physical space.
@@ -49,7 +65,7 @@ def fit_emulators(config: EmulationConfig) -> dict[str, Any]:
             logger.info(f'Removed {config.emulation_outputfile}')
         else:
             logger.info(f'Emulators already exist: {config.emulation_outputfile} (to force retrain, set force_retrain: True)')
-            return
+            return {}
 
     # Initialize predictions into a single 2D array: (design_point_index, observable_bins) i.e. (n_samples, n_features)
     # A consistent order of observables is enforced internally in data_IO
@@ -149,15 +165,72 @@ def fit_emulators(config: EmulationConfig) -> dict[str, Any]:
     return output_dict
 
 
-def write_emulators(config: EmulationConfig, output_dict: dict[str, Any]) -> None:
-    with open(config.emulation_outputfile, 'wb') as f:
+####################################################################################################################
+def read_emulators(config: EmulationGroupConfig) -> dict[str, Any]:
+    # Validation
+    filename = Path(config.emulation_outputfile)
+
+    with filename.open("rb") as f:
+        results = pickle.load(f)
+    return results
+
+
+####################################################################################################################
+def write_emulators(config: EmulationGroupConfig, output_dict: dict[str, Any]) -> None:
+    """Write emulators stored in a result from `fit_emulator_group` to file."""
+    # Validation
+    filename = Path(config.emulation_outputfile)
+
+    with filename.open('wb') as f:
 	    pickle.dump(output_dict, f)
 
 
 ####################################################################################################################
-def predict(parameters, results, config, validation_set=False):
-    '''
+def predict(parameters: npt.NDArray[np.float64], emulator_config: EmulationConfig, validation_set: bool = False, merge_predictions_over_groups: bool = True):
+    """
     Construct dictionary of emulator predictions for each observable
+
+    :param ndarray[float] parameters: list of parameter values (e.g. [tau0, c1, c2, ...]), with shape (n_samples, n_parameters)
+
+    :return dict emulator_predictions: dictionary containing matrices of central values and covariance
+    """
+    predict_output = {}
+    for emulation_group_name, emulation_group_config in emulator_config.emulation_groups_config.items():
+        emulator_results = read_emulators(emulation_group_config)
+        predict_output[emulation_group_name] = predict_emulation_group(
+            parameters=parameters,
+            results=emulator_results,
+            config=emulation_group_config,
+            validation_set=validation_set,
+        )
+
+    # Allow the option to return immediately to allow the study of performance per emulation group
+    if not merge_predictions_over_groups:
+        return predict_output
+
+    # Merge predictions over groups
+    # Note that we don't care about the keys of predict_output (which are just the emulation group names),
+    # but rather the keys stored in the predict_single results, which are "central_values" and "cov".
+    # This first line just lets us avoid hard coding those names.
+    merged_output: dict[str, list[npt.NDArray[np.float64]]] = {
+        k: [] for k in predict_output.values()
+    }
+    # Now, we extract the prediction results from inside of each emulation group to merge the final result together.
+    # NOTE: In doing so, we will append one emulation group after another. This should be consistent with our
+    #       convention of ordering results.
+    for k in merged_output:
+        for emulation_group_output in predict_output.values():
+            merged_output[k].append(emulation_group_output[k])
+    return {
+        k: np.concatenate(v, axis=1)
+        for k, v in merged_output.items()
+    }
+
+
+####################################################################################################################
+def predict_emulation_group(parameters, results, config, validation_set=False):
+    '''
+    Construct dictionary of emulator predictions for each observable in an emulation group.
 
     :param ndarray[float] parameters: list of parameter values (e.g. [tau0, c1, c2, ...]), with shape (n_samples, n_parameters)
     :param str results: dictionary that stores emulator
@@ -235,7 +308,7 @@ def predict(parameters, results, config, validation_set=False):
     return emulator_predictions
 
 ####################################################################################################################
-class EmulationConfig(common_base.CommonBase):
+class EmulationGroupConfig(common_base.CommonBase):
 
     #---------------------------------------------------------------
     # Constructor
@@ -304,3 +377,37 @@ class EmulationConfig(common_base.CommonBase):
         if emulator_name is not None:
             emulation_outputfile_name = f'emulation_{emulator_name}.pkl'
         self.emulation_outputfile = os.path.join(self.output_dir, emulation_outputfile_name)
+
+@attrs.define
+class EmulationConfig(common_base.CommonBase):
+    analysis_name: str
+    parametrization: str
+    config_file: Path = attrs.field(converter=Path)
+    analysis_config: dict[str, Any] = attrs.field(factory=dict)
+    emulation_groups_config: dict[str, EmulationGroupConfig] = attrs.field(factory=dict)
+    config: dict[str, Any] = attrs.field(init=False)
+
+    def __attrs_post_init__(self):
+        with self.config_file.open() as stream:
+            self.config = yaml.safe_load(stream)
+
+    @classmethod
+    def from_config_file(cls, analysis_name: str, parametrization: str, config_file: Path, analysis_config: dict[str, Any]):
+        c = cls(
+            analysis_name=analysis_name,
+            parametrization=parametrization,
+            config_file=config_file,
+            analysis_config=analysis_config,
+        )
+        # Initialize the config for each emulation group
+        c.emulation_groups_config = {
+            k: EmulationGroupConfig(
+                analysis_name=c.analysis_name,
+                parameterization=c.parametrization,
+                analysis_config=c.analysis_config,
+                config_file=c.config_file,
+                emulation_group_config_name=k,
+            )
+            for k in c.analysis_config["parameters"]["emulators"]
+        }
+        return c
