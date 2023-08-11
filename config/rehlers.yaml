@@ -31,7 +31,7 @@ parameters:
   # Emulator parameters
   emulator_parameters: &default_emulator_parameters
     force_retrain: True
-    n_pc: 20
+    n_pc: 3
 
     mean_function: 'constant'                      # constant, linear
     constant: 0.
@@ -131,7 +131,7 @@ analyses:
 
   analysis2:
     parameters:
-      emulator:
+      emulators:
         group1:
           <<: *default_emulator_parameters
           observable_list:
@@ -147,7 +147,7 @@ analyses:
 
   analysis3:
     parameters:
-      emulator:
+      emulators:
         group1:
           <<: *default_emulator_parameters
           observable_list:
