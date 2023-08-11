@@ -19,6 +19,7 @@ authors: J.Mulligan, R.Ehlers
 
 from __future__ import annotations
 
+import fnmatch
 import os
 import logging
 from collections import defaultdict
@@ -289,7 +290,7 @@ def data_dict_from_h5(output_dir, filename, observable_table_dir=None):
     return data
 
 ####################################################################################################################
-def data_array_from_h5(output_dir, filename, pseudodata_index=-1):
+def data_array_from_h5(output_dir, filename, pseudodata_index: int =-1, observable_filter: ObservableFilter | None = None):
     '''
     Initialize data array from observables.h5 file
 
@@ -303,7 +304,7 @@ def data_array_from_h5(output_dir, filename, pseudodata_index=-1):
     observables = read_dict_from_h5(output_dir, filename, verbose=False)
 
     # Sort observables, to keep well-defined ordering in matrix
-    sorted_observable_list = sorted_observable_list_from_dict(observables)
+    sorted_observable_list = sorted_observable_list_from_dict(observables, observable_filter=observable_filter)
 
     # Get data dictionary (or in case of closure test, pseudodata from validation set)
     if pseudodata_index < 0:
@@ -542,14 +543,32 @@ class ObservableFilter:
         # Select observables based on the input list, with the possibility of excluding some
         # observables with additional selection strings (eg. remove one experiment from the
         # observables for an exploratory analysis).
-        observable_in_include_list = any([observable_string in observable_name for observable_string in self.include_list])
-        observable_in_exclude_list = any([exclude in observable_name for exclude in self.exclude_list])
+        observable_in_include_list_no_glob = any([observable_string in observable_name for observable_string in self.include_list])
+        observable_in_exclude_list_no_glob = any([exclude in observable_name for exclude in self.exclude_list])
+        # NOTE: We don't actually care about the name - just that it matches
+        observable_in_include_list_glob = any(
+            # NOTE: We add "*" around the observable because we have to match against the full string (especially given file extensions), and if we add
+            #       them to existing strings, it won't disrupt it.
+            [len(fnmatch.filter([observable_name], f"*{observable_string}*")) > 0 for observable_string in self.include_list if "*" in observable_string]
+        )
+        observable_in_exclude_list_glob = any(
+            # NOTE: We add "*" around the observable because we have to match against the full string (especially given file extensions), and if we add
+            #       them to existing strings, it won't disrupt it.
+            [len(fnmatch.filter([observable_name], f"*{observable_string}*")) > 0 for observable_string in self.exclude_list if "*" in observable_string]
+        )
 
-        found_observable = (observable_in_include_list and not observable_in_exclude_list)
+        found_observable = (
+            (observable_in_include_list_no_glob or observable_in_include_list_glob)
+            and not
+            ( observable_in_exclude_list_no_glob or observable_in_exclude_list_glob)
+        )
 
         # Helpful for cross checking when debugging
-        if observable_in_exclude_list:
-            logger.debug(f"Excluding observable '{observable_name}' due to exclude list. {found_observable=}")
+        if observable_in_exclude_list_no_glob or observable_in_exclude_list_glob:
+            logger.debug(
+                f"Excluding observable '{observable_name}' due to exclude list. {found_observable=},"
+                f" {observable_in_include_list_no_glob=}, {observable_in_include_list_glob=}, {observable_in_exclude_list_no_glob=}, {observable_in_exclude_list_glob=}"
+            )
 
         return found_observable
 
@@ -595,13 +614,21 @@ def _accept_observable(analysis_config, filename):
     # Select observables based on the input list, with the possibility of excluding some
     # observables with additional selection strings (eg. remove one experiment from the
     # observables for an exploratory analysis).
-    observable_filter = ObservableFilter(
-        observable_list=analysis_config['observable_list'],
-        observable_exclude_list=analysis_config.get("observable_exclude_list", []),
-    )
-    return observable_filter.accept_observable(
-        observable_name=filename,
-    )
+    accept_observable = False
+    global_observable_exclude_list = analysis_config.get("global_observable_exclude_list", [])
+    for emulation_group_settings in analysis_config["parameters"]["emulator"].values():
+        observable_filter = ObservableFilter(
+            include_list=emulation_group_settings['observable_list'],
+            exclude_list=emulation_group_settings.get("observable_exclude_list", []) + global_observable_exclude_list,
+        )
+        accept_observable = observable_filter.accept_observable(
+            observable_name=filename,
+        )
+        # If it's accepted, return immediately
+        if accept_observable:
+            return accept_observable
+
+    return accept_observable
 
 #---------------------------------------------------------------
 def _split_training_validation_indices(validation_indices, observable_table_dir, parameterization):

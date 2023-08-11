@@ -5,12 +5,12 @@
 output_dir: 'output/20230804'
 
 initialize_observables: True
-fit_emulators: True
+fit_emulators: False
 run_mcmc: False
 run_closure_tests: False
 
 plot:
-  emulators: True
+  emulators: False
   mcmc: False
   qhat: False
   closure_tests: False
@@ -113,52 +113,54 @@ analyses:
         fluctuating:
           <<: *default_emulator_parameters
           observable_list:
-          - "hadron__pt_*_2760"
+          - "_2760_*_hadron__pt_"
         stable:
           <<: *default_emulator_parameters
           observable_list:
-          - "hadron__pt_*_200"
-          - "hadron__pt_*_5020"
+          - "_200_*_hadron__pt_"
+          - "_5020_*_hadron__pt_"
       mcmc:
         <<: *default_mcmc_parameters
       closure:
         <<: *default_closure_parameters
     <<: *model_base
-    # TODO: Derive this from the lists in the emulation groups
-    #observable_list:
-    #  - 'hadron__pt_'
+    # If we want to exclude from everything, regardless of selection.
+    # If we only want to exclude from a particular emulation group, we can do so above.
+    global_observable_exclude_list: []
     plot_panel_shapes: [[3,3], [3,3]]
 
   analysis2:
     parameters:
       emulator:
-        <<: *default_emulator_parameters
+        group1:
+          <<: *default_emulator_parameters
+          observable_list:
+            - 'jet__pt_'
       mcmc:
         <<: *default_mcmc_parameters
       closure:
         <<: *default_closure_parameters
     <<: *model_base
-    observable_list:
-      - 'jet__pt_'
-    observable_exclude_list:
+    global_observable_exclude_list:
       - "pt_y_atlas"
     plot_panel_shapes: [[3,3], [3,3], [3,3]]
 
   analysis3:
     parameters:
       emulator:
-        <<: *default_emulator_parameters
+        group1:
+          <<: *default_emulator_parameters
+          observable_list:
+            - 'hadron__pt_'
+            - 'jet__pt_'
+            - 'jet__Dz_'
+            - 'chjet__zg_'
+            - 'chjet__tg_'
       mcmc:
         <<: *default_mcmc_parameters
       closure:
         <<: *default_closure_parameters
     <<: *model_base
-    observable_list:
-      - 'hadron__pt_'
-      - 'jet__pt_'
-      - 'jet__Dz_'
-      - 'chjet__zg_'
-      - 'chjet__tg_'
-    observable_exclude_list:
+    global_observable_exclude_list:
       - "pt_y_atlas"
     plot_panel_shapes: [[3,3], [3,3], [3,3], [3,3], [3,3], [3,3]]
