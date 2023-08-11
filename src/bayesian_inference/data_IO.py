@@ -159,7 +159,8 @@ def initialize_observables_dict_from_tables(table_dir, analysis_config, paramete
 
     #----------------------
     # Print observables that we will use
-    [logger.info(f'  {s}') for s in sorted(observables['Prediction'].keys())]
+    # NOTE: We don't need to pass the observable filter because we already filtered the observables via `_accept_observables``
+    [logger.info(f'  {s}') for s in sorted_observable_list_from_dict(observables['Prediction'])]
 
     return observables
 
