@@ -21,7 +21,9 @@ import os
 import logging
 from collections import defaultdict
 from operator import itemgetter
+
 import numpy as np
+import numpy.typing as npt
 from silx.io.dictdump import dicttoh5, h5todict
 
 
@@ -320,10 +322,8 @@ def observable_dict_from_matrix(Y, observables, cov=np.array([]), config=None, v
     :param ndarray Y: 2D array: (n_samples, n_features)
     :param dict observables: dict
     :param ndarray cov: covariance matrix (n_samples, n_features, n_features)
-    :param str observable_table_dir: (optional, only needed to check against table values)
-    :param str parameterization: (optional, only needed to check against table values)
-    :param str validation_range: (optional, only needed to check against table values)
-    :param str validation_set: (optional, only needed to check against table values)
+    :param config EmulatorConfig: config object
+    :param bool validation_set: (optional, only needed to check against table values)
     :return dict[ndarray] Y_dict: dict with ndarray for each observable
     '''
 
@@ -356,7 +356,7 @@ def observable_dict_from_matrix(Y, observables, cov=np.array([]), config=None, v
     # Check that the total number of bins is correct
     assert current_bin == Y.shape[1]
 
-    # Check that prediction matches original table (if observable_table_dir, parameterization,validation_indices are specified)
+    # Check that prediction matches original table (if observable_table_dir, parameterization, validation_indices are specified)
     # If validation_set, select the validation indices; otherwise, select the training indices
     if config:
 
@@ -377,6 +377,29 @@ def observable_dict_from_matrix(Y, observables, cov=np.array([]), config=None, v
                                f"{observable_label} (design point 0) \n prediction: {Y_dict['central_value'][observable_label][0,:]} \n prediction (table): {prediction_table_selected[0,:]}"
 
     return Y_dict
+
+####################################################################################################################
+def observable_matrix_from_dict(Y_dict: dict[str, dict[str, npt.NDArray[np.float64]]], values_to_return: str = "central_value") -> npt.NDArray[np.float64]:
+    """
+    Translate dict of matrixes per observable to a matrix of stacked observables
+
+    The observable keys should already be ordered, so we're free to trivially concatenate them
+
+    :param dict[str, ndarray] Y_dict: dict with ndarray for each observable
+    :param str values_to_return: (optional) which values to return. Default: "central_value"
+    :return ndarray: 2D array: (n_samples, n_features)
+    """
+    matrix: npt.NDArray[np.float64] | None = None
+    for observable_values in Y_dict[values_to_return].values():
+        if matrix is None:
+            matrix = np.array(observable_values, copy=True)
+        else:
+            matrix = np.concatenate([matrix, observable_values], axis=1)
+
+    # Help out typing
+    assert matrix is not None
+
+    return matrix
 
 ####################################################################################################################
 def observable_label_to_keys(observable_label):
