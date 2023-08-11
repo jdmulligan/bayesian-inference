@@ -616,7 +616,7 @@ def _accept_observable(analysis_config, filename):
     # observables for an exploratory analysis).
     accept_observable = False
     global_observable_exclude_list = analysis_config.get("global_observable_exclude_list", [])
-    for emulation_group_settings in analysis_config["parameters"]["emulator"].values():
+    for emulation_group_settings in analysis_config["parameters"]["emulators"].values():
         observable_filter = ObservableFilter(
             include_list=emulation_group_settings['observable_list'],
             exclude_list=emulation_group_settings.get("observable_exclude_list", []) + global_observable_exclude_list,

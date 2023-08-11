@@ -303,7 +303,7 @@ class MCMCConfig(common_base.CommonBase):
         self.observable_table_dir = config['observable_table_dir']
         self.observable_config_dir = config['observable_config_dir']
 
-        emulator_configuration = analysis_config["parameters"]["emulator"]
+        emulator_configuration = analysis_config["parameters"]["emulators"]
         self.n_pc = emulator_configuration['n_pc']
 
         mcmc_configuration = analysis_config["parameters"]["mcmc"]

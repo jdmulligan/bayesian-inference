@@ -2,10 +2,10 @@
 #-------------------------------------------
 # General parameters
 
-output_dir: 'output/20230804'
+output_dir: 'output/20230811'
 
 initialize_observables: True
-fit_emulators: False
+fit_emulators: True
 run_mcmc: False
 run_closure_tests: False
 
@@ -109,7 +109,7 @@ analyses:
 
   analysis1:
     parameters:
-      emulator:
+      emulators:
         fluctuating:
           <<: *default_emulator_parameters
           observable_list:

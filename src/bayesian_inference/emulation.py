@@ -394,9 +394,9 @@ class EmulationGroupConfig(common_base.CommonBase):
         # Emulator configuration
         ########################
         if emulator_name is None:
-            emulator_configuration = self.analysis_config["parameters"]["emulator"]
+            emulator_configuration = self.analysis_config["parameters"]["emulators"]
         else:
-            emulator_configuration = self.analysis_config["parameters"]["emulator"][emulator_name]
+            emulator_configuration = self.analysis_config["parameters"]["emulators"][emulator_name]
         self.force_retrain = emulator_configuration['force_retrain']
         self.n_pc = emulator_configuration['n_pc']
         self.mean_function = emulator_configuration['mean_function']

@@ -109,7 +109,7 @@ class SteerAnalysis(common_base.CommonBase):
                         logger.info(f'Fitting emulators for {analysis_name}_{parameterization}...')
                         emulation_config = emulation.EmulationConfig.from_config_file(
                             analysis_name=analysis_name,
-                            parameterization=parameterization,
+                            parametrization=parameterization,
                             analysis_config=analysis_config,
                             config_file=self.config_file,
                         )
