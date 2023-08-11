@@ -2,7 +2,7 @@
 '''
 Main script to steer Bayesian inference studies for heavy-ion jet analysis
 
-authors: J.Mulligan
+authors: J.Mulligan, R.Ehlers
 Based in part on JETSCAPE/STAT code.
 '''
 
@@ -17,6 +17,7 @@ from bayesian_inference import mcmc
 from bayesian_inference import plot_emulation
 from bayesian_inference import plot_mcmc
 from bayesian_inference import plot_qhat
+from bayesian_inference import plot_closure
 
 from bayesian_inference import common_base, helpers
 
@@ -58,6 +59,7 @@ class SteerAnalysis(common_base.CommonBase):
         self.initialize_observables = config['initialize_observables']
         self.fit_emulators = config['fit_emulators']
         self.run_mcmc = config['run_mcmc']
+        self.run_closure_tests = config['run_closure_tests']
         self.plot = config['plot']
 
         # Configuration of different analyses
@@ -121,11 +123,31 @@ class SteerAnalysis(common_base.CommonBase):
                         logger.info('------------------------------------------------------------------------')
                         logger.info(f'Running MCMC for {analysis_name}_{parameterization}...')
                         mcmc_config = mcmc.MCMCConfig(analysis_name=analysis_name,
-                                                    parameterization=parameterization,
-                                                    analysis_config=analysis_config,
-                                                    config_file=self.config_file)
+                                                      parameterization=parameterization,
+                                                      analysis_config=analysis_config,
+                                                      config_file=self.config_file)
                         mcmc.run_mcmc(mcmc_config)
                         progress.update(mcmc_task, advance=100, visible=False)
+
+                    # Run closure tests -- one for each validation design point
+                    #   - Use validation point as pseudodata
+                    #   - Use emulator already trained on training points
+                    if self.run_closure_tests:
+                        n_design_points = analysis_config['validation_indices'][1] - analysis_config['validation_indices'][0]
+                        closure_test_task = progress.add_task("[deep_sky_blue4]Running closure tests...", total=n_design_points)
+                        progress.start_task(closure_test_task)
+                        logger.info("")
+                        logger.info('------------------------------------------------------------------------')
+                        for design_point_index in range(n_design_points):
+                            logger.info(f'Running closure tests for {analysis_name}_{parameterization}, validation_index={design_point_index}...')
+                            mcmc_config = mcmc.MCMCConfig(analysis_name=analysis_name,
+                                                          parameterization=parameterization,
+                                                          analysis_config=analysis_config,
+                                                          config_file=self.config_file,
+                                                          closure_index=design_point_index)
+                            mcmc.run_mcmc(mcmc_config, closure_index=design_point_index)
+                            progress.update(closure_test_task, advance=1)
+                        progress.update(closure_test_task, visible=False)
 
                     progress.update(parametrization_task, advance=1)
                 # Hide once we're done!
@@ -133,13 +155,11 @@ class SteerAnalysis(common_base.CommonBase):
 
                 progress.update(analysis_task, advance=1)
 
-        # Plot
-        if self.plot:
+        # Plots for individual analysis
+        for analysis_name,analysis_config in self.analyses.items():
+            for parameterization in analysis_config['parameterizations']:
 
-            # Plots for individual analysis
-            for analysis_name,analysis_config in self.analyses.items():
-                for parameterization in analysis_config['parameterizations']:
-
+                if self.plot['emulators']:
                     logger.info('========================================================================')
                     logger.info(f'Plotting for {analysis_name} ({parameterization} parameterization)...')
                     logger.info("")
@@ -154,6 +174,7 @@ class SteerAnalysis(common_base.CommonBase):
                     logger.info(f'Done!')
                     logger.info("")
 
+                if self.plot['mcmc']:
                     logger.info('------------------------------------------------------------------------')
                     logger.info(f'Plotting MCMC for {analysis_name}_{parameterization}...')
                     mcmc_config = mcmc.MCMCConfig(analysis_name=analysis_name,
@@ -164,13 +185,29 @@ class SteerAnalysis(common_base.CommonBase):
                     logger.info(f'Done!')
                     logger.info("")
 
+                if self.plot['qhat']:
                     logger.info('------------------------------------------------------------------------')
                     logger.info(f'Plotting qhat results {analysis_name}_{parameterization}...')
+                    mcmc_config = mcmc.MCMCConfig(analysis_name=analysis_name,
+                                                  parameterization=parameterization,
+                                                  analysis_config=analysis_config,
+                                                  config_file=self.config_file)
                     plot_qhat.plot(mcmc_config)
                     logger.info(f'Done!')
                     logger.info("")
 
-            # Plots across multiple analyses
+                if self.plot['closure_tests']:
+                    logger.info('------------------------------------------------------------------------')
+                    logger.info(f'Plotting closure test results {analysis_name}_{parameterization}...')
+                    mcmc_config = mcmc.MCMCConfig(analysis_name=analysis_name,
+                                                  parameterization=parameterization,
+                                                  analysis_config=analysis_config,
+                                                  config_file=self.config_file)
+                    plot_closure.plot(mcmc_config)
+                    logger.info(f'Done!')
+                    logger.info("")
+
+        # Plots across multiple analyses
 
 
 ####################################################################################################################

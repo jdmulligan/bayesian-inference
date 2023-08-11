@@ -31,12 +31,17 @@ logger = logging.getLogger(__name__)
 
 
 ####################################################################################################################
-def run_mcmc(config):
+def run_mcmc(config, closure_index=-1):
     '''
     Run MCMC to compute posterior
 
     Markov chain Monte Carlo model calibration using the `affine-invariant ensemble
     sampler (emcee) <http://dfm.io/emcee>`.
+
+    :param MCMCConfig config: Instance of MCMCConfig
+    :param int closure_index: Index of validation design point to use for MCMC closure. Off by default. 
+                              If non-negative index is specified, will construct pseudodata from the design point
+                              and use that for the closure test.
     '''
 
     # Get parameter names and min/max
@@ -50,9 +55,8 @@ def run_mcmc(config):
         emulators = pickle.load(f)
 
     # Load experimental data into arrays: experimental_results['y'/'y_err'] (n_features,)
-    output_dir = config.output_dir
-    filename = 'observables.h5'
-    experimental_results = data_IO.data_array_from_h5(output_dir, filename, observable_table_dir=None)
+    # In the case of a closure test, we use the pseudodata from the validation design point
+    experimental_results = data_IO.data_array_from_h5(config.output_dir, 'observables.h5', pseudodata_index=closure_index)
 
     # TODO: By default the chain will be stored in memory as a numpy array
     #       If needed we can create a h5py dataset for compression/chunking
@@ -100,7 +104,12 @@ def run_mcmc(config):
         except Exception as e:
             output_dict['autocorrelation_time'] = None
             logger.info(f"Could not compute autocorrelation time: {str(e)}")
-        data_IO.write_dict_to_h5(output_dict, config.output_dir, 'mcmc.h5', verbose=True)
+        # If closure test, save the design point parameters and experimental pseudodata
+        if closure_index >= 0:
+            design_point =  data_IO.design_array_from_h5(config.output_dir, filename='observables.h5', validation_set=True)[closure_index]
+            output_dict['design_point'] = design_point
+            output_dict['experimental_pseudodata'] = experimental_results
+        data_IO.write_dict_to_h5(output_dict, config.mcmc_output_dir, 'mcmc.h5', verbose=True)
 
         # Save the sampler to file as well, in case we want to access it later
         #   e.g. sampler.get_chain(discard=n_burn_steps, thin=thin, flat=True)
@@ -112,21 +121,34 @@ def run_mcmc(config):
         logger.info('Done.')
 
 ####################################################################################################################
-def credible_interval(samples, confidence=0.9):
-    """
-    Compute the highest-posterior density (HPD) credible interval (default 90%) for an array of samples.
-    """
-    # number of intervals to compute
-    nci = int((1 - confidence)*samples.size)
+def credible_interval(samples, confidence=0.9, interval_type='quantile'):
+    '''
+    Compute the credible interval for an array of samples.
 
-    # find highest posterior density (HPD) credible interval
-    # i.e. the one with minimum width
-    argp = np.argpartition(samples, [nci, samples.size - nci])
-    cil = np.sort(samples[argp[:nci]])   # interval lows
-    cih = np.sort(samples[argp[-nci:]])  # interval highs
-    ihpd = np.argmin(cih - cil)
+    TODO: one could also call the versions in pymc3 or arviz
 
-    return cil[ihpd], cih[ihpd]
+    :param 1darray samples: Array of samples
+    :param float confidence: Confidence level (default 0.9)
+    :param str type: Type of credible interval to compute. Options are: 
+                        'hpd' - highest-posterior density
+                        'quantile' - quantile interval    
+    '''
+
+    if interval_type == 'hpd':
+        # number of intervals to compute
+        nci = int((1 - confidence)*samples.size)
+        # find highest posterior density (HPD) credible interval i.e. the one with minimum width
+        argp = np.argpartition(samples, [nci, samples.size - nci])
+        cil = np.sort(samples[argp[:nci]])   # interval lows
+        cih = np.sort(samples[argp[-nci:]])  # interval highs
+        ihpd = np.argmin(cih - cil)
+        ci = cil[ihpd], cih[ihpd]
+
+    elif interval_type == 'quantile':
+        cred_range = [(1-confidence)/2, 1-(1-confidence)/2]
+        ci = np.quantile(samples, cred_range)
+
+    return ci
 
 #---------------------------------------------------------------
 def _log_posterior(X, min, max, config, emulators, experimental_results):
@@ -258,7 +280,8 @@ class MCMCConfig(common_base.CommonBase):
     #---------------------------------------------------------------
     # Constructor
     #---------------------------------------------------------------
-    def __init__(self, analysis_name='', parameterization='', analysis_config='', config_file='', **kwargs):
+    def __init__(self, analysis_name='', parameterization='', analysis_config='', config_file='', 
+                       closure_index=-1, **kwargs):
 
         self.parameterization = parameterization
         self.analysis_config = analysis_config
@@ -281,9 +304,13 @@ class MCMCConfig(common_base.CommonBase):
 
         self.output_dir = os.path.join(config['output_dir'], f'{analysis_name}_{parameterization}')
         self.emulation_outputfile = os.path.join(self.output_dir, 'emulation.pkl')
-        self.mcmc_outputfile = os.path.join(self.output_dir, 'mcmc.h5')
         self.mcmc_outputfilename = 'mcmc.h5'
-        self.sampler_outputfile = os.path.join(self.output_dir, 'mcmc_sampler.pkl')
+        if closure_index < 0:
+            self.mcmc_output_dir = self.output_dir
+        else:
+            self.mcmc_output_dir = os.path.join(self.output_dir, f'closure/results/{closure_index}')
+        self.mcmc_outputfile = os.path.join(self.mcmc_output_dir, 'mcmc.h5')
+        self.sampler_outputfile = os.path.join(self.mcmc_output_dir, 'mcmc_sampler.pkl')
 
         # Update formatting of parameter names for plotting
         unformatted_names = self.analysis_config['parametrization'][self.parameterization]['names']

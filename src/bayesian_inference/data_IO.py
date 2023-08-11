@@ -282,21 +282,34 @@ def data_dict_from_h5(output_dir, filename, observable_table_dir=None):
     return data
 
 ####################################################################################################################
-def data_array_from_h5(output_dir, filename, observable_table_dir=None):
+def data_array_from_h5(output_dir, filename, pseudodata_index=-1):
     '''
     Initialize data array from observables.h5 file
 
     :param str output_dir: location of filename
     :param str filename: h5 filename (typically 'observables.h5')
+    :param int pseudodata_index: index of validation design to use as pseudodata instead of actual experimental data (default: -1, i.e. use actual data)
     :return 2darray data: arrays of data points (n_features,)
     '''
 
     # Initialize observables dict from observables.h5 file
     observables = read_dict_from_h5(output_dir, filename, verbose=False)
-    data_dict = observables['Data']
 
     # Sort observables, to keep well-defined ordering in matrix
     sorted_observable_list = sorted_observable_list_from_dict(observables)
+
+    # Get data dictionary (or in case of closure test, pseudodata from validation set)
+    if pseudodata_index < 0:
+        data_dict = observables['Data']
+    else:
+        # If closure test, assign experimental data uncertainties and smear prediction values
+        data_dict = observables['Prediction_validation']
+        exp_data_dict = observables['Data']
+        for i,observable_label in enumerate(sorted_observable_list):
+            exp_uncertainty = exp_data_dict[observable_label]['y_err']
+            prediction_central_value = data_dict[observable_label]['y'][:,pseudodata_index]
+            data_dict[observable_label]['y'] = prediction_central_value + np.random.normal(loc=0., scale=exp_uncertainty)
+            data_dict[observable_label]['y_err'] = exp_uncertainty
 
     # Loop through sorted observables and concatenate them into a single array:
     #   (design_point_index, observable_bins) i.e. (n_samples, n_features)

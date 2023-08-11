@@ -7,7 +7,13 @@ output_dir: 'output/20230804'
 initialize_observables: False
 fit_emulators: True
 run_mcmc: False
-plot: True
+run_closure_tests: False
+
+plot:
+  emulators: True
+  mcmc: False
+  qhat: False
+  closure_tests: False
 
 debug_level: 0
 

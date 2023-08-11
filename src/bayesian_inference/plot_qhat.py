@@ -15,13 +15,14 @@ import seaborn as sns
 sns.set_context('paper', rc={'font.size':18,'axes.titlesize':18,'axes.labelsize':18})
 
 from bayesian_inference import data_IO
+from bayesian_inference import mcmc
 
 logger = logging.getLogger(__name__)
 
 ####################################################################################################################
 def plot(config):
     '''
-    Generate qhat plots and closure tests, using data written to mcmc.h5 file in analysis step.
+    Generate qhat plots, using data written to mcmc.h5 file in analysis step.
     If no file is found at expected location, no plotting will be done.
 
     :param MCMCConfig config: we take an instance of MCMCConfig as an argument to keep track of config info.
@@ -43,11 +44,11 @@ def plot(config):
         os.makedirs(plot_dir)
 
     # qhat plots
-    _plot_qhat(posterior, plot_dir, config, E=100, cred_level=0.9, n_samples=1000)
-    _plot_qhat(posterior, plot_dir, config, T=0.3, cred_level=0.9, n_samples=1000)
+    plot_qhat(posterior, plot_dir, config, E=100, cred_level=0.9, n_samples=1000)
+    plot_qhat(posterior, plot_dir, config, T=0.3, cred_level=0.9, n_samples=1000)
 
-#---------------------------------------------------------------
-def _plot_qhat(posterior, plot_dir, config, E=0, T=0, cred_level=0., n_samples=5000):
+#---------------------------------------------------------------[]
+def plot_qhat(posterior, plot_dir, config, E=0, T=0, cred_level=0., n_samples=5000, n_x=50, target_design_point=np.array([])):
     '''
     Plot qhat credible interval from posterior samples, 
     as a function of either E or T (with the other held fixed)
@@ -57,9 +58,14 @@ def _plot_qhat(posterior, plot_dir, config, E=0, T=0, cred_level=0., n_samples=5
     :param float T: fix temperature (GeV), and plot as a function of E
     :param float cred_level: credible interval level
     :param int n_samples: number of posterior samples to use for plotting
+    :param int n_x: number of T or E points to plot
+    :param 1darray target_design_point: if closure test, design point corresponding to "truth" qhat value
     '''
 
     # Sample posterior parameters without replacement
+    if posterior.shape[0] < n_samples:
+        n_samples = posterior.shape[0]
+        logger.info(f'WARNING Not enough posterior samples to plot {n_samples} samples, using {n_samples} instead')
     idx = np.random.choice(posterior.shape[0], size=n_samples, replace=False)
     posterior_samples = posterior[idx,:]
 
@@ -69,14 +75,14 @@ def _plot_qhat(posterior, plot_dir, config, E=0, T=0, cred_level=0., n_samples=5
         xlabel = 'T (GeV)'
         suffix = f'E{E}'
         label = f'E = {E} GeV'
-        x_array = np.linspace(0.16, 0.5)
-        qhat_posteriors = np.array([_qhat(posterior_samples, config, T=T, E=E) for T in x_array])           
+        x_array = np.linspace(0.16, 0.5, n_x)
+        qhat_posteriors = np.array([qhat(posterior_samples, config, T=T, E=E) for T in x_array])           
     elif T:
         xlabel = 'E (GeV)'
         suffix = f'T{T}'
         label = f'T = {T} GeV'
-        x_array = np.linspace(5, 200)
-        qhat_posteriors = np.array([_qhat(posterior_samples, config, T=T, E=E) for E in x_array])
+        x_array = np.linspace(5, 200, n_x)
+        qhat_posteriors = np.array([qhat(posterior_samples, config, T=T, E=E) for E in x_array])
     
     # Get mean qhat values for each T or E
     qhat_mean = np.mean(qhat_posteriors, axis=1)
@@ -90,14 +96,28 @@ def _plot_qhat(posterior, plot_dir, config, E=0, T=0, cred_level=0., n_samples=5
     axes.set_ylim([ymin, ymax])
 
     # Get credible interval for each T or E
-    # TODO: For simplicity I use quantiles, although it may be slightly better to use 
-    #       the highest posterior density (HPD) interval, e.g. in pymc3 or arviz
-    cred_range = [(1-cred_level)/2, 1-(1-cred_level)/2]
-    h = [np.quantile(qhat_values, cred_range) for qhat_values in qhat_posteriors]
+    h = [mcmc.credible_interval(qhat_values, confidence=cred_level) for qhat_values in qhat_posteriors]
     credible_low = [i[0] for i in h]
     credible_up =  [i[1] for i in h]
     plt.fill_between(x_array, credible_low, credible_up, color=sns.xkcd_rgb['light blue'],
                      label=f'{int(cred_level*100)}% Credible Interval')
+
+    # If closure test: Plot truth qhat value
+    # We will return a dict of info needed for plotting closure plots, including a 
+    #   boolean array (as a fcn of T or E) of whether the truth value is contained within credible region
+    if target_design_point.any():
+        if E:
+            qhat_truth = [qhat(target_design_point, config, T=T, E=E) for T in x_array]
+        elif T:
+            qhat_truth = [qhat(target_design_point, config, T=T, E=E) for E in x_array]
+        plt.plot(x_array, qhat_truth, sns.xkcd_rgb['pale red'],
+                linewidth=2., label='Target')
+            
+        qhat_closure = {}
+        qhat_closure['qhat_closure_array'] = np.array([((qhat_truth[i] < credible_up[i]) and (qhat_truth[i] > credible_low[i])) for i,_ in enumerate(x_array)]).squeeze()
+        qhat_closure['qhat_mean'] = qhat_mean
+        qhat_closure['x_array'] = x_array
+        qhat_closure['cred_level'] = cred_level
 
     plt.legend(title=f'{label}, {config.parameterization}', title_fontsize=12,
                loc='upper right', fontsize=12)
@@ -105,11 +125,14 @@ def _plot_qhat(posterior, plot_dir, config, E=0, T=0, cred_level=0., n_samples=5
     plt.savefig(f'{plot_dir}/qhat_{suffix}.pdf')
     plt.close('all')
 
+    if target_design_point.any():
+        return qhat_closure
+
 #---------------------------------------------------------------
-def _qhat(posterior_samples, config, T=0, E=0) -> float:
+def qhat(posterior_samples, config, T=0, E=0) -> float:
     '''
     Evaluate qhat/T^3 from posterior samples of parameters,
-    as a function of either E or T (with the other held fixed)
+    for fixed E and T
 
     See: https://github.com/raymondEhlers/STAT/blob/1b0df83a9fd479f8110fd326ae26c0ce002a1109/run_analysis_base.py
 
