@@ -243,7 +243,7 @@ def predict(parameters: npt.NDArray[np.float64],
             validation_set=validation_set,
             observable_filter=emulation_group_config.observable_filter,
         )
-        logger.info("hold up")
+        #logger.info("hold up")
 
     # Does it have "central_value"? "cov"?
     available_value_types = set([
@@ -251,9 +251,9 @@ def predict(parameters: npt.NDArray[np.float64],
         for group in emulation_group_prediction_observable_dict.values()
         for value_type in group
     ])
-    logger.warning(f"{predict_output=}")
-    logger.warning(f"{available_value_types=}")
-    logger.warning(f"{emulation_group_prediction_observable_dict=}")
+    #logger.warning(f"{predict_output=}")
+    #logger.warning(f"{available_value_types=}")
+    #logger.warning(f"{emulation_group_prediction_observable_dict=}")
 
     # We don't care about the observable groups anymore, and there should be no overlap, so we'll just merge them together.
     # Validation
