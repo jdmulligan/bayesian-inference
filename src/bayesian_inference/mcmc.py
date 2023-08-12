@@ -74,7 +74,7 @@ def run_mcmc(config, closure_index=-1):
         # Note: we pass the emulators and experimental data as args to the log_posterior function
         logger.info('Initializing sampler...')
         sampler = LoggingEnsembleSampler(config.n_walkers, ndim, _log_posterior,
-                                        args=[min, max, config, emulation_results, experimental_results],
+                                        args=[min, max, emulation_config, emulation_results, experimental_results],
                                         pool=pool)
 
         # Generate random starting positions for each walker
