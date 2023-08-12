@@ -218,9 +218,7 @@ def predict(parameters: npt.NDArray[np.float64],
 
     # Now, we want to merge predictions over groups
     # First, we need to figure out how observables map to the emulator groups
-    # NOTE: We take the last emulation_group_config from the above loop to get the output dir since it's the same across all groups
-    #       (however, the emulator filename is most likely different, so be careful!)
-    all_observables = data_IO.predictions_matrix_from_h5(emulation_group_config.output_dir, filename='observables.h5')
+    all_observables = data_IO.read_dict_from_h5(emulation_config.output_dir, 'observables.h5')
     emulation_group_prediction_observable_dict = {}
     # TODO: This isn't terribly efficient. Can we store this mapping somehow?
     for emulation_group_name, emulation_group_config in emulation_config.emulation_groups_config.items():
@@ -229,13 +227,20 @@ def predict(parameters: npt.NDArray[np.float64],
             Y=group_predict_output["central_value"],
             observables=all_observables,
             cov=group_predict_output.get("cov", np.array([])),
-            config=emulation_group_config,
             validation_set=validation_set,
             observable_filter=emulation_group_config.observable_filter,
         )
+        logger.info("hold up")
 
     # Does it have "central_value"? "cov"?
-    available_value_types = [k for k in predict_output.values()]
+    available_value_types = set([
+        value_type
+        for group in emulation_group_prediction_observable_dict.values()
+        for value_type in group
+    ])
+    logger.warning(f"{predict_output=}")
+    logger.warning(f"{available_value_types=}")
+    logger.warning(f"{emulation_group_prediction_observable_dict=}")
 
     # We don't care about the observable groups anymore, and there should be no overlap, so we'll just merge them together.
     # Validation
@@ -256,8 +261,10 @@ def predict(parameters: npt.NDArray[np.float64],
     }
     # Reorder to match observables
     for value_type in available_value_types:
-        for observable_key in all_observables:
-            merged_output[value_type][observable_key] = flat_predictions_dict[value_type][observable_key]
+        for observable_key in data_IO.sorted_observable_list_from_dict(all_observables):
+            value = flat_predictions_dict[value_type].get(observable_key)
+            if value is not None:
+                merged_output[value_type][observable_key] = value
 
     # {
     #     "central_value": np.array.shape: (n_design, n_features),
@@ -450,10 +457,12 @@ class EmulationConfig(common_base.CommonBase):
     analysis_config: dict[str, Any] = attrs.field(factory=dict)
     emulation_groups_config: dict[str, EmulationGroupConfig] = attrs.field(factory=dict)
     config: dict[str, Any] = attrs.field(init=False)
+    output_dir: Path = attrs.field(init=False)
 
     def __attrs_post_init__(self):
         with self.config_file.open() as stream:
             self.config = yaml.safe_load(stream)
+        self.output_dir = os.path.join(self.config['output_dir'], f'{self.analysis_name}_{self.parameterization}')
 
     @classmethod
     def from_config_file(cls, analysis_name: str, parameterization: str, config_file: Path, analysis_config: dict[str, Any]):
