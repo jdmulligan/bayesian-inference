@@ -183,6 +183,19 @@ def write_emulators(config: EmulationGroupConfig, output_dict: dict[str, Any]) -
     with filename.open('wb') as f:
 	    pickle.dump(output_dict, f)
 
+####################################################################################################################
+def nd_block_diag(arrs):
+    """See: https://stackoverflow.com/q/62384509"""
+    shapes = np.array([i.shape for i in arrs])
+
+    out = np.zeros(np.append(np.amax(shapes[:,:-2],axis=0), [shapes[:,-2].sum(), shapes[:,-1].sum()]))
+    r, c = 0, 0
+    for i, (rr, cc) in enumerate(shapes[:,-2:]):
+        out[..., r:r + rr, c:c + cc] = arrs[i]
+        r += rr
+        c += cc
+
+    return out
 
 ####################################################################################################################
 def predict(parameters: npt.NDArray[np.float64],
@@ -271,10 +284,16 @@ def predict(parameters: npt.NDArray[np.float64],
     #     "cov": np.array.shape: (n_design, n_features),
     # }
     # TODO: What about covariance between the groups? The cov here only accounts for the covariance within each group.
-    return {
-        value_type: data_IO.observable_matrix_from_dict(Y_dict=merged_output, values_to_return=value_type)
-        for value_type in merged_output
+    result = {
+        "central_value": data_IO.observable_matrix_from_dict(Y_dict=merged_output, values_to_return="central_value")
     }
+    if "cov" in available_value_types:
+        result["cov"] = nd_block_diag(list(merged_output["cov"].values()))
+        #import scipy.linalg
+        #mats = np.array().reshape(5, 3, 2, 2)
+        #result = [scipy.linalg.block_diag(*bmats) for bmats in mats]
+    return result
+
 
     # Next, we will merge the predictions of the groups together, careful to follow the order of the observables
 
