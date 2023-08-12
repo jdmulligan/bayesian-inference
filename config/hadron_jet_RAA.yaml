@@ -116,46 +116,49 @@ analyses:
   analysis1:
     parameters:
       emulators:
-        <<: *default_emulator_parameters
+        default_group:
+          <<: *default_emulator_parameters
+          observable_list:
+            - 'hadron__pt_'
       mcmc:
         <<: *default_mcmc_parameters
       closure:
         <<: *default_closure_parameters
     <<: *model_base
-    observable_list:
-      - 'hadron__pt_'
     plot_panel_shapes: [[3,3], [3,3]]
 
   analysis2:
     parameters:
       emulators:
-        <<: *default_emulator_parameters
+        default_group:
+          <<: *default_emulator_parameters
+          observable_list:
+            - 'jet__pt_'
+          observable_exclude_list:
+            - "pt_y_atlas"
       mcmc:
         <<: *default_mcmc_parameters
       closure:
         <<: *default_closure_parameters
     <<: *model_base
-    observable_list:
-      - 'jet__pt_'
-    observable_exclude_list:
-      - "pt_y_atlas"
     plot_panel_shapes: [[3,3], [3,3], [3,3]]
 
   analysis3:
     parameters:
       emulators:
-        <<: *default_emulator_parameters
+        default_group:
+          <<: *default_emulator_parameters
+          observable_list:
+            - 'hadron__pt_'
+            - 'jet__pt_'
+            - 'jet__Dz_'
+            - 'chjet__zg_'
+            - 'chjet__tg_'
+          observable_exclude_list:
+            - "pt_y_atlas"
       mcmc:
         <<: *default_mcmc_parameters
       closure:
         <<: *default_closure_parameters
     <<: *model_base
-    observable_list:
-      - 'hadron__pt_'
-      - 'jet__pt_'
-      - 'jet__Dz_'
-      - 'chjet__zg_'
-      - 'chjet__tg_'
-    observable_exclude_list:
-      - "pt_y_atlas"
     plot_panel_shapes: [[3,3], [3,3], [3,3], [3,3], [3,3], [3,3]]
