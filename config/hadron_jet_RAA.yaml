@@ -102,11 +102,11 @@ analysis_base: &model_base
   parameterization:
     exponential:
       names: ['$\alpha_S^{\rm{fix}}$', '$Q_0$', '$c_1$', '$c_2$', '$\tau_0$', '$c_3$']
-      min: [0.1, 1, 0, 0, 0, 0]
+      min: [0.1, 1, 0.006737946999085467, 0.006737946999085467, 0, 0.049787068367863944]
       max: [0.5, 10, 10, 10, 1.5, 100]
     binomial:
       names: ['$\alpha_S^{\rm{fix}}$', '$Q_0$', '$c_1$', '$c_2$', '$a$', '$b$', '$\tau_0$']
-      min: [0.1, 1, 0, 0, -10, -10, 0]
+      min: [0.1, 1, 0.006737946999085467, 0.006737946999085467, -10, -10, 0]
       max: [0.5, 10, 10, 10, 100, 100, 1.5]
   alpha: 0.2
   validation_indices: [200, 230] # For exp parameterization, these are the same for all sqrts (i.e. all points 200-229 inclusive)
