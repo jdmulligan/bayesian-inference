@@ -306,7 +306,14 @@ def _plot_emulator_residuals(results, config, plot_dir, validation_set=False):
 
         RAA_true = np.concatenate((RAA_true, np.ravel(Y_dict['central_value'][observable_label])))
         RAA_emulator = np.concatenate((RAA_emulator, np.ravel(emulator_predictions_dict['central_value'][observable_label])))
-        std_emulator = np.concatenate((std_emulator, np.ravel(emulator_predictions_dict['std'][observable_label])))
+        std_emulator = np.concatenate(
+            (
+                std_emulator,
+                np.ravel(
+                    np.sqrt(np.diag(emulator_predictions_dict['cov'][observable_label], axis1=1, axis2=2))
+                )
+            )
+        )
 
     residual = RAA_true - RAA_emulator
     normalized_residual = np.divide(residual, std_emulator)

@@ -1,4 +1,3 @@
-#! /usr/bin/env python
 '''
 Main script to steer Bayesian inference studies for heavy-ion jet analysis
 

@@ -353,7 +353,7 @@ def observable_dict_from_matrix(Y, observables, cov=np.array([]), config=None, v
     Y_dict: dict[str, dict[str, npt.NDArray]] = {}
     Y_dict['central_value'] = {}
     if cov.any():
-        Y_dict['std'] = {}
+        Y_dict['cov'] = {}
 
     if validation_set:
         prediction_key = 'Prediction_validation'
@@ -370,9 +370,8 @@ def observable_dict_from_matrix(Y, observables, cov=np.array([]), config=None, v
         Y_dict['central_value'][observable_label] = Y[:,current_bin:current_bin+n_bins]
 
         if cov.any():
-            Y_dict['std'][observable_label] = np.sqrt(np.diagonal(cov[:,current_bin:current_bin+n_bins,current_bin:current_bin+n_bins],
-                                                                       axis1=1, axis2=2))
-            assert Y_dict['central_value'][observable_label].shape == Y_dict['std'][observable_label].shape
+            Y_dict['cov'][observable_label] = cov[:,current_bin:current_bin+n_bins,current_bin:current_bin+n_bins]
+            assert Y_dict['central_value'][observable_label].shape == Y_dict['cov'][observable_label].shape[:-1]
 
         current_bin += n_bins
 
