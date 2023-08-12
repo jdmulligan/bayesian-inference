@@ -35,13 +35,13 @@ def plot(config):
     emulation_results = {}
     for emulation_group_name, emulation_group_config in config.emulation_groups_config.items():
         # Check if emulator already exists
-        if not os.path.exists(config.emulation_outputfile):
-            logger.info(f'Emulator output does not exist: {config.emulation_outputfile}')
+        if not os.path.exists(emulation_group_config.emulation_outputfile):
+            logger.info(f'Emulator output does not exist: {emulation_group_config.emulation_outputfile}')
             continue
         emulation_results[emulation_group_name] = emulation.read_emulators(emulation_group_config)
 
         # Plot output dir
-        plot_dir = os.path.join(config.output_dir, f'plot_emulation_{emulation_group_name}')
+        plot_dir = os.path.join(emulation_group_config.output_dir, f'plot_emulation_{emulation_group_name}')
         if not os.path.exists(plot_dir):
             os.makedirs(plot_dir)
 

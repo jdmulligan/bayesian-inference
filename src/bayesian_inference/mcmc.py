@@ -57,12 +57,9 @@ def run_mcmc(config, closure_index=-1):
         analysis_config=config.analysis_config,
         config_file=config.config_file,
     )
-    # TODO: Move loading into emulation module
-    emulation_results = {}
-    for emulation_group_name, emulation_group_config in emulation_config.emulation_groups_config.items():
-        emulation_results[emulation_group_name] = emulation.read_emulators(emulation_group_config)
-    # FIXME: The experimental results are NOT in the same order as the emulator groups!
+    emulation_results = emulation_config.read_all_emulator_groups()
 
+    # FIXME: The experimental results are NOT in the same order as the emulator groups!
     # Load experimental data into arrays: experimental_results['y'/'y_err'] (n_features,)
     # In the case of a closure test, we use the pseudodata from the validation design point
     experimental_results = data_IO.data_array_from_h5(config.output_dir, 'observables.h5', pseudodata_index=closure_index)

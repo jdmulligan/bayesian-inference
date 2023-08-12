@@ -174,7 +174,6 @@ def read_emulators(config: EmulationGroupConfig) -> dict[str, Any]:
         results = pickle.load(f)
     return results
 
-
 ####################################################################################################################
 def write_emulators(config: EmulationGroupConfig, output_dict: dict[str, Any]) -> None:
     """Write emulators stored in a result from `fit_emulator_group` to file."""
@@ -223,7 +222,7 @@ def predict(parameters: npt.NDArray[np.float64],
     #       (however, the emulator filename is most likely different, so be careful!)
     all_observables = data_IO.predictions_matrix_from_h5(emulation_group_config.output_dir, filename='observables.h5')
     emulation_group_prediction_observable_dict = {}
-    # FIXME: This doesn't seem terribly efficient. Can we store this mapping somehow?
+    # TODO: This isn't terribly efficient. Can we store this mapping somehow?
     for emulation_group_name, emulation_group_config in emulation_config.emulation_groups_config.items():
         group_predict_output = predict_output[emulation_group_name]
         emulation_group_prediction_observable_dict[emulation_group_name] = data_IO.observable_dict_from_matrix(
@@ -476,3 +475,13 @@ class EmulationConfig(common_base.CommonBase):
             for k in c.analysis_config["parameters"]["emulators"]
         }
         return c
+
+    def read_all_emulator_groups(self) -> dict[str, dict[str, npt.NDarray[np.float64]]]:
+        """ Read all emulator groups.
+
+        Just a convenience function.
+        """
+        emulation_results = {}
+        for emulation_group_name, emulation_group_config in self.emulation_groups_config.items():
+            emulation_results[emulation_group_name] = read_emulators(emulation_group_config)
+        return emulation_results

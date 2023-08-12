@@ -5,12 +5,12 @@
 output_dir: 'output/20230811'
 
 initialize_observables: True
-fit_emulators: True
+fit_emulators: False
 run_mcmc: False
 run_closure_tests: False
 
 plot:
-  emulators: False
+  emulators: True
   mcmc: False
   qhat: False
   closure_tests: False
