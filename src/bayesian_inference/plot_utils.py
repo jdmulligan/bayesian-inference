@@ -4,7 +4,7 @@ Module with plotting utilities that can be shared across multiple other plotting
 
 authors: J.Mulligan, R.Ehlers
 '''
-
+from __future__ import annotations
 import os
 import logging
 import yaml
