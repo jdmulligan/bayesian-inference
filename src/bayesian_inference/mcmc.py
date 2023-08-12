@@ -156,6 +156,26 @@ def credible_interval(samples, confidence=0.9, interval_type='quantile'):
 
     return ci
 
+####################################################################################################################
+def map_parameters(posterior, method='quantile'):
+    '''
+    Compute the MAP parameters
+
+    :param 1darray posterior: Array of samples
+    :param str method: Method used to compute MAP. Options are:
+                        'quantile' - take a narrow quantile interval and compute mean of parameters in that interval
+    :return 1darray map_parameters: Array of MAP parameters
+    '''
+
+    if method == 'quantile':
+        central_quantile = 0.01
+        lower_bounds = np.quantile(posterior, 0.5-central_quantile/2, axis=0)
+        upper_bounds = np.quantile(posterior, 0.5+central_quantile/2, axis=0)
+        mask = (posterior >= lower_bounds) & (posterior <= upper_bounds)
+        map_parameters = np.array([posterior[mask[:,i],i].mean() for i in range(posterior.shape[1])])
+
+    return map_parameters
+
 #---------------------------------------------------------------
 def _log_posterior(X, min, max, emulation_config, emulation_results, experimental_results):
     """
