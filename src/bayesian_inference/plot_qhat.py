@@ -48,7 +48,8 @@ def plot(config):
     plot_qhat(posterior, plot_dir, config, T=0.3, cred_level=0.9, n_samples=1000)
 
 #---------------------------------------------------------------[]
-def plot_qhat(posterior, plot_dir, config, E=0, T=0, cred_level=0., n_samples=5000, n_x=50, target_design_point=np.array([])):
+def plot_qhat(posterior, plot_dir, config, E=0, T=0, cred_level=0., n_samples=5000, n_x=50, 
+              plot_prior=True, target_design_point=np.array([])):
     '''
     Plot qhat credible interval from posterior samples,
     as a function of either E or T (with the other held fixed)
@@ -100,7 +101,27 @@ def plot_qhat(posterior, plot_dir, config, E=0, T=0, cred_level=0., n_samples=50
     credible_low = [i[0] for i in h]
     credible_up =  [i[1] for i in h]
     plt.fill_between(x_array, credible_low, credible_up, color=sns.xkcd_rgb['light blue'],
-                     label=f'{int(cred_level*100)}% Credible Interval')
+                     label=f'Posterior {int(cred_level*100)}% Credible Interval')
+
+    # Plot prior as well, for comparison
+    # TODO: one could also plot some type of "information gain" metric, e.g. KL divergence
+    if plot_prior:
+
+        # Generate samples
+        prior_samples = _generate_prior_samples(config, n_samples=n_samples)
+
+        # Compute qhat for each sample, as a function of T or E
+        if E:
+            qhat_priors = np.array([qhat(prior_samples, config, T=T, E=E) for T in x_array])
+        elif T:
+            qhat_priors = np.array([qhat(prior_samples, config, T=T, E=E) for E in x_array])
+
+        # Get credible interval for each T or E
+        h_prior = [mcmc.credible_interval(qhat_values, confidence=cred_level) for qhat_values in qhat_priors]
+        credible_low_prior = [i[0] for i in h_prior]
+        credible_up_prior =  [i[1] for i in h_prior]
+        plt.fill_between(x_array, credible_low_prior, credible_up_prior, color=sns.xkcd_rgb['light blue'],
+                         alpha=0.3, label=f'Prior {int(cred_level*100)}% Credible Interval')
 
     # If closure test: Plot truth qhat value
     # We will return a dict of info needed for plotting closure plots, including a
@@ -161,3 +182,34 @@ def qhat(posterior_samples, config, T=0, E=0) -> float:
         answer = (C_a * 50.4864 / np.pi) * running_alpha_s * alpha_s_fix * np.abs(np.log(scale_net / debye_mass_square))
 
         return answer * 0.19732698   # 1/GeV to fm
+
+#---------------------------------------------------------------
+def _generate_prior_samples(config, n_samples=100):
+    '''
+    Generate samples of prior parameters
+
+    The prior is uniform in the parameter space -- except for c1,c2,c3 it is the log that is uniform.
+
+    :param 2darray parameters: posterior samples of parameters -- shape (n_samples, n_params)
+    :return 2darray: samples -- shape (n_samples,n_params)
+    '''
+    names = config.analysis_config['parameterization'][config.parameterization]['names']
+    parameter_min = config.analysis_config['parameterization'][config.parameterization]['min'].copy()
+    parameter_max = config.analysis_config['parameterization'][config.parameterization]['max'].copy()
+
+    # Transform c1,c2,c3 to log
+    n_params = len(names)
+    for i,name in enumerate(names):
+        if 'c_' in name:
+            parameter_min[i] = np.log(parameter_min[i])
+            parameter_max[i] = np.log(parameter_max[i])
+
+    # Generate uniform samples
+    samples = np.random.uniform(parameter_min, parameter_max, (n_samples, n_params))
+
+    # Transform log(c1,c2,c3) back to c1,c2,c3
+    for i,name in enumerate(names):
+        if 'c_' in name:
+            samples[:,i] = np.exp(samples[:,i])
+
+    return samples
