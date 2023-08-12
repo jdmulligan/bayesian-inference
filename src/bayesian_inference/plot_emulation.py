@@ -41,7 +41,7 @@ def plot(config):
         emulation_results[emulation_group_name] = emulation.read_emulators(emulation_group_config)
 
         # Plot output dir
-        plot_dir = os.path.join(emulation_group_config.output_dir, f'plot_emulation_{emulation_group_name}')
+        plot_dir = os.path.join(emulation_group_config.output_dir, f'plot_emulation_group_{emulation_group_name}')
         if not os.path.exists(plot_dir):
             os.makedirs(plot_dir)
 
@@ -201,8 +201,8 @@ def _plot_pca_reconstruction_observables(results, config, plot_dir):
     Y_reconstructed_truncated = results['PCA']['Y_reconstructed_truncated_unscaled']
     # Translate matrix of stacked observables to a dict of matrices per observable
     observables = data_IO.read_dict_from_h5(config.output_dir, 'observables.h5')
-    Y_dict = data_IO.observable_dict_from_matrix(Y, observables, config=config, validation_set=False)
-    Y_dict_truncated_reconstructed = data_IO.observable_dict_from_matrix(Y_reconstructed_truncated, observables, validation_set=False)
+    Y_dict = data_IO.observable_dict_from_matrix(Y, observables, config=config, validation_set=False, observable_filter=config.observable_filter)
+    Y_dict_truncated_reconstructed = data_IO.observable_dict_from_matrix(Y_reconstructed_truncated, observables, validation_set=False, observable_filter=config.observable_filter)
 
     # Pass in a list of dicts to plot, each of which has structure Y[observable_label][design_point_index]
     plot_list = [Y_dict['central_value'], Y_dict_truncated_reconstructed['central_value']]
@@ -211,7 +211,7 @@ def _plot_pca_reconstruction_observables(results, config, plot_dir):
 
     design_point_index = 0
     filename = f'PCA_observables__design_point{design_point_index}'
-    plot_utils.plot_observable_panels(plot_list, labels, colors, [design_point_index], config, plot_dir, filename)
+    plot_utils.plot_observable_panels(plot_list, labels, colors, [design_point_index], config, plot_dir, filename, observable_filter=config.observable_filter)
 
 #-------------------------------------------------------------------------------------------
 def _plot_emulator_observables(results, config, plot_dir, validation_set=False):
@@ -226,15 +226,16 @@ def _plot_emulator_observables(results, config, plot_dir, validation_set=False):
     design = data_IO.design_array_from_h5(config.output_dir, filename='observables.h5', validation_set=validation_set)
 
     # Get JETSCAPE predictions
-    Y = data_IO.predictions_matrix_from_h5(config.output_dir, filename='observables.h5', validation_set=validation_set)
+    Y = data_IO.predictions_matrix_from_h5(config.output_dir, filename='observables.h5', validation_set=validation_set, observable_filter=config.observable_filter)
     # Translate matrix of stacked observables to a dict of matrices per observable
-    Y_dict = data_IO.observable_dict_from_matrix(Y, observables, config=config, validation_set=validation_set)
+    Y_dict = data_IO.observable_dict_from_matrix(Y, observables, config=config, validation_set=validation_set, observable_filter=config.observable_filter)
 
     # Get emulator predictions
-    emulator_predictions = emulation.predict(design, results, config, validation_set=validation_set)
+    emulator_predictions = emulation.predict_emulation_group(parameters=design, results=results, config=config)
     emulator_predictions_dict = data_IO.observable_dict_from_matrix(emulator_predictions['central_value'],
                                                                     observables,
-                                                                    validation_set=validation_set)
+                                                                    validation_set=validation_set,
+                                                                    observable_filter=config.observable_filter)
 
     # Plot
     design_point_index = 0
@@ -247,13 +248,14 @@ def _plot_emulator_observables(results, config, plot_dir, validation_set=False):
         # Get PCA results -- 2D arrays: (design_point_index, observable_bins)
         Y_reconstructed_truncated = results['PCA']['Y_reconstructed_truncated_unscaled']
         # Translate matrix of stacked observables to a dict of matrices per observable
-        Y_dict_truncated_reconstructed = data_IO.observable_dict_from_matrix(Y_reconstructed_truncated, observables, validation_set=validation_set)
+        Y_dict_truncated_reconstructed = data_IO.observable_dict_from_matrix(Y_reconstructed_truncated, observables, validation_set=validation_set, observable_filter=config.observable_filter)
 
         plot_list = [Y_dict['central_value'], Y_dict_truncated_reconstructed['central_value'], emulator_predictions_dict['central_value']]
         labels = [r'JETSCAPE', r'JETSCAPE (reconstructed)', r'Emulator']
         colors = [sns.xkcd_rgb['dark sky blue'], sns.xkcd_rgb['denim blue'], sns.xkcd_rgb['light blue']]
         filename = f'emulator_observables_training__design_point{design_point_index}'
-    plot_utils.plot_observable_panels(plot_list, labels, colors, [design_point_index], config, plot_dir, filename)
+
+    plot_utils.plot_observable_panels(plot_list, labels, colors, [design_point_index], config, plot_dir, filename, observable_filter=config.observable_filter)
 
 #-------------------------------------------------------------------------------------------
 def _plot_emulator_residuals(results, config, plot_dir, validation_set=False):
@@ -268,16 +270,17 @@ def _plot_emulator_residuals(results, config, plot_dir, validation_set=False):
     design = data_IO.design_array_from_h5(config.output_dir, filename='observables.h5', validation_set=validation_set)
 
     # Get JETSCAPE predictions
-    Y = data_IO.predictions_matrix_from_h5(config.output_dir, filename='observables.h5', validation_set=validation_set)
+    Y = data_IO.predictions_matrix_from_h5(config.output_dir, filename='observables.h5', validation_set=validation_set, observable_filter=config.observable_filter)
     # Translate matrix of stacked observables to a dict of matrices per observable
-    Y_dict = data_IO.observable_dict_from_matrix(Y, observables, config=config, validation_set=validation_set)
+    Y_dict = data_IO.observable_dict_from_matrix(Y, observables, config=config, validation_set=validation_set, observable_filter=config.observable_filter)
 
     # Get emulator predictions
-    emulator_predictions = emulation.predict(design, results, config, validation_set=validation_set)
+    emulator_predictions = emulation.predict_emulation_group(parameters=design, results=results, config=config)
     emulator_predictions_dict = data_IO.observable_dict_from_matrix(emulator_predictions['central_value'],
                                                                     observables,
                                                                     cov=emulator_predictions['cov'],
-                                                                    validation_set=validation_set)
+                                                                    validation_set=validation_set,
+                                                                    observable_filter=config.observable_filter)
 
     # Construct scatter plot of |RAA_true - RAA_emulator| over all design points
     # We will also project the residuals into a histogram as a function of RAA_true
@@ -297,8 +300,8 @@ def _plot_emulator_residuals(results, config, plot_dir, validation_set=False):
     RAA_true = np.array([])
     RAA_emulator = np.array([])
     std_emulator = np.array([])
-    sorted_observable_list = data_IO.sorted_observable_list_from_dict(observables)
-    for i_observable,observable_label in enumerate(sorted_observable_list):
+    sorted_observable_list = data_IO.sorted_observable_list_from_dict(observables, observable_filter=config.observable_filter)
+    for observable_label in sorted_observable_list:
         sqrts, system, observable_type, observable, subobserable, centrality = data_IO.observable_label_to_keys(observable_label)
 
         RAA_true = np.concatenate((RAA_true, np.ravel(Y_dict['central_value'][observable_label])))

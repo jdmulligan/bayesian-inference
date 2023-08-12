@@ -377,7 +377,7 @@ def observable_dict_from_matrix(Y, observables, cov=np.array([]), config=None, v
         current_bin += n_bins
 
     # Check that the total number of bins is correct
-    assert current_bin == Y.shape[1]
+    assert current_bin == Y.shape[1], f"{current_bin=}, {Y.shape[1]=}"
 
     # Check that prediction matches original table (if observable_table_dir, parameterization, validation_indices are specified)
     # If validation_set, select the validation indices; otherwise, select the training indices

@@ -439,7 +439,7 @@ class EmulationGroupConfig(common_base.CommonBase):
         self.output_dir = os.path.join(config['output_dir'], f'{analysis_name}_{parameterization}')
         emulation_outputfile_name = 'emulation.pkl'
         if emulation_group_name is not None:
-            emulation_outputfile_name = f'emulation_{emulation_group_name}.pkl'
+            emulation_outputfile_name = f'emulation_group_{emulation_group_name}.pkl'
         self.emulation_outputfile = os.path.join(self.output_dir, emulation_outputfile_name)
 
 @attrs.define

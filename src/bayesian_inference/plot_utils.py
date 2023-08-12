@@ -22,14 +22,14 @@ logger = logging.getLogger(__name__)
 
 #---------------------------------------------------------------
 def plot_observable_panels(plot_list, labels, colors, columns, config, plot_dir, filename,
-                           linewidth=2):
+                           linewidth=2, observable_filter: data_IO.ObservableFilter | None = None):
     '''
     Plot observables before and after PCA -- for fixed n_pc
     '''
     # Loop through observables and plot
     # Get sorted list of observables
     observables = data_IO.read_dict_from_h5(config.output_dir, 'observables.h5', verbose=False)
-    sorted_observable_list = data_IO.sorted_observable_list_from_dict(observables)
+    sorted_observable_list = data_IO.sorted_observable_list_from_dict(observables, observable_filter=observable_filter)
 
     # Get data (Note: this is where the bin values are stored)
     data = data_IO.data_dict_from_h5(config.output_dir, filename='observables.h5',
@@ -92,7 +92,7 @@ def plot_observable_panels(plot_list, labels, colors, columns, config, plot_dir,
 
         # Draw predictions
         for i_prediction,_ in enumerate(plot_list):
-            for i_col in range(len(columns)):  
+            for i_col in range(len(columns)):
                 if i_col == 0:
                     label = label=labels[i_prediction]
                 else:
@@ -128,7 +128,7 @@ def plot_observable_panels(plot_list, labels, colors, columns, config, plot_dir,
 #-------------------------------------------------------------------------------------------
 def plot_histogram_1d(x_list=[], label_list=[],
                       density=False, bins=np.array([]), logy=False,
-                      xlabel='', ylabel='', xfontsize=12, yfontsize=16, 
+                      xlabel='', ylabel='', xfontsize=12, yfontsize=16,
                       outputfile=''):
     '''
     Plot 1D histograms from arrays of values (i.e. bin the values together)
@@ -149,7 +149,7 @@ def plot_histogram_1d(x_list=[], label_list=[],
                  linestyle='-',
                  alpha=0.5,
                  log=logy)
-    
+
     legend = plt.legend(loc='best', fontsize=10, frameon=False)
 
     plt.xlabel(xlabel, fontsize=xfontsize)
