@@ -54,7 +54,7 @@ def plot(config):
     logger.info(f'Chain is of size: {os.path.getsize(config.mcmc_outputfile)/(1024*1024):.1f} MB')
     assert chain.shape[0] == config.n_sampling_steps
     assert chain.shape[1] == config.n_walkers
-    assert chain.shape[2] == len(config.analysis_config['parametrization'][config.parameterization]['names'])
+    assert chain.shape[2] == len(config.analysis_config['parameterization'][config.parameterization]['names'])
 
     # MCMC plots
     _plot_acceptance_fraction(results['acceptance_fraction'], plot_dir, config)
@@ -74,13 +74,13 @@ def _plot_acceptance_fraction(acceptance_fraction, plot_dir, config):
     '''
     Plot histogram of acceptance_fraction for each walker.
 
-    Typically we want to check that the acceptance fraction is not too low (e.g. < 0.1) 
+    Typically we want to check that the acceptance fraction is not too low (e.g. < 0.1)
     and that it is fairly consistent across walkers, in order to ensure walkers are not getting stuck.
 
     :param 1darray acceptance_fraction: fraction of steps accepted for each walker -- shape (n_walkers,)
     '''
     plt.figure(figsize=(10, 6))
-    plt.plot(np.arange(config.n_walkers), acceptance_fraction, 
+    plt.plot(np.arange(config.n_walkers), acceptance_fraction,
              marker='o', color=sns.xkcd_rgb['denim blue'])
     plt.ylim(0,1)
     plt.xlabel('Walker Index')
@@ -117,12 +117,12 @@ def _plot_log_posterior(log_posterior, plot_dir, config):
     plt.close()
 
     # Plot mean and stdev of each walker as a function of step number
-    mean_log_posterior = log_posterior.mean(axis=1)    
+    mean_log_posterior = log_posterior.mean(axis=1)
     std_log_posterior = log_posterior.std(axis=1)
     plt.figure(figsize=(10, 6))
     plt.plot(mean_log_posterior, label='mean over walkers')
-    plt.fill_between(range(n_steps), mean_log_posterior - std_log_posterior, 
-                                     mean_log_posterior + std_log_posterior, 
+    plt.fill_between(range(n_steps), mean_log_posterior - std_log_posterior,
+                                     mean_log_posterior + std_log_posterior,
                                      alpha=0.3, label='std over walkers')
     plt.xlabel('Step Number')
     plt.ylabel('Log Posterior (unnormalized)')
@@ -132,11 +132,11 @@ def _plot_log_posterior(log_posterior, plot_dir, config):
     plt.close()
 
     # Plot mean and stdev of each step number as a function of walkers
-    mean_log_posterior = log_posterior.mean(axis=0)    
+    mean_log_posterior = log_posterior.mean(axis=0)
     std_log_posterior = log_posterior.std(axis=0)
     plt.figure(figsize=(10, 6))
     plt.plot(mean_log_posterior, label='mean over steps')
-    plt.fill_between(range(n_walkers), mean_log_posterior - std_log_posterior, 
+    plt.fill_between(range(n_walkers), mean_log_posterior - std_log_posterior,
                                        mean_log_posterior + std_log_posterior,
                                        alpha=0.3, label='std over steps')
     plt.xlabel('Walker')
@@ -145,14 +145,14 @@ def _plot_log_posterior(log_posterior, plot_dir, config):
     outputfile = os.path.join(plot_dir, 'log_posterior_1D_walkers.pdf')
     plt.savefig(outputfile)
     plt.close()
-    
+
 #---------------------------------------------------------------
 def _plot_autocorrelation_time(results, plot_dir, config):
     '''
     Plot autocorrelation time
 
-    The autocorrelation time is crucial because ideally we would want to draw independent 
-    samples from the posterior, but in practice MCMC draws correlated samples -- thereby 
+    The autocorrelation time is crucial because ideally we would want to draw independent
+    samples from the posterior, but in practice MCMC draws correlated samples -- thereby
     affecting sampling uncertainty.
 
     For a given walker, the autocorrelation function is defined as
@@ -174,19 +174,19 @@ def _plot_autocorrelation_time(results, plot_dir, config):
 
     :param 1darray autocorrelation_time: estimate of autocorrelation time for each parameter -- shape (n_dim,)
     '''
-    
+
     # For each walker, use emcee to compute the autocorrelation time for each parameter
     chain = results['chain']
     _, n_walkers, n_dim = chain.shape
     autocorrelation_time_parameters = np.zeros((n_walkers, n_dim))
     for i in range(n_walkers):
         try:
-            autocorrelation_time_parameters[i] = emcee.autocorr.integrated_time(chain[:,i,:]) 
+            autocorrelation_time_parameters[i] = emcee.autocorr.integrated_time(chain[:,i,:])
         except emcee.autocorr.AutocorrError as e:
             logger.info(f"Autocorrelation time could not be computed for walker {i}: {e}")
 
     # Compute the mean and stdev over all walkers
-    mean_autocorrelation_time_parameters = autocorrelation_time_parameters.mean(axis=0)    
+    mean_autocorrelation_time_parameters = autocorrelation_time_parameters.mean(axis=0)
     std_autocorrelation_time_parameters = autocorrelation_time_parameters.std(axis=0)
 
     # Also compute the autocorrelation time for the log posterior
@@ -194,21 +194,21 @@ def _plot_autocorrelation_time(results, plot_dir, config):
     autocorrelation_time_posterior = np.zeros((n_walkers, 1))
     for i in range(n_walkers):
         try:
-            autocorrelation_time_posterior[i] = emcee.autocorr.integrated_time(log_posterior[:,i]) 
+            autocorrelation_time_posterior[i] = emcee.autocorr.integrated_time(log_posterior[:,i])
         except emcee.autocorr.AutocorrError as e:
             logger.info(f"Autocorrelation time could not be computed for log_posterior: {e}")
-    mean_autocorrelation_time_posterior = autocorrelation_time_posterior.mean(axis=0)    
+    mean_autocorrelation_time_posterior = autocorrelation_time_posterior.mean(axis=0)
     std_autocorrelation_time_posterior = autocorrelation_time_posterior.std(axis=0)
 
     # Concatenate the autocorrelation time for the parameters and the log posterior
-    mean_autocorrelation_time = np.concatenate((mean_autocorrelation_time_parameters, 
+    mean_autocorrelation_time = np.concatenate((mean_autocorrelation_time_parameters,
                                                 mean_autocorrelation_time_posterior))
-    std_autocorrelation_time = np.concatenate((std_autocorrelation_time_parameters, 
+    std_autocorrelation_time = np.concatenate((std_autocorrelation_time_parameters,
                                                std_autocorrelation_time_posterior))
 
     # Bar plot
     plt.figure(figsize=(10, 6))
-    parameter_names = config.analysis_config['parametrization'][config.parameterization]['names']
+    parameter_names = config.analysis_config['parameterization'][config.parameterization]['names']
     labels = parameter_names + ['log_posterior']
     plt.bar(labels, mean_autocorrelation_time, yerr=std_autocorrelation_time)
     plt.ylabel('Autocorrelation time')
@@ -223,7 +223,7 @@ def _plot_autocorrelation_time(results, plot_dir, config):
         if autocorrelation_time is None:
             logger.info('No autocorrelation time data found.')
             return
-        
+
         plt.figure(figsize=(10, 6))
         plt.bar(parameter_names, results['autocorrelation_time'])
         plt.ylabel('Autocorrelation time')
@@ -246,14 +246,14 @@ def _plot_posterior_pairplot(chain, plot_dir, config, holdout_test = False, hold
     samples = chain.reshape((chain.shape[0]*chain.shape[1], chain.shape[2]))
 
     # Construct dataframe of samples
-    names = [rf'{s}' for s in config.analysis_config['parametrization'][config.parameterization]['names']]
+    names = [rf'{s}' for s in config.analysis_config['parameterization'][config.parameterization]['names']]
     df = pd.DataFrame(samples, columns=names)
 
     # Plot posterior pairplot
-    g = sns.pairplot(df, diag_kind='kde', 
-                     plot_kws={'alpha':0.1, 's':1, 'color':sns.xkcd_rgb['light blue']}, 
+    g = sns.pairplot(df, diag_kind='kde',
+                     plot_kws={'alpha':0.1, 's':1, 'color':sns.xkcd_rgb['light blue']},
                      diag_kws={'color':'blue', 'fill':True})
-    
+
     # Rasterize the scatter points but not the diagonal, to keep file size small
     for i, row_axes in enumerate(g.axes):
         for j, ax in enumerate(row_axes):
@@ -269,16 +269,16 @@ def _plot_posterior_pairplot(chain, plot_dir, config, holdout_test = False, hold
         for i, row_axes in enumerate(g.axes):
             for j, ax in enumerate(row_axes):
                 if i == j: # Along diagonal, draw the highest posterior density interval (HPDI)
-                    
+
                     credible_interval = pymc.stats.hpd(np.array(samples[:,i]), config.confidence)
                     ymax = ax.get_ylim()[1]
                     ax.fill_between(credible_interval, [ymax,ymax], color=sns.xkcd_rgb['almost black'], alpha=0.1)
-                        
+
                     # Store whether truth value is contained within credible region
                     theta_truth = holdout_point[i]
                     if (theta_truth > credible_interval[1]) or (theta_truth < credible_interval[0]):
                         theta_closure = False
-                        
+
                 if i != j: # Off diagonal, draw the holdout point
                     ax.scatter(holdout_point[j], holdout_point[i], color=sns.xkcd_rgb['almost black'])
 
@@ -287,7 +287,7 @@ def _plot_posterior_pairplot(chain, plot_dir, config, holdout_test = False, hold
 
     if holdout_test:
         return theta_closure
-    
+
 #---------------------------------------------------------------
 def _plot_design_pairplot(design, plot_dir, config):
     '''
@@ -297,7 +297,7 @@ def _plot_design_pairplot(design, plot_dir, config):
     '''
 
     # Construct dataframe of design points
-    names = [rf'{s}' for s in config.analysis_config['parametrization'][config.parameterization]['names']]
+    names = [rf'{s}' for s in config.analysis_config['parameterization'][config.parameterization]['names']]
     df = pd.DataFrame(design, columns=names)
 
     # Take log of c1,c2,c3 since it is their log that is uniformly distributed
@@ -307,8 +307,8 @@ def _plot_design_pairplot(design, plot_dir, config):
             df.rename(columns={col: col.replace('c_','\mathrm{ln}c_')}, inplace=True)
 
     # Plot posterior pairplot
-    sns.pairplot(df, diag_kind='hist', 
-                 plot_kws={'alpha':0.7, 's':3, 'color':'blue'}, 
+    sns.pairplot(df, diag_kind='hist',
+                 plot_kws={'alpha':0.7, 's':3, 'color':'blue'},
                  diag_kws={'color':'blue', 'fill':True, 'bins':20})
 
     plt.savefig(f'{plot_dir}/pairplot_design.pdf')
@@ -346,7 +346,7 @@ def _plot_posterior_observables(chain, plot_dir, config, n_samples=200):
     :param 3darray chain: positions of walkers at each step -- shape (n_steps, n_walkers, n_dim)
     :param int n_samples: number of posterior samples to plot
     '''
-        
+
     # Flatten chain to shape (n_steps*n_walkers, n_dim), and sample parameters without replacement
     posterior = chain.reshape((chain.shape[0]*chain.shape[1], chain.shape[2]))
     idx = np.random.choice(posterior.shape[0], size=n_samples, replace=False)
@@ -354,10 +354,16 @@ def _plot_posterior_observables(chain, plot_dir, config, n_samples=200):
 
     # Get emulator predictions at these points
     observables = data_IO.read_dict_from_h5(config.output_dir, 'observables.h5', verbose=False)
-    with open(config.emulation_outputfile, 'rb') as f:
-        results = pickle.load(f)
-    emulator_predictions = emulation.predict(posterior_samples, results, config)
-    emulator_predictions_dict = data_IO.observable_dict_from_matrix(emulator_predictions['central_value'], 
+    # To get the results, we need to setup the emulation config
+    emulation_config = emulation.EmulationConfig.from_config_file(
+        analysis_name=config.analysis_name,
+        parameterization=config.parameterization,
+        analysis_config=config.analysis_config,
+        config_file=config.config_file,
+    )
+    emulator_predictions = emulation.predict(posterior_samples, emulation_config=emulation_config)
+    # FIXME: The observable list doesn't match up in order with the emulator results
+    emulator_predictions_dict = data_IO.observable_dict_from_matrix(emulator_predictions['central_value'],
                                                                     observables)
     # Plot
     columns = np.arange(posterior_samples.shape[0])

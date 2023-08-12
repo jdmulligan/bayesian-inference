@@ -104,6 +104,9 @@ def setup_logging(
         handlers=[RichModuleNameHandler(level=level, console=rich_console, rich_tracebacks=True)],
     )
 
+    # Capture warnings into logging
+    logging.captureWarnings(True)
+
     # Quiet down some loggers for sanity
     # None for now...
 

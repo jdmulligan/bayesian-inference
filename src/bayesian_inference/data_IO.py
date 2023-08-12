@@ -17,11 +17,15 @@ The main functionalities are:
 authors: J.Mulligan, R.Ehlers
 '''
 
+from __future__ import annotations
+
+import fnmatch
 import os
 import logging
 from collections import defaultdict
 from operator import itemgetter
 
+import attrs
 import numpy as np
 import numpy.typing as npt
 from silx.io.dictdump import dicttoh5, h5todict
@@ -155,7 +159,8 @@ def initialize_observables_dict_from_tables(table_dir, analysis_config, paramete
 
     #----------------------
     # Print observables that we will use
-    [logger.info(f'  {s}') for s in sorted(observables['Prediction'].keys())]
+    # NOTE: We don't need to pass the observable filter because we already filtered the observables via `_accept_observables``
+    [logger.info(f'  {s}') for s in sorted_observable_list_from_dict(observables['Prediction'])]
 
     return observables
 
@@ -203,12 +208,13 @@ def read_dict_from_h5(input_dir, filename, verbose=True):
     return results
 
 ####################################################################################################################
-def predictions_matrix_from_h5(output_dir, filename, validation_set=False):
+def predictions_matrix_from_h5(output_dir, filename, validation_set=False, observable_filter: ObservableFilter | None = None):
     '''
     Initialize predictions from observables.h5 file into a single 2D array:
 
     :param str output_dir: location of filename
     :param str filename: h5 filename (typically 'observables.h5')
+    :param ObservableFilter observable_filter: (optional) filter to apply to the observables
     :return 2darray Y: matrix of predictions at all design points (design_point_index, observable_bins) i.e. (n_samples, n_features)
     '''
 
@@ -216,7 +222,7 @@ def predictions_matrix_from_h5(output_dir, filename, validation_set=False):
     observables = read_dict_from_h5(output_dir, filename, verbose=False)
 
     # Sort observables, to keep well-defined ordering in matrix
-    sorted_observable_list = sorted_observable_list_from_dict(observables)
+    sorted_observable_list = sorted_observable_list_from_dict(observables, observable_filter=observable_filter)
 
     # Set dictionary key
     if validation_set:
@@ -226,8 +232,11 @@ def predictions_matrix_from_h5(output_dir, filename, validation_set=False):
 
     # Loop through sorted observables and concatenate them into a single 2D array:
     #   (design_point_index, observable_bins) i.e. (n_samples, n_features)
+    length_of_Y = 0
     for i,observable_label in enumerate(sorted_observable_list):
         values = observables[prediction_label][observable_label]['y'].T
+        length_of_Y += values.shape[1]
+        logger.info(f"{observable_label} shape: {values.shape}, length: {length_of_Y=}")
         if i==0:
             Y = values
         else:
@@ -282,7 +291,7 @@ def data_dict_from_h5(output_dir, filename, observable_table_dir=None):
     return data
 
 ####################################################################################################################
-def data_array_from_h5(output_dir, filename, pseudodata_index=-1):
+def data_array_from_h5(output_dir, filename, pseudodata_index: int =-1, observable_filter: ObservableFilter | None = None):
     '''
     Initialize data array from observables.h5 file
 
@@ -296,7 +305,7 @@ def data_array_from_h5(output_dir, filename, pseudodata_index=-1):
     observables = read_dict_from_h5(output_dir, filename, verbose=False)
 
     # Sort observables, to keep well-defined ordering in matrix
-    sorted_observable_list = sorted_observable_list_from_dict(observables)
+    sorted_observable_list = sorted_observable_list_from_dict(observables, observable_filter=observable_filter)
 
     # Get data dictionary (or in case of closure test, pseudodata from validation set)
     if pseudodata_index < 0:
@@ -328,7 +337,7 @@ def data_array_from_h5(output_dir, filename, pseudodata_index=-1):
     return data
 
 ####################################################################################################################
-def observable_dict_from_matrix(Y, observables, cov=np.array([]), config=None, validation_set=False):
+def observable_dict_from_matrix(Y, observables, cov=np.array([]), config=None, validation_set=False, observable_filter: ObservableFilter | None = None):
     '''
     Translate matrix of stacked observables to a dict of matrices per observable
 
@@ -337,13 +346,14 @@ def observable_dict_from_matrix(Y, observables, cov=np.array([]), config=None, v
     :param ndarray cov: covariance matrix (n_samples, n_features, n_features)
     :param config EmulatorConfig: config object
     :param bool validation_set: (optional, only needed to check against table values)
+    :param ObservableFilter observable_filter: (optional) filter to apply to the observables
     :return dict[ndarray] Y_dict: dict with ndarray for each observable
     '''
 
-    Y_dict = {}
+    Y_dict: dict[str, dict[str, npt.NDArray]] = {}
     Y_dict['central_value'] = {}
     if cov.any():
-        Y_dict['std'] = {}
+        Y_dict['cov'] = {}
 
     if validation_set:
         prediction_key = 'Prediction_validation'
@@ -353,21 +363,20 @@ def observable_dict_from_matrix(Y, observables, cov=np.array([]), config=None, v
     # Loop through sorted list of observables and populate predictions into Y_dict
     # Also store variances (ignore off-diagonal terms here, for plotting purposes)
     #   (Note that in general there will be significant covariances between observables, induced by the PCA)
-    sorted_observable_list = sorted_observable_list_from_dict(observables)
+    sorted_observable_list = sorted_observable_list_from_dict(observables, observable_filter=observable_filter)
     current_bin = 0
     for observable_label in sorted_observable_list:
         n_bins = observables[prediction_key][observable_label]['y'].shape[0]
         Y_dict['central_value'][observable_label] = Y[:,current_bin:current_bin+n_bins]
 
         if cov.any():
-            Y_dict['std'][observable_label] = np.sqrt(np.diagonal(cov[:,current_bin:current_bin+n_bins,current_bin:current_bin+n_bins],
-                                                                       axis1=1, axis2=2))
-            assert Y_dict['central_value'][observable_label].shape == Y_dict['std'][observable_label].shape
+            Y_dict['cov'][observable_label] = cov[:,current_bin:current_bin+n_bins,current_bin:current_bin+n_bins]
+            assert Y_dict['central_value'][observable_label].shape == Y_dict['cov'][observable_label].shape[:-1]
 
         current_bin += n_bins
 
     # Check that the total number of bins is correct
-    assert current_bin == Y.shape[1]
+    assert current_bin == Y.shape[1], f"{current_bin=}, {Y.shape[1]=}"
 
     # Check that prediction matches original table (if observable_table_dir, parameterization, validation_indices are specified)
     # If validation_set, select the validation indices; otherwise, select the training indices
@@ -435,20 +444,26 @@ def observable_label_to_keys(observable_label):
     return sqrts, system, observable_type, observable, subobserable, centrality
 
 ####################################################################################################################
-def sorted_observable_list_from_dict(observables):
+def sorted_observable_list_from_dict(observables, observable_filter: ObservableFilter | None = None):
     '''
     Define a sorted list of observable_labels from the keys of the observables dict, to keep well-defined ordering in matrix
 
     :param dict observables: dictionary containing predictions/design/data (or any other dict with observable_labels as keys)
+    :param ObservableFilter observable_filter: (optional) filter to apply to the observables
     :return list[str] sorted_observable_list: list of observable labels
     '''
+    observable_keys = list(observables.keys())
+    if 'Prediction' in observables.keys():
+        observable_keys = list(observables['Prediction'].keys())
+
+    if observable_filter is not None:
+        # Filter the observables based on the provided filter
+        observable_keys = [
+            k for k in observable_keys if observable_filter.accept_observable(observable_name=k)
+        ]
 
     # Sort observables, to keep well-defined ordering in matrix
-    if 'Prediction' in observables.keys():
-        sorted_observable_list = _sort_observable_labels(list(observables['Prediction'].keys()))
-    else:
-        sorted_observable_list = _sort_observable_labels(list(observables.keys()))
-    return sorted_observable_list
+    return _sort_observable_labels(observable_keys)
 
 #---------------------------------------------------------------
 def _sort_observable_labels(unordered_observable_labels):
@@ -508,6 +523,54 @@ def _filename_to_labels(filename):
 
     return observable_label, parameterization
 
+@attrs.define
+class ObservableFilter:
+    include_list: list[str]
+    exclude_list: list[str] = attrs.field(factory=list)
+
+    def accept_observable(self, observable_name: str) -> bool:
+        """Accept observable from the provided list(s)
+
+        :param str observable_name: Name of the observable to possibly accept.
+        :return: bool True if the observable should be accepted.
+        """
+        # Select observables based on the input list, with the possibility of excluding some
+        # observables with additional selection strings (eg. remove one experiment from the
+        # observables for an exploratory analysis).
+        observable_in_include_list_no_glob = any([observable_string in observable_name for observable_string in self.include_list])
+        observable_in_exclude_list_no_glob = any([exclude in observable_name for exclude in self.exclude_list])
+        # NOTE: We don't actually care about the name - just that it matches
+        observable_in_include_list_glob = any(
+            # NOTE: We add "*" around the observable because we have to match against the full string (especially given file extensions), and if we add
+            #       them to existing strings, it won't disrupt it.
+            [len(fnmatch.filter([observable_name], f"*{observable_string}*")) > 0 for observable_string in self.include_list if "*" in observable_string]
+        )
+        observable_in_exclude_list_glob = any(
+            # NOTE: We add "*" around the observable because we have to match against the full string (especially given file extensions), and if we add
+            #       them to existing strings, it won't disrupt it.
+            [len(fnmatch.filter([observable_name], f"*{observable_string}*")) > 0 for observable_string in self.exclude_list if "*" in observable_string]
+        )
+
+        found_observable = (
+            (observable_in_include_list_no_glob or observable_in_include_list_glob)
+            and not
+            (observable_in_exclude_list_no_glob or observable_in_exclude_list_glob)
+        )
+
+        #logger.debug(
+        #    f"'{observable_name}': {found_observable=},"
+        #    f" {observable_in_include_list_no_glob=}, {observable_in_include_list_glob=}, {observable_in_exclude_list_no_glob=}, {observable_in_exclude_list_glob=}"
+        #)
+
+        # Helpful for cross checking when debugging
+        if observable_in_exclude_list_no_glob or observable_in_exclude_list_glob:
+            logger.debug(
+                f"Excluding observable '{observable_name}' due to exclude list. {found_observable=},"
+                f" {observable_in_include_list_no_glob=}, {observable_in_include_list_glob=}, {observable_in_exclude_list_no_glob=}, {observable_in_exclude_list_glob=}"
+            )
+
+        return found_observable
+
 #---------------------------------------------------------------
 def _accept_observable(analysis_config, filename):
     '''
@@ -550,18 +613,21 @@ def _accept_observable(analysis_config, filename):
     # Select observables based on the input list, with the possibility of excluding some
     # observables with additional selection strings (eg. remove one experiment from the
     # observables for an exploratory analysis).
-    config_observable_list = analysis_config['observable_list']
-    config_observable_exclude_list = analysis_config.get("observable_exclude_list", [])
-    observable_in_include_list = any([observable_string in filename for observable_string in config_observable_list])
-    observable_in_exclude_list = any([exclude in filename for exclude in config_observable_exclude_list])
+    accept_observable = False
+    global_observable_exclude_list = analysis_config.get("global_observable_exclude_list", [])
+    for emulation_group_settings in analysis_config["parameters"]["emulators"].values():
+        observable_filter = ObservableFilter(
+            include_list=emulation_group_settings['observable_list'],
+            exclude_list=emulation_group_settings.get("observable_exclude_list", []) + global_observable_exclude_list,
+        )
+        accept_observable = observable_filter.accept_observable(
+            observable_name=filename,
+        )
+        # If it's accepted, return immediately
+        if accept_observable:
+            return accept_observable
 
-    found_observable = (observable_in_include_list and not observable_in_exclude_list)
-
-    # Helpful for cross checking when debugging
-    if observable_in_exclude_list:
-        logger.debug(f"Excluding observable '{filename}' due to exclude list. {found_observable=}")
-
-    return found_observable
+    return accept_observable
 
 #---------------------------------------------------------------
 def _split_training_validation_indices(validation_indices, observable_table_dir, parameterization):

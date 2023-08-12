@@ -17,9 +17,12 @@ from __future__ import annotations
 import os
 import logging
 import yaml
+from pathlib import Path
 from typing import Any
 
+import attrs
 import numpy as np
+import numpy.typing as npt
 import pickle
 import sklearn.preprocessing as sklearn_preprocessing
 import sklearn.decomposition as sklearn_decomposition
@@ -32,9 +35,22 @@ logger = logging.getLogger(__name__)
 
 
 ####################################################################################################################
-def fit_emulators(config: EmulationConfig) -> None:
+def fit_emulators(emulation_config: EmulationConfig) -> None:
+    """ Do PCA, fit emulators, and write to file.
+
+    :param EmulationConfig config: Configuration for the emulators, including all groups.
+    """
+    emulator_groups_output = {}
+    for emulation_group_name, emulation_group_config in emulation_config.emulation_groups_config.items():
+        emulator_groups_output[emulation_group_name] = fit_emulator_group(emulation_group_config)
+    for emulation_group_config, emulation_group_output in zip(emulation_config.emulation_groups_config.values(), emulator_groups_output.values()):
+        write_emulators(config=emulation_group_config, output_dict=emulation_group_output)
+
+
+####################################################################################################################
+def fit_emulator_group(config: EmulationGroupConfig) -> dict[str, Any]:
     '''
-    Do PCA, fit emulators, and write to file.
+    Do PCA, fit emulators, and write to file for an individual emulation group.
 
     The first config.n_pc principal components (PCs) are emulated by independent Gaussian processes (GPs)
     The emulators map design points to PCs; the output will need to be inverted from PCA space to physical space.
@@ -49,13 +65,13 @@ def fit_emulators(config: EmulationConfig) -> None:
             logger.info(f'Removed {config.emulation_outputfile}')
         else:
             logger.info(f'Emulators already exist: {config.emulation_outputfile} (to force retrain, set force_retrain: True)')
-            return
+            return {}
 
     # Initialize predictions into a single 2D array: (design_point_index, observable_bins) i.e. (n_samples, n_features)
     # A consistent order of observables is enforced internally in data_IO
     # NOTE: One sample corresponds to one design point, while one feature is one bin of one observable
     logger.info(f'Doing PCA...')
-    Y = data_IO.predictions_matrix_from_h5(config.output_dir, filename='observables.h5')
+    Y = data_IO.predictions_matrix_from_h5(config.output_dir, filename='observables.h5', observable_filter=config.observable_filter)
 
     # Use sklearn to:
     #  - Center and scale each feature (and later invert)
@@ -100,8 +116,8 @@ def fit_emulators(config: EmulationConfig) -> None:
     design = data_IO.design_array_from_h5(config.output_dir, filename='observables.h5')
 
     # Define GP kernel (covariance function)
-    min = np.array(config.analysis_config['parametrization'][config.parameterization]['min'])
-    max = np.array(config.analysis_config['parametrization'][config.parameterization]['max'])
+    min = np.array(config.analysis_config['parameterization'][config.parameterization]['min'])
+    max = np.array(config.analysis_config['parameterization'][config.parameterization]['max'])
     length_scale = max - min
     length_scale_bounds = (np.outer(length_scale, tuple(config.length_scale_bounds)))
     kernel_matern = sklearn_gaussian_process.kernels.Matern(length_scale=length_scale,
@@ -145,24 +161,176 @@ def fit_emulators(config: EmulationConfig) -> None:
     output_dict['PCA']['pca'] = pca
     output_dict['PCA']['scaler'] = scaler
     output_dict['emulators'] = emulators
-    with open(config.emulation_outputfile, 'wb') as f:
+
+    return output_dict
+
+
+####################################################################################################################
+def read_emulators(config: EmulationGroupConfig) -> dict[str, Any]:
+    # Validation
+    filename = Path(config.emulation_outputfile)
+
+    with filename.open("rb") as f:
+        results = pickle.load(f)
+    return results
+
+####################################################################################################################
+def write_emulators(config: EmulationGroupConfig, output_dict: dict[str, Any]) -> None:
+    """Write emulators stored in a result from `fit_emulator_group` to file."""
+    # Validation
+    filename = Path(config.emulation_outputfile)
+
+    with filename.open('wb') as f:
 	    pickle.dump(output_dict, f)
 
 ####################################################################################################################
-def predict(parameters, results, config, validation_set=False):
-    '''
+def nd_block_diag(arrs):
+    """See: https://stackoverflow.com/q/62384509"""
+    shapes = np.array([i.shape for i in arrs])
+
+    out = np.zeros(np.append(np.amax(shapes[:,:-2],axis=0), [shapes[:,-2].sum(), shapes[:,-1].sum()]))
+    r, c = 0, 0
+    for i, (rr, cc) in enumerate(shapes[:,-2:]):
+        out[..., r:r + rr, c:c + cc] = arrs[i]
+        r += rr
+        c += cc
+
+    return out
+
+####################################################################################################################
+def predict(parameters: npt.NDArray[np.float64],
+            emulation_config: EmulationConfig,
+            validation_set: bool = False,
+            merge_predictions_over_groups: bool = True,
+            emulation_group_results: dict[str, dict[str, Any]] | None = None) -> dict[str, npt.NDArray[np.float64]]:
+    """
     Construct dictionary of emulator predictions for each observable
+
+    :param ndarray[float] parameters: list of parameter values (e.g. [tau0, c1, c2, ...]), with shape (n_samples, n_parameters)
+    :param EmulationConfig emulation_config: configuration object for the overall emulator (including all groups)
+    :param bool validation_set: whether to use the validation set (True) or the training set (False)
+    :param bool merge_predictions_over_groups: whether to merge predictions over emulation groups (True)
+                                               or return a dictionary of predictions for each group (False). Default: True
+    :param dict emulator_group_results: dictionary containing results from each emulation group. If None, read from file.
+    :return dict emulator_predictions: dictionary containing matrices of central values and covariance
+    """
+    if emulation_group_results is None:
+        emulation_group_results = {}
+    predict_output = {}
+    for emulation_group_name, emulation_group_config in emulation_config.emulation_groups_config.items():
+        emulation_group_result = emulation_group_results.get(emulation_group_name, read_emulators(emulation_group_config))
+        predict_output[emulation_group_name] = predict_emulation_group(
+            parameters=parameters,
+            results=emulation_group_result,
+            config=emulation_group_config,
+        )
+
+    # Allow the option to return immediately to allow the study of performance per emulation group
+    if not merge_predictions_over_groups:
+        return predict_output
+
+    # Now, we want to merge predictions over groups
+    # First, we need to figure out how observables map to the emulator groups
+    all_observables = data_IO.read_dict_from_h5(emulation_config.output_dir, 'observables.h5')
+    emulation_group_prediction_observable_dict = {}
+    # TODO: This isn't terribly efficient. Can we store this mapping somehow?
+    for emulation_group_name, emulation_group_config in emulation_config.emulation_groups_config.items():
+        group_predict_output = predict_output[emulation_group_name]
+        emulation_group_prediction_observable_dict[emulation_group_name] = data_IO.observable_dict_from_matrix(
+            Y=group_predict_output["central_value"],
+            observables=all_observables,
+            cov=group_predict_output.get("cov", np.array([])),
+            validation_set=validation_set,
+            observable_filter=emulation_group_config.observable_filter,
+        )
+        logger.info("hold up")
+
+    # Does it have "central_value"? "cov"?
+    available_value_types = set([
+        value_type
+        for group in emulation_group_prediction_observable_dict.values()
+        for value_type in group
+    ])
+    logger.warning(f"{predict_output=}")
+    logger.warning(f"{available_value_types=}")
+    logger.warning(f"{emulation_group_prediction_observable_dict=}")
+
+    # We don't care about the observable groups anymore, and there should be no overlap, so we'll just merge them together.
+    # Validation
+    flat_predictions_dict = {
+        value_type: {
+            k: v
+            for group in emulation_group_prediction_observable_dict.values()
+            for k, v in group[value_type].items()
+        }
+        for value_type in available_value_types
+    }
+    if len(set(flat_predictions_dict["central_value"])) != len(flat_predictions_dict["central_value"]):
+        raise ValueError("Duplicate observable keys found when merging emulator groups!")
+    merged_output: dict[str, dict[str, npt.NDArray[np.float64]]] = {
+        # NOTE: We're compiling from emulation_group_prediction_observable_dict, but this contains the same info
+        #       on whether there are "cov" matrices
+        k: {} for k in available_value_types
+    }
+    # Reorder to match observables
+    for value_type in available_value_types:
+        for observable_key in data_IO.sorted_observable_list_from_dict(all_observables):
+            value = flat_predictions_dict[value_type].get(observable_key)
+            if value is not None:
+                merged_output[value_type][observable_key] = value
+
+    # {
+    #     "central_value": np.array.shape: (n_design, n_features),
+    #     "cov": np.array.shape: (n_design, n_features),
+    # }
+    # TODO: What about covariance between the groups? The cov here only accounts for the covariance within each group.
+    result = {
+        "central_value": data_IO.observable_matrix_from_dict(Y_dict=merged_output, values_to_return="central_value")
+    }
+    if "cov" in available_value_types:
+        result["cov"] = nd_block_diag(list(merged_output["cov"].values()))
+        #import scipy.linalg
+        #mats = np.array().reshape(5, 3, 2, 2)
+        #result = [scipy.linalg.block_diag(*bmats) for bmats in mats]
+    return result
+
+
+    # Next, we will merge the predictions of the groups together, careful to follow the order of the observables
+
+    # Below is debug code for converting without following the order. Keeping around for now in case we need it.
+    ## Note that we don't care about the keys of predict_output (which are just the emulation group names),
+    ## but rather the keys stored in the predict_single results, which are "central_values" and "cov".
+    ## This first line just lets us avoid hard coding those names.
+    #merged_output: dict[str, list[npt.NDArray[np.float64]]] = {
+    #    k: [] for k in predict_output.values()
+    #}
+    ## Now, we extract the prediction results from inside of each emulation group to merge the final result together.
+    ## NOTE: In doing so, we will append one emulation group after another. This should be consistent with our
+    ##       convention of ordering results.
+    #for k in merged_output:
+    #    for emulation_group_output in predict_output.values():
+    #        merged_output[k].append(emulation_group_output[k])
+    #return {
+    #    k: np.concatenate(v, axis=1)
+    #    for k, v in merged_output.items()
+    #}
+
+
+####################################################################################################################
+def predict_emulation_group(parameters, results, config):
+    '''
+    Construct dictionary of emulator predictions for each observable in an emulation group.
 
     :param ndarray[float] parameters: list of parameter values (e.g. [tau0, c1, c2, ...]), with shape (n_samples, n_parameters)
     :param str results: dictionary that stores emulator
 
     :return dict emulator_predictions: dictionary containing matrices of central values and covariance
-    
+
     Note: One can easily construct a dict of predictions with format emulator_predictions[observable_label]
           from the returned matrix as follows (useful for plotting / troubleshooting):
               observables = data_IO.read_dict_from_h5(config.output_dir, 'observables.h5', verbose=False)
-              emulator_predictions = data_IO.observable_dict_from_matrix(emulator_central_value_reconstructed, 
-                                                                         observables, 
+              emulator_predictions = data_IO.observable_dict_from_matrix(emulator_central_value_reconstructed,
+                                                                         observables,
                                                                          cov=emulator_cov_reconstructed,
                                                                          validation_set=validation_set)
     '''
@@ -195,7 +363,7 @@ def predict(parameters, results, config, validation_set=False):
     # Note that for a vector f = Ax, the covariance matrix of f is C_f = A C_x A^T.
     #   (see https://en.wikipedia.org/wiki/Propagation_of_uncertainty)
     #   (Note also that even if C_x is diagonal, C_f will not be)
-    # In our case, we have Y[i].T = S*Y_PCA[i].T for each point i in parameter space, where 
+    # In our case, we have Y[i].T = S*Y_PCA[i].T for each point i in parameter space, where
     #    Y[i].T is a column vector of features -- shape (n_features,)
     #    Y_PCA[i].T is a column vector of corresponding PCs -- shape (n_pc,)
     #    S is the transfer matrix described above -- shape (n_features, n_pc)
@@ -219,7 +387,7 @@ def predict(parameters, results, config, validation_set=False):
     # TODO: include predictive variance due to truncated PCs (also propagated as above)
     #np.sum(pca.explained_variance_[config.n_pc:])
 
-    # Return the stacked matrices: 
+    # Return the stacked matrices:
     #   Central values: (n_samples, n_features)
     #   Covariances: (n_samples, n_features, n_features)
     emulator_predictions = {}
@@ -229,13 +397,14 @@ def predict(parameters, results, config, validation_set=False):
     return emulator_predictions
 
 ####################################################################################################################
-class EmulationConfig(common_base.CommonBase):
+class EmulationGroupConfig(common_base.CommonBase):
 
     #---------------------------------------------------------------
     # Constructor
     #---------------------------------------------------------------
-    def __init__(self, analysis_name='', parameterization='', analysis_config='', config_file='', **kwargs):
+    def __init__(self, analysis_name='', parameterization='', analysis_config='', config_file='', emulation_group_name: str | None = None):
 
+        self.analysis_name = analysis_name
         self.parameterization = parameterization
         self.analysis_config = analysis_config
         self.config_file = config_file
@@ -250,7 +419,10 @@ class EmulationConfig(common_base.CommonBase):
         ########################
         # Emulator configuration
         ########################
-        emulator_configuration = self.analysis_config["parameters"]["emulator"]
+        if emulation_group_name is None:
+            emulator_configuration = self.analysis_config["parameters"]["emulators"]
+        else:
+            emulator_configuration = self.analysis_config["parameters"]["emulators"][emulation_group_name]
         self.force_retrain = emulator_configuration['force_retrain']
         self.n_pc = emulator_configuration['n_pc']
         self.mean_function = emulator_configuration['mean_function']
@@ -278,6 +450,66 @@ class EmulationConfig(common_base.CommonBase):
         self.n_restarts = emulator_configuration["GPR"]['n_restarts']
         self.alpha = emulator_configuration["GPR"]["alpha"]
 
+        # Observable list
+        # None implies a convention of accepting all available data
+        self.observable_filter = None
+        observable_list = emulator_configuration.get("observable_list", [])
+        observable_exclude_list = emulator_configuration.get("observable_exclude_list", [])
+        if observable_list or observable_exclude_list:
+            self.observable_filter = data_IO.ObservableFilter(
+                include_list=observable_list,
+                exclude_list=observable_exclude_list,
+            )
+
         # Output options
         self.output_dir = os.path.join(config['output_dir'], f'{analysis_name}_{parameterization}')
-        self.emulation_outputfile = os.path.join(self.output_dir, 'emulation.pkl')
+        emulation_outputfile_name = 'emulation.pkl'
+        if emulation_group_name is not None:
+            emulation_outputfile_name = f'emulation_group_{emulation_group_name}.pkl'
+        self.emulation_outputfile = os.path.join(self.output_dir, emulation_outputfile_name)
+
+@attrs.define
+class EmulationConfig(common_base.CommonBase):
+    analysis_name: str
+    parameterization: str
+    config_file: Path = attrs.field(converter=Path)
+    analysis_config: dict[str, Any] = attrs.field(factory=dict)
+    emulation_groups_config: dict[str, EmulationGroupConfig] = attrs.field(factory=dict)
+    config: dict[str, Any] = attrs.field(init=False)
+    output_dir: Path = attrs.field(init=False)
+
+    def __attrs_post_init__(self):
+        with self.config_file.open() as stream:
+            self.config = yaml.safe_load(stream)
+        self.output_dir = os.path.join(self.config['output_dir'], f'{self.analysis_name}_{self.parameterization}')
+
+    @classmethod
+    def from_config_file(cls, analysis_name: str, parameterization: str, config_file: Path, analysis_config: dict[str, Any]):
+        c = cls(
+            analysis_name=analysis_name,
+            parameterization=parameterization,
+            config_file=config_file,
+            analysis_config=analysis_config,
+        )
+        # Initialize the config for each emulation group
+        c.emulation_groups_config = {
+            k: EmulationGroupConfig(
+                analysis_name=c.analysis_name,
+                parameterization=c.parameterization,
+                analysis_config=c.analysis_config,
+                config_file=c.config_file,
+                emulation_group_name=k,
+            )
+            for k in c.analysis_config["parameters"]["emulators"]
+        }
+        return c
+
+    def read_all_emulator_groups(self) -> dict[str, dict[str, npt.NDarray[np.float64]]]:
+        """ Read all emulator groups.
+
+        Just a convenience function.
+        """
+        emulation_results = {}
+        for emulation_group_name, emulation_group_config in self.emulation_groups_config.items():
+            emulation_results[emulation_group_name] = read_emulators(emulation_group_config)
+        return emulation_results

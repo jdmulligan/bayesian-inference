@@ -2,10 +2,10 @@
 #-------------------------------------------
 # General parameters
 
-output_dir: 'output/20230804'
+output_dir: 'output/20230811'
 
-initialize_observables: False
-fit_emulators: True
+initialize_observables: True
+fit_emulators: False
 run_mcmc: False
 run_closure_tests: False
 
@@ -31,7 +31,7 @@ parameters:
   # Emulator parameters
   emulator_parameters: &default_emulator_parameters
     force_retrain: True
-    n_pc: 20
+    n_pc: 3
 
     mean_function: 'constant'                      # constant, linear
     constant: 0.
@@ -93,7 +93,7 @@ analysis_base: &model_base
   #centrality_range: [[0, 10], [30, 50]]
   centrality_range: [[0, 10]]
   recoil_scheme: 'negative_recominber'
-  parametrization:
+  parameterization:
     exponential:
       names: ['$\alpha_S^{\rm{fix}}$', '$Q_0$', '$c_1$', '$c_2$', '$\tau_0$', '$c_3$']
       min: [0.1, 1, 0, 0, 0, 0]
@@ -109,48 +109,58 @@ analyses:
 
   analysis1:
     parameters:
-      emulator:
-        <<: *default_emulator_parameters
+      emulators:
+        fluctuating:
+          <<: *default_emulator_parameters
+          observable_list:
+          - "2760_*_hadron__pt_"
+        stable:
+          <<: *default_emulator_parameters
+          observable_list:
+          - "200_*_hadron__pt_"
+          - "5020_*_hadron__pt_"
       mcmc:
         <<: *default_mcmc_parameters
       closure:
         <<: *default_closure_parameters
     <<: *model_base
-    observable_list:
-      - 'hadron__pt_'
+    # If we want to exclude from everything, regardless of selection.
+    # If we only want to exclude from a particular emulation group, we can do so above.
+    global_observable_exclude_list: []
     plot_panel_shapes: [[3,3], [3,3]]
 
   analysis2:
     parameters:
-      emulator:
-        <<: *default_emulator_parameters
+      emulators:
+        group1:
+          <<: *default_emulator_parameters
+          observable_list:
+            - 'jet__pt_'
       mcmc:
         <<: *default_mcmc_parameters
       closure:
         <<: *default_closure_parameters
     <<: *model_base
-    observable_list:
-      - 'jet__pt_'
-    observable_exclude_list:
-      # Exclude the ATLAS rapidity dependent, since we don't want to deal with it for now
+    global_observable_exclude_list:
       - "pt_y_atlas"
     plot_panel_shapes: [[3,3], [3,3], [3,3]]
 
   analysis3:
     parameters:
-      emulator:
-        <<: *default_emulator_parameters
+      emulators:
+        group1:
+          <<: *default_emulator_parameters
+          observable_list:
+            - 'hadron__pt_'
+            - 'jet__pt_'
+            - 'jet__Dz_'
+            - 'chjet__zg_'
+            - 'chjet__tg_'
       mcmc:
         <<: *default_mcmc_parameters
       closure:
         <<: *default_closure_parameters
     <<: *model_base
-    observable_list:
-      - 'hadron__pt_'
-      - 'jet__pt_'
-      - 'jet__Dz_'
-      - 'chjet__zg_'
-      - 'chjet__tg_'
-    observable_exclude_list:
+    global_observable_exclude_list:
       - "pt_y_atlas"
     plot_panel_shapes: [[3,3], [3,3], [3,3], [3,3], [3,3], [3,3]]

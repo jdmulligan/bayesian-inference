@@ -39,21 +39,27 @@ def run_mcmc(config, closure_index=-1):
     sampler (emcee) <http://dfm.io/emcee>`.
 
     :param MCMCConfig config: Instance of MCMCConfig
-    :param int closure_index: Index of validation design point to use for MCMC closure. Off by default. 
+    :param int closure_index: Index of validation design point to use for MCMC closure. Off by default.
                               If non-negative index is specified, will construct pseudodata from the design point
                               and use that for the closure test.
     '''
 
     # Get parameter names and min/max
-    names = config.analysis_config['parametrization'][config.parameterization]['names']
-    min = config.analysis_config['parametrization'][config.parameterization]['min']
-    max = config.analysis_config['parametrization'][config.parameterization]['max']
+    names = config.analysis_config['parameterization'][config.parameterization]['names']
+    min = config.analysis_config['parameterization'][config.parameterization]['min']
+    max = config.analysis_config['parameterization'][config.parameterization]['max']
     ndim = len(names)
 
     # Load emulators
-    with open(config.emulation_outputfile, 'rb') as f:
-        emulators = pickle.load(f)
+    emulation_config = emulation.EmulationConfig.from_config_file(
+        analysis_name=config.analysis_name,
+        parameterization=config.parameterization,
+        analysis_config=config.analysis_config,
+        config_file=config.config_file,
+    )
+    emulation_results = emulation_config.read_all_emulator_groups()
 
+    # FIXME: The experimental results are NOT in the same order as the emulator groups!
     # Load experimental data into arrays: experimental_results['y'/'y_err'] (n_features,)
     # In the case of a closure test, we use the pseudodata from the validation design point
     experimental_results = data_IO.data_array_from_h5(config.output_dir, 'observables.h5', pseudodata_index=closure_index)
@@ -67,8 +73,8 @@ def run_mcmc(config, closure_index=-1):
         # Construct sampler (we create a dummy daughter class from emcee.EnsembleSampler, to add some logging info)
         # Note: we pass the emulators and experimental data as args to the log_posterior function
         logger.info('Initializing sampler...')
-        sampler = LoggingEnsembleSampler(config.n_walkers, ndim, _log_posterior, 
-                                        args=[min, max, config, emulators, experimental_results],
+        sampler = LoggingEnsembleSampler(config.n_walkers, ndim, _log_posterior,
+                                        args=[min, max, config, emulation_results, experimental_results],
                                         pool=pool)
 
         # Generate random starting positions for each walker
@@ -129,9 +135,9 @@ def credible_interval(samples, confidence=0.9, interval_type='quantile'):
 
     :param 1darray samples: Array of samples
     :param float confidence: Confidence level (default 0.9)
-    :param str type: Type of credible interval to compute. Options are: 
+    :param str type: Type of credible interval to compute. Options are:
                         'hpd' - highest-posterior density
-                        'quantile' - quantile interval    
+                        'quantile' - quantile interval
     '''
 
     if interval_type == 'hpd':
@@ -151,18 +157,18 @@ def credible_interval(samples, confidence=0.9, interval_type='quantile'):
     return ci
 
 #---------------------------------------------------------------
-def _log_posterior(X, min, max, config, emulators, experimental_results):
+def _log_posterior(X, min, max, emulation_config, emulation_results, experimental_results):
     """
     Function to evaluate the log-posterior for a given set of input parameters.
 
     This function is called by https://emcee.readthedocs.io/en/stable/user/sampler/
 
-    :X: input ndarray of parameter space values
-    :min: list of minimum boundaries for each emulator parameter
-    :max: list of maximum boundaries for each emulator parameter
-    :config: configuration object
-    :emulators: dict of emulators
-    :experimental_results: arrays of experimental results
+    :param X input ndarray of parameter space values
+    :param min list of minimum boundaries for each emulator parameter
+    :param max list of maximum boundaries for each emulator parameter
+    :param config emulation_configuration object
+    :param emulation_results dict of emulation groups
+    :param experimental_results arrays of experimental results
     """
 
     # Convert to 2darray of shape (n_samples, n_parameters)
@@ -188,7 +194,7 @@ def _log_posterior(X, min, max, config, emulators, experimental_results):
         # Returns dict of matrices of emulator predictions:
         #     emulator_predictions['central_value'] -- (n_samples, n_features)
         #     emulator_predictions['cov'] -- (n_samples, n_features, n_features)
-        emulator_predictions = emulation.predict(X[inside], emulators, config)
+        emulator_predictions = emulation.predict(X[inside], emulation_config, emulation_group_results=emulation_results)
 
         # Construct array to store the difference between emulator prediction and experimental data
         # (using broadcasting to subtract each data point from each emulator prediction)
@@ -280,9 +286,10 @@ class MCMCConfig(common_base.CommonBase):
     #---------------------------------------------------------------
     # Constructor
     #---------------------------------------------------------------
-    def __init__(self, analysis_name='', parameterization='', analysis_config='', config_file='', 
+    def __init__(self, analysis_name='', parameterization='', analysis_config='', config_file='',
                        closure_index=-1, **kwargs):
 
+        self.analysis_name = analysis_name
         self.parameterization = parameterization
         self.analysis_config = analysis_config
         self.config_file = config_file
@@ -292,9 +299,6 @@ class MCMCConfig(common_base.CommonBase):
 
         self.observable_table_dir = config['observable_table_dir']
         self.observable_config_dir = config['observable_config_dir']
- 
-        emulator_configuration = analysis_config["parameters"]["emulator"]
-        self.n_pc = emulator_configuration['n_pc']
 
         mcmc_configuration = analysis_config["parameters"]["mcmc"]
         self.n_walkers = mcmc_configuration['n_walkers']
@@ -313,5 +317,5 @@ class MCMCConfig(common_base.CommonBase):
         self.sampler_outputfile = os.path.join(self.mcmc_output_dir, 'mcmc_sampler.pkl')
 
         # Update formatting of parameter names for plotting
-        unformatted_names = self.analysis_config['parametrization'][self.parameterization]['names']
-        self.analysis_config['parametrization'][self.parameterization]['names'] = [rf'{s}' for s in unformatted_names]
+        unformatted_names = self.analysis_config['parameterization'][self.parameterization]['names']
+        self.analysis_config['parameterization'][self.parameterization]['names'] = [rf'{s}' for s in unformatted_names]

@@ -2,9 +2,9 @@
 '''
 Module to plot closure test results
 
-The basic idea of the closure tests is: 
-    - For each validation point, compute “true qhat” and get “pseudodata” of 
-        observables (taking experimental uncertainties from actual data). 
+The basic idea of the closure tests is:
+    - For each validation point, compute “true qhat” and get “pseudodata” of
+        observables (taking experimental uncertainties from actual data).
     - Using originally trained emulator, run the MCMC and compute qhat posterior — then compare to “true qhat”.
 
 authors: J.Mulligan, R.Ehlers
@@ -55,7 +55,7 @@ def plot(config):
     closure_summary[f'T{T}']['qhat_closure_array'] = np.zeros((n_design_points, n_x))
     closure_summary[f'T{T}']['qhat_mean'] = np.zeros((n_design_points, n_x))
 
-    parameter_names = [rf'{s}' for s in config.analysis_config['parametrization'][config.parameterization]['names']]
+    parameter_names = [rf'{s}' for s in config.analysis_config['parameterization'][config.parameterization]['names']]
     for parameter in parameter_names:
         closure_summary[parameter] = {}
         closure_summary[parameter]['theta_truth'] = np.zeros((n_design_points))
@@ -85,14 +85,14 @@ def plot(config):
         # Plot qhat vs. T,E and return boolean array of whether target qhat is within credible interval
         # Then save relevant info to make summary plots over all closure points
         qhat_plot_dir = os.path.join(config.output_dir, f'closure/results/{design_point_index}')
-        qhat_closure_dict = plot_qhat.plot_qhat(posterior, qhat_plot_dir, config, E=E, cred_level=cred_level, 
+        qhat_closure_dict = plot_qhat.plot_qhat(posterior, qhat_plot_dir, config, E=E, cred_level=cred_level,
                                                 n_samples=1000, n_x=n_x, target_design_point=target_design_point)
         closure_summary[f'E{E}']['qhat_closure_array'][design_point_index] = qhat_closure_dict['qhat_closure_array']
         closure_summary[f'E{E}']['qhat_mean'][design_point_index] = qhat_closure_dict['qhat_mean']
         closure_summary[f'E{E}']['x_array'] = qhat_closure_dict['x_array']
         closure_summary[f'E{E}']['cred_level'] = qhat_closure_dict['cred_level']
 
-        qhat_closure_dict = plot_qhat.plot_qhat(posterior, qhat_plot_dir, config, T=T, cred_level=cred_level, 
+        qhat_closure_dict = plot_qhat.plot_qhat(posterior, qhat_plot_dir, config, T=T, cred_level=cred_level,
                                                 n_samples=1000, n_x=n_x, target_design_point=target_design_point)
         closure_summary[f'T{T}']['qhat_closure_array'][design_point_index] = qhat_closure_dict['qhat_closure_array']
         closure_summary[f'T{T}']['qhat_mean'][design_point_index] = qhat_closure_dict['qhat_mean']
@@ -134,7 +134,7 @@ def _plot_closure_summary_qhat(key, qhat_closure_dict, plot_dir):
     We will construct a 2D histogram of <qhat> vs. T or E, with z-axis the fraction of closure tests that passed.
     This allows us to see both the aggregate closure statistics, as well as to look differentially
     in qhat to see if our closure is successful across the space.
-    
+
     :param str key: E{E} or T{T}, specifying which variable is fixed (plot as a function of the other one)
     :param dict qhat_closure_dict: dict containing qhat closure results
     '''
@@ -174,7 +174,7 @@ def _plot_closure_summary_theta(parameter_closure_dict, parameter, i, cred_level
     We will construct a 2D histogram of <qhat> vs. theta[i], with z-axis the fraction of closure tests that passed.
     This allows us to see both the aggregate closure statistics, as well as to look differentially
     in qhat to see if our closure is successful across the space.
-    
+
     :param dict parameter_closure_dict: dict containing theta closure results
     :param str parameter: design parameter label
     '''
@@ -196,8 +196,8 @@ def _plot_closure_summary_theta(parameter_closure_dict, parameter, i, cred_level
     y = qhat_mean
     z = theta_closure_array
 
-    parameter_min = config.analysis_config['parametrization'][config.parameterization]['min'][i]
-    parameter_max = config.analysis_config['parametrization'][config.parameterization]['max'][i]
+    parameter_min = config.analysis_config['parameterization'][config.parameterization]['min'][i]
+    parameter_max = config.analysis_config['parameterization'][config.parameterization]['max'][i]
     xbins = np.linspace(parameter_min, parameter_max, num=8)
 
     xlabel = parameter
@@ -220,7 +220,7 @@ def _plot_closure_2D_histogram(x, y, z, xbins, cred_level, xlabel, ylabel, suffi
     # Define y-axis bins
     qhat_bins =  np.array([0, 1, 2, 3, 4, 5, 6, 8, 10, 12])
     qhat_bins_center = (qhat_bins[:-1] + qhat_bins[1:]) / 2.0
-    
+
     # Generate and plot histogram
     H, xedges, yedges, _ = scipy.stats.binned_statistic_2d(x, y, z, statistic=np.mean,
                                                            bins=[xbins, qhat_bins])
@@ -230,7 +230,7 @@ def _plot_closure_2D_histogram(x, y, z, xbins, cred_level, xlabel, ylabel, suffi
     ax1=plt.subplot(111)
     plot1 = ax1.pcolormesh(XX, YY, H.T)
     fig.colorbar(plot1, ax=ax1)
-    
+
     # Generate histogram of binomial uncertainty, and print success rate in each bin
     statistic = partial(efficiency_uncertainty, nbins=xbins.shape[0])
     Herr, xedges, yedges, _ = scipy.stats.binned_statistic_2d(x, y, z,
@@ -246,12 +246,12 @@ def _plot_closure_2D_histogram(x, y, z, xbins, cred_level, xlabel, ylabel, suffi
             ax1.text(xbins_center[i], qhat_bins_center[j], rf'{zval:0.2f}$\pm${zerr:0.2f}',
                      size=8, ha='center', va='center',
                      bbox=dict(boxstyle='round', facecolor='white', edgecolor='0.3'))
-    
+
     # Print aggregated closure success rate
     mean = np.mean(z)
     unc = efficiency_uncertainty(z, 1) # Here, we take just one point per curve
-    plt.gca().text(0.95, 0.95, rf'mean: {mean:0.2f}$\pm${unc:0.2f}', ha='right', va='top', 
-                    transform=plt.gca().transAxes, 
+    plt.gca().text(0.95, 0.95, rf'mean: {mean:0.2f}$\pm${unc:0.2f}', ha='right', va='top',
+                    transform=plt.gca().transAxes,
                     bbox=dict(facecolor='white', alpha=1.0, boxstyle="round,pad=0.3"))
 
     plt.xlabel(xlabel, size=14)
@@ -259,7 +259,7 @@ def _plot_closure_2D_histogram(x, y, z, xbins, cred_level, xlabel, ylabel, suffi
     plt.title(f'Fraction of closure tests contained in {100*cred_level}% CR', size=14)
     plt.savefig(f'{plot_dir}/Closure_Summary2D_{suffix}.pdf')
     plt.close('all')
-    
+
 #---------------------------------------------------------------
 def efficiency_uncertainty(success_array, nbins=0, type='bayesian'):
     '''
@@ -271,11 +271,11 @@ def efficiency_uncertainty(success_array, nbins=0, type='bayesian'):
     length = success_array.shape[0]
     sum = np.sum(success_array)
     mean = 1.*sum/length
-    
+
     # We have multiple E,T points per bin, which would underestimate the uncertainty
     # since neighboring points are highly correlated -- so we average all points in a bin
     real_length = length / nbins
-    
+
     # Bayesian uncertainty: http://phys.kent.edu/~smargeti/STAR/D0/Ullrich-Errors.pdf
     if type == 'bayesian':
         k = mean*real_length
