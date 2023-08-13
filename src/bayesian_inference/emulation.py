@@ -35,6 +35,90 @@ from bayesian_inference import common_base
 logger = logging.getLogger(__name__)
 
 
+@attrs.define
+class EmulationClassToSortedObservables:
+    """ Class to track and covert between emulation group matrices to match sorted observables.
+
+    emulation_group_to_observable_matrix: Mapping from emulation group matrix to the matrix of observables. Format:
+        {observable_name: (emulator_group_name, slice in output_matrix, slice in emulator_group_matrix)}
+    """
+    emulation_group_to_observable_matrix: ... = attrs.field()
+
+    def learn_mapping(self, emulation_config: EmulationConfig, emulator_groups_output: dict[str, Any]) -> None:
+        prediction_key = "Predictions"
+
+
+        # Now we need the mapping from emulator groups to observables with the right indices.
+        # First, we need to start with all available observables (beyond just what's in any given group)
+        # to learn the entire mapping
+        all_observables = data_IO.read_dict_from_h5(emulation_config.output_dir, 'observables.h5')
+        current_position = 0
+        observable_slices = {}
+        for observable_key in data_IO.sorted_observable_list_from_dict(all_observables[prediction_key]):
+            n_bins = all_observables[prediction_key][observable_key]['y'].shape[0]
+            observable_slices[observable_key] = slice(current_position, current_position + n_bins)
+            current_bin += n_bins
+
+        # Now, take advantage of the ordering in the emulator groups.
+        observable_emulation_group_map = {}
+        for emulation_group_name, emulation_group_config in emulation_config.emulation_groups_config.items():
+            emulation_group_observable_keys = data_IO.sorted_observable_list_from_dict(all_observables[prediction_key], observable_filter=emulation_group_config.observable_filter)
+            current_group_bin = 0
+            for observable_key in emulation_group_observable_keys:
+                observable_slice = observable_slices[observable_key]
+                observable_emulation_group_map[observable_key] = (
+                    emulation_group_name,
+                    observable_slice,
+                    slice(current_group_bin, current_group_bin + (observable_slice.stop - observable_slice.start))
+                )
+                current_group_bin += (observable_slice.stop - observable_slice.start)
+
+        # And then finally put them in the proper observable order
+        observable_emulation_group_map = {
+            k: observable_emulation_group_map[k]
+            for k in observable_slices
+        }
+
+        # We want the shape to allow us to preallocate the array:
+        last_observable = list(observable_slices)[-1]
+        shape_of_merged_output_matrix = (all_observables[prediction_key][observable_key]['y'].shape[1], observable_slices[last_observable].stop)
+        #shape_of_merged_output_matrix = []
+        #for emulator_group_output in emulator_groups_output.values():
+        #    # Grab the first dimension from the number of design points
+        #    y_reco_shape = emulator_group_output["Y_reconstructed_truncated"].shape
+        #    if not shape_of_merged_output_matrix:
+        #        shape_of_merged_output_matrix.append(*y_reco_shape)
+        #    else:
+        #        # Add in the additional dimensions.
+        #        shape_of_merged_output_matrix[1] += y_reco_shape[1]
+        # TODO: Store this!
+
+        #emulation_group_prediction_observable_dict = {}
+        ## TODO: This isn't terribly efficient. Can we store this mapping somehow?
+        #for emulation_group_name, emulation_group_config in emulation_config.emulation_groups_config.items():
+        #    group_predict_output = predict_output[emulation_group_name]
+        #    emulation_group_prediction_observable_dict[emulation_group_name] = data_IO.observable_dict_from_matrix(
+        #        Y=group_predict_output["central_value"],
+        #        observables=all_observables,
+        #        cov=group_predict_output.get("cov", np.array([])),
+        #        validation_set=validation_set,
+        #        observable_filter=emulation_group_config.observable_filter,
+        #    )
+
+    def convert(self, group_matrices: dict[str, npt.NDArray[np.float64]]) -> npt.NDArray[np.float64]:
+        """ Convert a matrix to match the sorted observables.
+
+        :param matrix: Matrix to convert.
+        :return: Converted matrix.
+        """
+        group_matrices[Y]
+        output = np.zeros(Y.shape)
+        for (emulator_group_name, slice_in_matrix) in self._sorted_observable_indices.items():
+            # shape = (n_design, n_features)
+            # can extract this from Y_reconstructed_truncated.shape, for example
+            return matrix[:, self._sorted_observable_indices]
+
+
 ####################################################################################################################
 def fit_emulators(emulation_config: EmulationConfig) -> None:
     """ Do PCA, fit emulators, and write to file.

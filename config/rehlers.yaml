@@ -4,14 +4,14 @@
 
 output_dir: 'output/20230811'
 
-initialize_observables: True
+initialize_observables: False
 fit_emulators: False
-run_mcmc: False
+run_mcmc: True
 run_closure_tests: False
 
 plot:
   emulators: True
-  mcmc: False
+  mcmc: True
   qhat: False
   closure_tests: False
 
