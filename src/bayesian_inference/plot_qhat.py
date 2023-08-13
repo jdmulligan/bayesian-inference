@@ -232,9 +232,10 @@ def _plot_single_parameter_observable_sensitivity(map_parameters, i_parameter, p
 
     # Convert to dict: emulator_predictions[observable_label]
     observables = data_IO.read_dict_from_h5(config.output_dir, 'observables.h5', verbose=False)
-     # FIXME: The observable list doesn't match up in order with the emulator results
-    emulator_predictions_x_dict = data_IO.observable_dict_from_matrix(emulator_predictions_x['central_value'], observables)
-    emulator_predictions_x_prime_dict = data_IO.observable_dict_from_matrix(emulator_predictions_x_prime['central_value'], observables)
+    emulator_predictions_x_dict = data_IO.observable_dict_from_matrix(emulator_predictions_x['central_value'], 
+                                                                      observables, observable_filter=emulation_config.observable_filter)
+    emulator_predictions_x_prime_dict = data_IO.observable_dict_from_matrix(emulator_predictions_x_prime['central_value'], 
+                                                                            observables, observable_filter=emulation_config.observable_filter)
 
     # Construct dict of sensitivity index, in same format as emulator_predictions['central_value']
     sensitivity_index_dict = emulator_predictions_x_prime_dict['central_value'].copy()
