@@ -14,8 +14,9 @@ Based in part on JETSCAPE/STAT code.
 
 from __future__ import annotations
 
-import os
+import functools
 import logging
+import os
 import yaml
 from pathlib import Path
 from typing import Any
@@ -477,6 +478,7 @@ class EmulationConfig(common_base.CommonBase):
     emulation_groups_config: dict[str, EmulationGroupConfig] = attrs.field(factory=dict)
     config: dict[str, Any] = attrs.field(init=False)
     output_dir: Path = attrs.field(init=False)
+    _observable_filter: data_IO.ObservableFilter | None = attrs.field(default=None)
 
     def __attrs_post_init__(self):
         with self.config_file.open() as stream:
@@ -513,3 +515,21 @@ class EmulationConfig(common_base.CommonBase):
         for emulation_group_name, emulation_group_config in self.emulation_groups_config.items():
             emulation_results[emulation_group_name] = read_emulators(emulation_group_config)
         return emulation_results
+
+    @property
+    def observable_filter(self) -> data_IO.ObservableFilter:
+        if self._observable_filter is None:
+            if not self.emulation_groups_config:
+                raise ValueError("Need to specify emulation groups to provide an observable filter")
+            # Accumulate the include and exclude lists from all emulation groups
+            include_list = []
+            exclude_list = self.config.get("global_observable_exclude_list", [])
+            for emulation_group_config in self.emulation_groups_config.values():
+                include_list.extend(emulation_group_config.observable_filter.include_list)
+                exclude_list.extend(emulation_group_config.observable_filter.exclude_list)
+
+            self._observable_filter = data_IO.ObservableFilter(
+                include_list=include_list,
+                exclude_list=exclude_list,
+            )
+        return self._observable_filter

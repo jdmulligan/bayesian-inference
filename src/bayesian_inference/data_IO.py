@@ -613,6 +613,7 @@ def _accept_observable(analysis_config, filename):
     # Select observables based on the input list, with the possibility of excluding some
     # observables with additional selection strings (eg. remove one experiment from the
     # observables for an exploratory analysis).
+    # NOTE: This is equivalent to EmulationConfig.observable_filter
     accept_observable = False
     global_observable_exclude_list = analysis_config.get("global_observable_exclude_list", [])
     for emulation_group_settings in analysis_config["parameters"]["emulators"].values():

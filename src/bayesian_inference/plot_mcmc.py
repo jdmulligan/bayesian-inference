@@ -362,9 +362,9 @@ def _plot_posterior_observables(chain, plot_dir, config, n_samples=200):
         config_file=config.config_file,
     )
     emulator_predictions = emulation.predict(posterior_samples, emulation_config=emulation_config)
-    # FIXME: The observable list doesn't match up in order with the emulator results
     emulator_predictions_dict = data_IO.observable_dict_from_matrix(emulator_predictions['central_value'],
-                                                                    observables)
+                                                                    observables,
+                                                                    observable_filter=emulation_config.observable_filter)
     # Plot
     columns = np.arange(posterior_samples.shape[0])
     plot_list = [emulator_predictions_dict['central_value']]
