@@ -14,7 +14,6 @@ Based in part on JETSCAPE/STAT code.
 
 from __future__ import annotations
 
-import functools
 import logging
 import os
 import yaml
@@ -184,24 +183,130 @@ def write_emulators(config: EmulationGroupConfig, output_dict: dict[str, Any]) -
     with filename.open('wb') as f:
 	    pickle.dump(output_dict, f)
 
+
 ####################################################################################################################
-def nd_block_diag(arrs):
-    """See: https://stackoverflow.com/q/62384509"""
-    shapes = np.array([i.shape for i in arrs])
+def nd_block_diag(arrays):
+    """ Add 2D matrices into a block diagonal matrix in n-dimensions.
+
+    See: https://stackoverflow.com/q/62384509
+
+    :param arrays list[np.array]: List of arrays to block diagonalize.
+    """
+    shapes = np.array([i.shape for i in arrays])
 
     out = np.zeros(np.append(np.amax(shapes[:,:-2],axis=0), [shapes[:,-2].sum(), shapes[:,-1].sum()]))
     r, c = 0, 0
     for i, (rr, cc) in enumerate(shapes[:,-2:]):
-        out[..., r:r + rr, c:c + cc] = arrs[i]
+        out[..., r:r + rr, c:c + cc] = arrays[i]
         r += rr
         c += cc
 
     return out
 
+
+####################################################################################################################
+@attrs.define
+class SortEmulationGroupObservables:
+    """ Class to track and covert between emulation group matrices to match sorted observables.
+
+    emulation_group_to_observable_matrix: Mapping from emulation group matrix to the matrix of observables. Format:
+        {observable_name: (emulator_group_name, slice in output_matrix, slice in emulator_group_matrix)}
+    shape: Shape of matrix output.
+    available_value_types:
+    """
+    emulation_group_to_observable_matrix: dict[str, tuple[str, slice, slice]]
+    shape: tuple[int, int]
+    _available_value_types: set[str] | None = attrs.field(init=False, default=None)
+
+    @classmethod
+    def learn_mapping(cls, emulation_config: EmulationConfig) -> SortEmulationGroupObservables:
+        """ Construct this object by learning the mapping from the emulation group prediction matrices to the sorted and merged matrices.
+
+        :param EmulationConfig emulation_config: Configuration for the emulator(s).
+        :return: Constructed object.
+        """
+        # NOTE: This could be configurable (eg. for validation). However, we don't seem to immediately
+        #       need this functionality, so we'll omit it for now.
+        prediction_key = "Prediction"
+
+        # Now we need the mapping from emulator groups to observables with the right indices.
+        # First, we need to start with all available observables (beyond just what's in any given group)
+        # to learn the entire mapping
+        all_observables = data_IO.read_dict_from_h5(emulation_config.output_dir, 'observables.h5')
+        current_position = 0
+        observable_slices = {}
+        for observable_key in data_IO.sorted_observable_list_from_dict(all_observables[prediction_key]):
+            n_bins = all_observables[prediction_key][observable_key]['y'].shape[0]
+            observable_slices[observable_key] = slice(current_position, current_position + n_bins)
+            current_position += n_bins
+
+        # Now, take advantage of the ordering in the emulator groups. (ie. the ordering in the group
+        # matrix is consistent with the order of the observable names).
+        observable_emulation_group_map = {}
+        for emulation_group_name, emulation_group_config in emulation_config.emulation_groups_config.items():
+            emulation_group_observable_keys = data_IO.sorted_observable_list_from_dict(all_observables[prediction_key], observable_filter=emulation_group_config.observable_filter)
+            current_group_bin = 0
+            for observable_key in emulation_group_observable_keys:
+                observable_slice = observable_slices[observable_key]
+                observable_emulation_group_map[observable_key] = (
+                    emulation_group_name,
+                    observable_slice,
+                    slice(current_group_bin, current_group_bin + (observable_slice.stop - observable_slice.start))
+                )
+                current_group_bin += (observable_slice.stop - observable_slice.start)
+                logger.debug(f"{observable_key=}, {observable_emulation_group_map[observable_key]=}, {current_group_bin=}")
+        logger.debug(f"Sorted order: {observable_slices=}")
+
+        # And then finally put them in the proper sorted observable order
+        observable_emulation_group_map = {
+            k: observable_emulation_group_map[k]
+            for k in observable_slices
+        }
+
+        # We want the shape to allow us to preallocate the array:
+        last_observable = list(observable_slices)[-1]
+        shape = (all_observables[prediction_key][observable_key]['y'].shape[1], observable_slices[last_observable].stop)
+        logger.debug(f"{shape=}")
+
+        return cls(
+            emulation_group_to_observable_matrix=observable_emulation_group_map,
+            shape=shape,
+        )
+
+    def convert(self, group_matrices: dict[str, npt.NDArray[np.float64]]) -> dict[str, npt.NDArray[np.float64]]:
+        """ Convert a matrix to match the sorted observables.
+
+        :param group_matrices: Matrixes to convert by emulation group. eg:
+            {"group_1": {"central_value": [...], "cov": [...]}, "group_2": ...}
+        :return: Converted matrix for each available value type.
+        """
+        if self._available_value_types is None:
+            self._available_value_types = set([
+                value_type
+                for group in group_matrices.values()
+                for value_type in group
+            ])
+
+        output = {}
+        # Requires special handling since we're adding matrices
+        if "cov" in self._available_value_types:
+            output["cov"] = nd_block_diag([m["cov"] for m in group_matrices.values()])
+        # Handle the rest (as of 14 August 2023, it's just "central_value")
+        for value_type in self._available_value_types:
+            if value_type == "cov":
+                continue
+
+            output[value_type] = np.zeros(self.shape)
+            for (emulation_group_name, slice_in_output_matrix, slice_in_emulation_group_matrix), emulation_group_matrix in zip(
+                self.emulation_group_to_observable_matrix.values(), group_matrices.values()
+            ):
+                output[value_type][:, slice_in_output_matrix] = emulation_group_matrix[value_type][:, slice_in_emulation_group_matrix]
+        return output
+
+
 ####################################################################################################################
 def predict(parameters: npt.NDArray[np.float64],
             emulation_config: EmulationConfig,
-            validation_set: bool = False,
             merge_predictions_over_groups: bool = True,
             emulation_group_results: dict[str, dict[str, Any]] | None = None) -> dict[str, npt.NDArray[np.float64]]:
     """
@@ -209,7 +314,6 @@ def predict(parameters: npt.NDArray[np.float64],
 
     :param ndarray[float] parameters: list of parameter values (e.g. [tau0, c1, c2, ...]), with shape (n_samples, n_parameters)
     :param EmulationConfig emulation_config: configuration object for the overall emulator (including all groups)
-    :param bool validation_set: whether to use the validation set (True) or the training set (False)
     :param bool merge_predictions_over_groups: whether to merge predictions over emulation groups (True)
                                                or return a dictionary of predictions for each group (False). Default: True
     :param dict emulator_group_results: dictionary containing results from each emulation group. If None, read from file.
@@ -219,7 +323,15 @@ def predict(parameters: npt.NDArray[np.float64],
         emulation_group_results = {}
     predict_output = {}
     for emulation_group_name, emulation_group_config in emulation_config.emulation_groups_config.items():
-        emulation_group_result = emulation_group_results.get(emulation_group_name, read_emulators(emulation_group_config))
+        emulation_group_result = emulation_group_results.get(emulation_group_name)
+        # Only load the emulator group directly from file if needed. If called frequently
+        # (eg. in the MCMC), it's probably better to load it once and pass it in.
+        # NOTE: I know that get() can provide a second argument as the default, but a quick check showed that
+        #       `read_emulators` was executing far more than expected (maybe trying to determine some default value?).
+        #       However, separately it out like this seems to avoid the issue, but better to just avoid the issue.
+        if emulation_group_result is None:
+            emulation_group_result = read_emulators(emulation_group_config)
+
         predict_output[emulation_group_name] = predict_emulation_group(
             parameters=parameters,
             results=emulation_group_result,
@@ -231,90 +343,7 @@ def predict(parameters: npt.NDArray[np.float64],
         return predict_output
 
     # Now, we want to merge predictions over groups
-    # First, we need to figure out how observables map to the emulator groups
-    all_observables = data_IO.read_dict_from_h5(emulation_config.output_dir, 'observables.h5')
-    emulation_group_prediction_observable_dict = {}
-    # TODO: This isn't terribly efficient. Can we store this mapping somehow?
-    for emulation_group_name, emulation_group_config in emulation_config.emulation_groups_config.items():
-        group_predict_output = predict_output[emulation_group_name]
-        emulation_group_prediction_observable_dict[emulation_group_name] = data_IO.observable_dict_from_matrix(
-            Y=group_predict_output["central_value"],
-            observables=all_observables,
-            cov=group_predict_output.get("cov", np.array([])),
-            validation_set=validation_set,
-            observable_filter=emulation_group_config.observable_filter,
-        )
-        #logger.info("hold up")
-
-    # Does it have "central_value"? "cov"?
-    available_value_types = set([
-        value_type
-        for group in emulation_group_prediction_observable_dict.values()
-        for value_type in group
-    ])
-    #logger.warning(f"{predict_output=}")
-    #logger.warning(f"{available_value_types=}")
-    #logger.warning(f"{emulation_group_prediction_observable_dict=}")
-
-    # We don't care about the observable groups anymore, and there should be no overlap, so we'll just merge them together.
-    # Validation
-    flat_predictions_dict = {
-        value_type: {
-            k: v
-            for group in emulation_group_prediction_observable_dict.values()
-            for k, v in group[value_type].items()
-        }
-        for value_type in available_value_types
-    }
-    if len(set(flat_predictions_dict["central_value"])) != len(flat_predictions_dict["central_value"]):
-        raise ValueError("Duplicate observable keys found when merging emulator groups!")
-    merged_output: dict[str, dict[str, npt.NDArray[np.float64]]] = {
-        # NOTE: We're compiling from emulation_group_prediction_observable_dict, but this contains the same info
-        #       on whether there are "cov" matrices
-        k: {} for k in available_value_types
-    }
-    # Reorder to match observables
-    for value_type in available_value_types:
-        for observable_key in data_IO.sorted_observable_list_from_dict(all_observables):
-            value = flat_predictions_dict[value_type].get(observable_key)
-            if value is not None:
-                merged_output[value_type][observable_key] = value
-
-    # {
-    #     "central_value": np.array.shape: (n_design, n_features),
-    #     "cov": np.array.shape: (n_design, n_features),
-    # }
-    # TODO: What about covariance between the groups? The cov here only accounts for the covariance within each group.
-    result = {
-        "central_value": data_IO.observable_matrix_from_dict(Y_dict=merged_output, values_to_return="central_value")
-    }
-    if "cov" in available_value_types:
-        result["cov"] = nd_block_diag(list(merged_output["cov"].values()))
-        #import scipy.linalg
-        #mats = np.array().reshape(5, 3, 2, 2)
-        #result = [scipy.linalg.block_diag(*bmats) for bmats in mats]
-    return result
-
-
-    # Next, we will merge the predictions of the groups together, careful to follow the order of the observables
-
-    # Below is debug code for converting without following the order. Keeping around for now in case we need it.
-    ## Note that we don't care about the keys of predict_output (which are just the emulation group names),
-    ## but rather the keys stored in the predict_single results, which are "central_values" and "cov".
-    ## This first line just lets us avoid hard coding those names.
-    #merged_output: dict[str, list[npt.NDArray[np.float64]]] = {
-    #    k: [] for k in predict_output.values()
-    #}
-    ## Now, we extract the prediction results from inside of each emulation group to merge the final result together.
-    ## NOTE: In doing so, we will append one emulation group after another. This should be consistent with our
-    ##       convention of ordering results.
-    #for k in merged_output:
-    #    for emulation_group_output in predict_output.values():
-    #        merged_output[k].append(emulation_group_output[k])
-    #return {
-    #    k: np.concatenate(v, axis=1)
-    #    for k, v in merged_output.items()
-    #}
+    return emulation_config.sort_observables_in_matrix.convert(group_matrices=predict_output)
 
 
 ####################################################################################################################
@@ -478,7 +507,9 @@ class EmulationConfig(common_base.CommonBase):
     emulation_groups_config: dict[str, EmulationGroupConfig] = attrs.field(factory=dict)
     config: dict[str, Any] = attrs.field(init=False)
     output_dir: Path = attrs.field(init=False)
-    _observable_filter: data_IO.ObservableFilter | None = attrs.field(default=None)
+    # Optional objects that may provide useful additional functionality
+    _observable_filter: data_IO.ObservableFilter | None = attrs.field(init=False, default=None)
+    _sort_observables_in_matrix: SortEmulationGroupObservables | None = attrs.field(init=False, default=None)
 
     def __attrs_post_init__(self):
         with self.config_file.open() as stream:
@@ -533,3 +564,12 @@ class EmulationConfig(common_base.CommonBase):
                 exclude_list=exclude_list,
             )
         return self._observable_filter
+
+    @property
+    def sort_observables_in_matrix(self) -> SortEmulationGroupObservables:
+        if self._sort_observables_in_matrix is None:
+            if not self.emulation_groups_config:
+                raise ValueError("Need to specify emulation groups to provide an sorting for observable group observables")
+            # Accumulate the include and exclude lists from all emulation groups
+            self._sort_observables_in_matrix = SortEmulationGroupObservables.learn_mapping(self)
+        return self._sort_observables_in_matrix
