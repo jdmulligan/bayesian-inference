@@ -6,10 +6,7 @@ authors: J.Mulligan, R.Ehlers
 '''
 
 import os
-import itertools
 import logging
-import pickle
-import yaml
 
 import numpy as np
 
@@ -194,7 +191,7 @@ def _plot_pca_reconstruction_error_by_feature(results, plot_dir, config, fixed_y
                 0.4,
                 s=observable_key,
                 transform=transform_observable_label_placement,
-                rotation=75,
+                rotation=90,
                 horizontalalignment="center",
                 verticalalignment="center",
                 fontsize=8,
