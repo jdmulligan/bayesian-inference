@@ -307,7 +307,6 @@ class SortEmulationGroupObservables:
 ####################################################################################################################
 def predict(parameters: npt.NDArray[np.float64],
             emulation_config: EmulationConfig,
-            validation_set: bool = False,
             merge_predictions_over_groups: bool = True,
             emulation_group_results: dict[str, dict[str, Any]] | None = None) -> dict[str, npt.NDArray[np.float64]]:
     """
@@ -315,7 +314,6 @@ def predict(parameters: npt.NDArray[np.float64],
 
     :param ndarray[float] parameters: list of parameter values (e.g. [tau0, c1, c2, ...]), with shape (n_samples, n_parameters)
     :param EmulationConfig emulation_config: configuration object for the overall emulator (including all groups)
-    :param bool validation_set: whether to use the validation set (True) or the training set (False)
     :param bool merge_predictions_over_groups: whether to merge predictions over emulation groups (True)
                                                or return a dictionary of predictions for each group (False). Default: True
     :param dict emulator_group_results: dictionary containing results from each emulation group. If None, read from file.
