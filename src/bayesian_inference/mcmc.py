@@ -67,14 +67,14 @@ def run_mcmc(config, closure_index=-1):
     #       If needed we can create a h5py dataset for compression/chunking
 
     # We can use multiprocessing in emcee to parallelize the independent walkers
-    with Pool(processes=1) as pool:
+    with Pool() as pool:
 
         # Construct sampler (we create a dummy daughter class from emcee.EnsembleSampler, to add some logging info)
         # Note: we pass the emulators and experimental data as args to the log_posterior function
         logger.info('Initializing sampler...')
         sampler = LoggingEnsembleSampler(config.n_walkers, ndim, _log_posterior,
                                         args=[min, max, emulation_config, emulation_results, experimental_results],
-                                        )#pool=pool)
+                                        pool=pool)
 
         # Generate random starting positions for each walker
         random_pos = np.random.uniform(min, max, (config.n_walkers, ndim))
