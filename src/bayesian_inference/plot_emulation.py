@@ -14,6 +14,7 @@ import yaml
 import numpy as np
 
 from matplotlib import pyplot as plt
+import matplotlib.transforms
 import seaborn as sns
 sns.set_context('paper', rc={'font.size':18,'axes.titlesize':18,'axes.labelsize':18})
 
@@ -136,7 +137,12 @@ def _plot_pca_reconstruction_error_by_feature(results, plot_dir, config):
     Y_pca = results['PCA']['Y_pca']
     scaler = results['PCA']['scaler']
 
-    colors = [sns.xkcd_rgb['dark sky blue'], sns.xkcd_rgb['denim blue'], sns.xkcd_rgb['light blue'], sns.xkcd_rgb['pale red'], sns.xkcd_rgb['medium green']]
+    colors = [sns.xkcd_rgb['denim blue'], sns.xkcd_rgb['dark sky blue'], sns.xkcd_rgb['light blue'], sns.xkcd_rgb['pale red'], sns.xkcd_rgb['medium green']]
+
+    # Needed to add an axis that maps from index to observable label
+    all_observables = data_IO.read_dict_from_h5(config.output_dir, 'observables.h5')
+    # The validation set doesn't matter for this plot - we just need some predictions to get the feature mapping from
+    Y_dict = data_IO.observable_dict_from_matrix(Y, observables=all_observables, config=config, validation_set=False, observable_filter=config.observable_filter)
 
     for n_chunk in range(1, n_pc_max, n_pc_per_figure):
         n_pc_range = list(range(n_chunk, n_chunk + n_pc_per_figure))
@@ -146,6 +152,7 @@ def _plot_pca_reconstruction_error_by_feature(results, plot_dir, config):
         ax.set_xlabel('PCA feature', fontsize=16)
         ax.set_ylabel('reconstruction error', fontsize=16)
         ax.grid(True)
+        transform_observable_label_placement = matplotlib.transforms.blended_transform_factory(ax.transData, ax.transAxes)
 
         for i, n_pc in enumerate(n_pc_range):
             # Need to invert PCA and undo the scaling
@@ -164,10 +171,31 @@ def _plot_pca_reconstruction_error_by_feature(results, plot_dir, config):
                 linewidth=2,
                 linestyle='-',
                 alpha=1.,
-                color=colors[n_pc % n_pc_per_figure],
+                # Need to shift by 1 because we start counting at 1
+                color=colors[(n_pc - 1) % n_pc_per_figure],
                 label=f"n_pc = {n_pc}",
-                zorder=3 + i,
+                zorder=3 + n_pc_per_figure - i,
             )
+
+        # Plot the observable limits
+        # It would obviously be better to do this with an axis, but it seems that mpl won't handle a categorical axis well
+        # (since the transform is not bijective)
+        current_index = 0
+        for observable_key, _values in Y_dict["central_value"].items():
+            low, high = (current_index, current_index + _values.shape[1])
+            ax.axvline(low, color="black", linestyle="--", alpha=0.5, zorder=1)
+            #ax.axvline(high, color="black", linestyle="--", alpha=0.5, zorder=1)
+            ax.text(
+                (low + high) / 2,
+                0.4,
+                s=observable_key,
+                transform=transform_observable_label_placement,
+                rotation=75,
+                horizontalalignment="center",
+                verticalalignment="center",
+                fontsize=8,
+            )
+            current_index += _values.shape[1]
 
         ax.legend(frameon=False, loc="upper right", fontsize=14)
         fig.tight_layout()
