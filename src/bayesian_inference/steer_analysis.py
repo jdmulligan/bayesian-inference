@@ -8,7 +8,9 @@ Based in part on JETSCAPE/STAT code.
 import argparse
 import logging
 import os
+import shutil
 import yaml
+from pathlib import Path
 
 from bayesian_inference import data_IO
 from bayesian_inference import emulation
@@ -71,6 +73,9 @@ class SteerAnalysis(common_base.CommonBase):
         # Add logging to file
         _root_log = logging.getLogger()
         _root_log.addHandler(logging.FileHandler(os.path.join(self.output_dir, 'steer_analysis.log'), 'w'))
+
+        # Also write analysis config to shared directory
+        shutil.copy(self.config_file, Path(self.output_dir) / "steer_analysis_config.yaml")
 
         # Loop through each analysis
         with helpers.progress_bar() as progress:
