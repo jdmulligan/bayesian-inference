@@ -22,7 +22,8 @@ logger = logging.getLogger(__name__)
 
 #---------------------------------------------------------------
 def plot_observable_panels(plot_list, labels, colors, columns, config, plot_dir, filename,
-                           linewidth=2, observable_filter: data_IO.ObservableFilter | None = None):
+                           linewidth=2, observable_filter: data_IO.ObservableFilter | None = None,
+                           plot_exp_data=True, bar_plot=False, ymin=0, ymax=2, ylabel=''):
     '''
     Plot observables before and after PCA -- for fixed n_pc
     '''
@@ -54,8 +55,10 @@ def plot_observable_panels(plot_list, labels, colors, columns, config, plot_dir,
         with open(plot_config_file, 'r') as stream:
             plot_config = yaml.safe_load(stream)
         plot_block = plot_config[observable_type][observable]
-        xtitle = latex_from_tlatex(plot_block['xtitle'])
-        ytitle = latex_from_tlatex(plot_block['ytitle_AA'])
+        xtitle = rf"{latex_from_tlatex(plot_block['xtitle'])}"
+        ytitle = rf"{latex_from_tlatex(plot_block['ytitle_AA'])}"
+        if ylabel:
+            ytitle = ylabel
 
         color_data = sns.xkcd_rgb['almost black']
         linewidth = linewidth
@@ -85,9 +88,9 @@ def plot_observable_panels(plot_list, labels, colors, columns, config, plot_dir,
             col = i_subplot // plot_shape[0]
             row = i_subplot % plot_shape[0]
 
-        axs[row,col].set_xlabel(rf'{xtitle}', fontsize=fontsize)
-        axs[row,col].set_ylabel(rf'{ytitle}', fontsize=fontsize)
-        axs[row,col].set_ylim([0., 2.])
+        axs[row,col].set_xlabel(xtitle, fontsize=fontsize)
+        axs[row,col].set_ylabel(ytitle, fontsize=fontsize)
+        axs[row,col].set_ylim([ymin, ymax])
         axs[row,col].set_xlim(xmin[0], xmax[-1])
 
         # Draw predictions
@@ -97,17 +100,23 @@ def plot_observable_panels(plot_list, labels, colors, columns, config, plot_dir,
                     label = label=labels[i_prediction]
                 else:
                     label = None
-                axs[row,col].plot(x, plot_list[i_prediction][observable_label][columns[i_col]],
-                                  label=label, color=colors[i_prediction],
-                                  linewidth=linewidth, alpha=alpha)
+                if bar_plot:
+                    axs[row,col].bar(x, plot_list[i_prediction][observable_label][columns[i_col]],
+                                     label=label, color=colors[i_prediction],
+                                     width=2*xerr, alpha=alpha)
+                else:
+                    axs[row,col].plot(x, plot_list[i_prediction][observable_label][columns[i_col]],
+                                    label=label, color=colors[i_prediction],
+                                    linewidth=linewidth, alpha=alpha)
 
         # Draw data
-        axs[row,col].errorbar(x, data_y, xerr=xerr, yerr=data_y_err,
-                              color=color_data, marker='s', markersize=markersize, linestyle='', label='Experimental data')
+        if plot_exp_data:
+            axs[row,col].errorbar(x, data_y, xerr=xerr, yerr=data_y_err,
+                                color=color_data, marker='s', markersize=markersize, linestyle='', label='Experimental data')
 
-        # Draw dashed line at RAA=1
-        axs[row,col].plot([xmin[0], xmax[-1]], [1, 1],
-                          sns.xkcd_rgb['almost black'], alpha=alpha, linewidth=linewidth, linestyle='dotted')
+            # Draw dashed line at RAA=1
+            axs[row,col].plot([xmin[0], xmax[-1]], [1, 1],
+                            sns.xkcd_rgb['almost black'], alpha=alpha, linewidth=linewidth, linestyle='dotted')
 
         # Draw legend
         axs[row,col].legend(loc='upper right', title=observable_label,
