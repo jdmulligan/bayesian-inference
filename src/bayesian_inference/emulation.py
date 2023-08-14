@@ -102,29 +102,6 @@ class SortEmulationGroupObservables:
             shape=shape,
         )
 
-        #shape_of_merged_output_matrix = []
-        #for emulator_group_output in emulator_groups_output.values():
-        #    # Grab the first dimension from the number of design points
-        #    y_reco_shape = emulator_group_output["Y_reconstructed_truncated"].shape
-        #    if not shape_of_merged_output_matrix:
-        #        shape_of_merged_output_matrix.append(*y_reco_shape)
-        #    else:
-        #        # Add in the additional dimensions.
-        #        shape_of_merged_output_matrix[1] += y_reco_shape[1]
-        # TODO: Store this!
-
-        #emulation_group_prediction_observable_dict = {}
-        ## TODO: This isn't terribly efficient. Can we store this mapping somehow?
-        #for emulation_group_name, emulation_group_config in emulation_config.emulation_groups_config.items():
-        #    group_predict_output = predict_output[emulation_group_name]
-        #    emulation_group_prediction_observable_dict[emulation_group_name] = data_IO.observable_dict_from_matrix(
-        #        Y=group_predict_output["central_value"],
-        #        observables=all_observables,
-        #        cov=group_predict_output.get("cov", np.array([])),
-        #        validation_set=validation_set,
-        #        observable_filter=emulation_group_config.observable_filter,
-        #    )
-
     def convert(self, group_matrices: dict[str, npt.NDArray[np.float64]]) -> dict[str, npt.NDArray[np.float64]]:
         """ Convert a matrix to match the sorted observables.
 
@@ -366,93 +343,6 @@ def predict(parameters: npt.NDArray[np.float64],
 
     # Now, we want to merge predictions over groups
     return emulation_config.sort_observables_in_matrix.convert(group_matrices=predict_output)
-    #sort_observables_in_matrix = SortEmulationGroupObservables.learn_mapping(emulation_config)
-    #return sort_observables_in_matrix.convert(predict_output)
-
-    # First, we need to figure out how observables map to the emulator groups
-    all_observables = data_IO.read_dict_from_h5(emulation_config.output_dir, 'observables.h5')
-    emulation_group_prediction_observable_dict = {}
-    # TODO: This isn't terribly efficient. Can we store this mapping somehow?
-    for emulation_group_name, emulation_group_config in emulation_config.emulation_groups_config.items():
-        group_predict_output = predict_output[emulation_group_name]
-        emulation_group_prediction_observable_dict[emulation_group_name] = data_IO.observable_dict_from_matrix(
-            Y=group_predict_output["central_value"],
-            observables=all_observables,
-            cov=group_predict_output.get("cov", np.array([])),
-            validation_set=validation_set,
-            observable_filter=emulation_group_config.observable_filter,
-        )
-        #logger.info("hold up")
-
-    # Does it have "central_value"? "cov"?
-    available_value_types = set([
-        value_type
-        for group in emulation_group_prediction_observable_dict.values()
-        for value_type in group
-    ])
-    #logger.warning(f"{predict_output=}")
-    #logger.warning(f"{available_value_types=}")
-    #logger.warning(f"{emulation_group_prediction_observable_dict=}")
-
-    # We don't care about the observable groups anymore, and there should be no overlap, so we'll just merge them together.
-    # Validation
-    flat_predictions_dict = {
-        value_type: {
-            k: v
-            for group in emulation_group_prediction_observable_dict.values()
-            for k, v in group[value_type].items()
-        }
-        for value_type in available_value_types
-    }
-    if len(set(flat_predictions_dict["central_value"])) != len(flat_predictions_dict["central_value"]):
-        raise ValueError("Duplicate observable keys found when merging emulator groups!")
-    merged_output: dict[str, dict[str, npt.NDArray[np.float64]]] = {
-        # NOTE: We're compiling from emulation_group_prediction_observable_dict, but this contains the same info
-        #       on whether there are "cov" matrices
-        k: {} for k in available_value_types
-    }
-    # Reorder to match observables
-    for value_type in available_value_types:
-        for observable_key in data_IO.sorted_observable_list_from_dict(all_observables):
-            value = flat_predictions_dict[value_type].get(observable_key)
-            if value is not None:
-                merged_output[value_type][observable_key] = value
-
-    # {
-    #     "central_value": np.array.shape: (n_design, n_features),
-    #     "cov": np.array.shape: (n_design, n_features),
-    # }
-    # TODO: What about covariance between the groups? The cov here only accounts for the covariance within each group.
-    result = {
-        "central_value": data_IO.observable_matrix_from_dict(Y_dict=merged_output, values_to_return="central_value")
-    }
-    if "cov" in available_value_types:
-        result["cov"] = nd_block_diag(list(merged_output["cov"].values()))
-        #import scipy.linalg
-        #mats = np.array().reshape(5, 3, 2, 2)
-        #result = [scipy.linalg.block_diag(*bmats) for bmats in mats]
-    return result
-
-
-    # Next, we will merge the predictions of the groups together, careful to follow the order of the observables
-
-    # Below is debug code for converting without following the order. Keeping around for now in case we need it.
-    ## Note that we don't care about the keys of predict_output (which are just the emulation group names),
-    ## but rather the keys stored in the predict_single results, which are "central_values" and "cov".
-    ## This first line just lets us avoid hard coding those names.
-    #merged_output: dict[str, list[npt.NDArray[np.float64]]] = {
-    #    k: [] for k in predict_output.values()
-    #}
-    ## Now, we extract the prediction results from inside of each emulation group to merge the final result together.
-    ## NOTE: In doing so, we will append one emulation group after another. This should be consistent with our
-    ##       convention of ordering results.
-    #for k in merged_output:
-    #    for emulation_group_output in predict_output.values():
-    #        merged_output[k].append(emulation_group_output[k])
-    #return {
-    #    k: np.concatenate(v, axis=1)
-    #    for k, v in merged_output.items()
-    #}
 
 
 ####################################################################################################################
