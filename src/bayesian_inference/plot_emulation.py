@@ -53,6 +53,7 @@ def plot(config):
         # TODO: These deserve to be a global plot. Also nice to have for the group
         _plot_pca_explained_variance(results, plot_dir, emulation_group_config)
         _plot_pca_reconstruction_error_by_feature(results, plot_dir, emulation_group_config)
+        _plot_pca_reconstruction_error_by_feature(results, plot_dir, emulation_group_config, fixed_y_range=True)
 
         # Emulator plots
         _plot_emulator_observables(results, emulation_group_config, plot_dir, validation_set=False)
@@ -118,7 +119,7 @@ def _plot_pca_reconstruction_error(results, plot_dir, config):
     plt.close()
 
 
-def _plot_pca_reconstruction_error_by_feature(results, plot_dir, config):
+def _plot_pca_reconstruction_error_by_feature(results, plot_dir, config, fixed_y_range: bool = False):
     """ Plot reconstruction (ie. truncated PCA) - nominal vs feature as a function of n_pc.
 
     Here, features are the point by point observables. We'll plot a separate figure per PC.
@@ -144,6 +145,7 @@ def _plot_pca_reconstruction_error_by_feature(results, plot_dir, config):
     # The validation set doesn't matter for this plot - we just need some predictions to get the feature mapping from
     Y_dict = data_IO.observable_dict_from_matrix(Y, observables=all_observables, config=config, validation_set=False, observable_filter=config.observable_filter)
 
+    y_max = 0
     for n_chunk in range(1, n_pc_max, n_pc_per_figure):
         n_pc_range = list(range(n_chunk, n_chunk + n_pc_per_figure))
         # Split into groups of n_pcs for readability
@@ -164,6 +166,7 @@ def _plot_pca_reconstruction_error_by_feature(results, plot_dir, config):
                 y = np.sum(np.abs(feature_diff_at_fixed_n_pc), axis=0) / feature_diff_at_fixed_n_pc.shape[0]
             else:
                 y = np.abs(feature_diff_at_fixed_n_pc[selected_design_point, :])
+            y_max = np.maximum(y_max, np.max(y))
 
             ax.plot(
                 x,
@@ -174,7 +177,8 @@ def _plot_pca_reconstruction_error_by_feature(results, plot_dir, config):
                 # Need to shift by 1 because we start counting at 1
                 color=colors[(n_pc - 1) % n_pc_per_figure],
                 label=f"n_pc = {n_pc}",
-                zorder=3 + n_pc_per_figure - i,
+                #zorder=3 + n_pc_per_figure - i,
+                zorder=3 + i,
             )
 
         # Plot the observable limits
@@ -197,6 +201,8 @@ def _plot_pca_reconstruction_error_by_feature(results, plot_dir, config):
             )
             current_index += _values.shape[1]
 
+        if fixed_y_range:
+            ax.set_ylim([-0.05, y_max * 1.05])
         ax.legend(frameon=False, loc="upper right", fontsize=14)
         fig.tight_layout()
         selected_design_point_str = ""
@@ -212,7 +218,11 @@ def _plot_pca_reconstruction_error_by_feature(results, plot_dir, config):
                 stop = feature_diff_at_fixed_n_pc.shape[-1]
             selected_design_point_str = f"s_{start}_{stop}"
 
-        _path = os.path.join(plot_dir, f'PCA_reconstruction_error__design_point_{selected_design_point_str}__n_pc_{"_".join([str(n_pc_range[0]), str(n_pc_range[-1])])}.pdf')
+        name = f"PCA_reconstruction_error__design_point_{selected_design_point_str}"
+        if fixed_y_range:
+            name += "__fixed_y_range"
+        name += f'__n_pc_{"_".join([str(n_pc_range[0]), str(n_pc_range[-1])])}'
+        _path = os.path.join(plot_dir, f"{name}.pdf")
         fig.savefig(_path)
         plt.close(fig)
 
