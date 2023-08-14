@@ -62,7 +62,6 @@ class SortEmulationGroupObservables:
         # First, we need to start with all available observables (beyond just what's in any given group)
         # to learn the entire mapping
         all_observables = data_IO.read_dict_from_h5(emulation_config.output_dir, 'observables.h5')
-        logger.info(f"{list(all_observables.keys())=}")
         current_position = 0
         observable_slices = {}
         for observable_key in data_IO.sorted_observable_list_from_dict(all_observables[prediction_key]):
@@ -84,8 +83,8 @@ class SortEmulationGroupObservables:
                     slice(current_group_bin, current_group_bin + (observable_slice.stop - observable_slice.start))
                 )
                 current_group_bin += (observable_slice.stop - observable_slice.start)
-                logger.info(f"{observable_key=}, {observable_emulation_group_map[observable_key]=}, {current_group_bin=}")
-        logger.info(f"Sorted order: {observable_slices=}")
+                logger.debug(f"{observable_key=}, {observable_emulation_group_map[observable_key]=}, {current_group_bin=}")
+        logger.debug(f"Sorted order: {observable_slices=}")
 
         # And then finally put them in the proper sorted observable order
         observable_emulation_group_map = {
@@ -96,8 +95,8 @@ class SortEmulationGroupObservables:
         # We want the shape to allow us to preallocate the array:
         last_observable = list(observable_slices)[-1]
         shape = (all_observables[prediction_key][observable_key]['y'].shape[1], observable_slices[last_observable].stop)
+        logger.debug(f"{shape=}")
 
-        logger.info(f"{shape=}")
         return cls(
             emulation_group_to_observable_matrix=observable_emulation_group_map,
             shape=shape,
@@ -346,7 +345,15 @@ def predict(parameters: npt.NDArray[np.float64],
         emulation_group_results = {}
     predict_output = {}
     for emulation_group_name, emulation_group_config in emulation_config.emulation_groups_config.items():
-        emulation_group_result = emulation_group_results.get(emulation_group_name, read_emulators(emulation_group_config))
+        emulation_group_result = emulation_group_results.get(emulation_group_name)
+        # Only load the emulator group directly from file if needed. If called frequently
+        # (eg. in the MCMC), it's probably better to load it once and pass it in.
+        # NOTE: I know that get() can provide a second argument as the default, but a quick check showed that
+        #       `read_emulators` was executing far more than expected (maybe trying to determine some default value?).
+        #       However, separately it out like this seems to avoid the issue, but better to just avoid the issue.
+        if emulation_group_result is None:
+            emulation_group_result = read_emulators(emulation_group_config)
+
         predict_output[emulation_group_name] = predict_emulation_group(
             parameters=parameters,
             results=emulation_group_result,
@@ -356,7 +363,6 @@ def predict(parameters: npt.NDArray[np.float64],
     # Allow the option to return immediately to allow the study of performance per emulation group
     if not merge_predictions_over_groups:
         return predict_output
-    logger.info(f"{predict_output=}")
 
     # Now, we want to merge predictions over groups
     return emulation_config.sort_observables_in_matrix.convert(group_matrices=predict_output)
