@@ -14,7 +14,6 @@ Based in part on JETSCAPE/STAT code.
 
 from __future__ import annotations
 
-import functools
 import logging
 import os
 import yaml
@@ -36,30 +35,43 @@ logger = logging.getLogger(__name__)
 
 
 @attrs.define
-class EmulationClassToSortedObservables:
+class SortEmulationGroupObservables:
     """ Class to track and covert between emulation group matrices to match sorted observables.
 
     emulation_group_to_observable_matrix: Mapping from emulation group matrix to the matrix of observables. Format:
         {observable_name: (emulator_group_name, slice in output_matrix, slice in emulator_group_matrix)}
+    shape: Shape of matrix output.
+    available_value_types:
     """
-    emulation_group_to_observable_matrix: ... = attrs.field()
+    emulation_group_to_observable_matrix: dict[str, tuple[str, slice, slice]]
+    shape: tuple[int, int]
+    _available_value_types: set[str] | None = attrs.field(init=False, default=None)
 
-    def learn_mapping(self, emulation_config: EmulationConfig, emulator_groups_output: dict[str, Any]) -> None:
-        prediction_key = "Predictions"
+    @classmethod
+    def learn_mapping(cls, emulation_config: EmulationConfig) -> SortEmulationGroupObservables:
+        """ Construct this object by learning the mapping from the emulation group prediction matrices to the sorted and merged matrices.
 
+        :param EmulationConfig emulation_config: Configuration for the emulator(s).
+        :return: Constructed object.
+        """
+        # NOTE: This could be configurable (eg. for validation). However, we don't seem to immediately
+        #       need this functionality, so we'll omit it for now.
+        prediction_key = "Prediction"
 
         # Now we need the mapping from emulator groups to observables with the right indices.
         # First, we need to start with all available observables (beyond just what's in any given group)
         # to learn the entire mapping
         all_observables = data_IO.read_dict_from_h5(emulation_config.output_dir, 'observables.h5')
+        logger.info(f"{list(all_observables.keys())=}")
         current_position = 0
         observable_slices = {}
         for observable_key in data_IO.sorted_observable_list_from_dict(all_observables[prediction_key]):
             n_bins = all_observables[prediction_key][observable_key]['y'].shape[0]
             observable_slices[observable_key] = slice(current_position, current_position + n_bins)
-            current_bin += n_bins
+            current_position += n_bins
 
-        # Now, take advantage of the ordering in the emulator groups.
+        # Now, take advantage of the ordering in the emulator groups. (ie. the ordering in the group
+        # matrix is consistent with the order of the observable names).
         observable_emulation_group_map = {}
         for emulation_group_name, emulation_group_config in emulation_config.emulation_groups_config.items():
             emulation_group_observable_keys = data_IO.sorted_observable_list_from_dict(all_observables[prediction_key], observable_filter=emulation_group_config.observable_filter)
@@ -72,8 +84,10 @@ class EmulationClassToSortedObservables:
                     slice(current_group_bin, current_group_bin + (observable_slice.stop - observable_slice.start))
                 )
                 current_group_bin += (observable_slice.stop - observable_slice.start)
+                logger.info(f"{observable_key=}, {observable_emulation_group_map[observable_key]=}, {current_group_bin=}")
+        logger.info(f"Sorted order: {observable_slices=}")
 
-        # And then finally put them in the proper observable order
+        # And then finally put them in the proper sorted observable order
         observable_emulation_group_map = {
             k: observable_emulation_group_map[k]
             for k in observable_slices
@@ -81,7 +95,14 @@ class EmulationClassToSortedObservables:
 
         # We want the shape to allow us to preallocate the array:
         last_observable = list(observable_slices)[-1]
-        shape_of_merged_output_matrix = (all_observables[prediction_key][observable_key]['y'].shape[1], observable_slices[last_observable].stop)
+        shape = (all_observables[prediction_key][observable_key]['y'].shape[1], observable_slices[last_observable].stop)
+
+        logger.info(f"{shape=}")
+        return cls(
+            emulation_group_to_observable_matrix=observable_emulation_group_map,
+            shape=shape,
+        )
+
         #shape_of_merged_output_matrix = []
         #for emulator_group_output in emulator_groups_output.values():
         #    # Grab the first dimension from the number of design points
@@ -105,18 +126,35 @@ class EmulationClassToSortedObservables:
         #        observable_filter=emulation_group_config.observable_filter,
         #    )
 
-    def convert(self, group_matrices: dict[str, npt.NDArray[np.float64]]) -> npt.NDArray[np.float64]:
+    def convert(self, group_matrices: dict[str, npt.NDArray[np.float64]]) -> dict[str, npt.NDArray[np.float64]]:
         """ Convert a matrix to match the sorted observables.
 
-        :param matrix: Matrix to convert.
-        :return: Converted matrix.
+        :param group_matrices: Matrixes to convert by emulation group. eg:
+            {"group_1": {"central_value": [...], "cov": [...]}, "group_2": ...}
+        :return: Converted matrix for each available value type.
         """
-        group_matrices[Y]
-        output = np.zeros(Y.shape)
-        for (emulator_group_name, slice_in_matrix) in self._sorted_observable_indices.items():
-            # shape = (n_design, n_features)
-            # can extract this from Y_reconstructed_truncated.shape, for example
-            return matrix[:, self._sorted_observable_indices]
+        if self._available_value_types is None:
+            self._available_value_types = set([
+                value_type
+                for group in group_matrices.values()
+                for value_type in group
+            ])
+
+        output = {}
+        # Requires special handling since we're adding matrices
+        if "cov" in self._available_value_types:
+            output["cov"] = nd_block_diag([m["cov"] for m in group_matrices.values()])
+        # Handle the rest (as of 14 August 2023, it's just "central_value")
+        for value_type in self._available_value_types:
+            if value_type == "cov":
+                continue
+
+            output[value_type] = np.zeros(self.shape)
+            for (emulation_group_name, slice_in_output_matrix, slice_in_emulation_group_matrix), emulation_group_matrix in zip(
+                self.emulation_group_to_observable_matrix.values(), group_matrices.values()
+            ):
+                output[value_type][:, slice_in_output_matrix] = emulation_group_matrix[value_type][:, slice_in_emulation_group_matrix]
+        return output
 
 
 ####################################################################################################################
@@ -269,14 +307,19 @@ def write_emulators(config: EmulationGroupConfig, output_dict: dict[str, Any]) -
 	    pickle.dump(output_dict, f)
 
 ####################################################################################################################
-def nd_block_diag(arrs):
-    """See: https://stackoverflow.com/q/62384509"""
-    shapes = np.array([i.shape for i in arrs])
+def nd_block_diag(arrays):
+    """ Add 2D matrices into a block diagonal matrix in n-dimensions.
+
+    See: https://stackoverflow.com/q/62384509
+
+    :param arrays list[np.array]: List of arrays to block diagonalize.
+    """
+    shapes = np.array([i.shape for i in arrays])
 
     out = np.zeros(np.append(np.amax(shapes[:,:-2],axis=0), [shapes[:,-2].sum(), shapes[:,-1].sum()]))
     r, c = 0, 0
     for i, (rr, cc) in enumerate(shapes[:,-2:]):
-        out[..., r:r + rr, c:c + cc] = arrs[i]
+        out[..., r:r + rr, c:c + cc] = arrays[i]
         r += rr
         c += cc
 
@@ -313,8 +356,13 @@ def predict(parameters: npt.NDArray[np.float64],
     # Allow the option to return immediately to allow the study of performance per emulation group
     if not merge_predictions_over_groups:
         return predict_output
+    logger.info(f"{predict_output=}")
 
     # Now, we want to merge predictions over groups
+    return emulation_config.sort_observables_in_matrix.convert(group_matrices=predict_output)
+    #sort_observables_in_matrix = SortEmulationGroupObservables.learn_mapping(emulation_config)
+    #return sort_observables_in_matrix.convert(predict_output)
+
     # First, we need to figure out how observables map to the emulator groups
     all_observables = data_IO.read_dict_from_h5(emulation_config.output_dir, 'observables.h5')
     emulation_group_prediction_observable_dict = {}
@@ -562,7 +610,9 @@ class EmulationConfig(common_base.CommonBase):
     emulation_groups_config: dict[str, EmulationGroupConfig] = attrs.field(factory=dict)
     config: dict[str, Any] = attrs.field(init=False)
     output_dir: Path = attrs.field(init=False)
-    _observable_filter: data_IO.ObservableFilter | None = attrs.field(default=None)
+    # Optional objects that may provide useful additional functionality
+    _observable_filter: data_IO.ObservableFilter | None = attrs.field(init=False, default=None)
+    _sort_observables_in_matrix: SortEmulationGroupObservables | None = attrs.field(init=False, default=None)
 
     def __attrs_post_init__(self):
         with self.config_file.open() as stream:
@@ -617,3 +667,12 @@ class EmulationConfig(common_base.CommonBase):
                 exclude_list=exclude_list,
             )
         return self._observable_filter
+
+    @property
+    def sort_observables_in_matrix(self) -> SortEmulationGroupObservables:
+        if self._sort_observables_in_matrix is None:
+            if not self.emulation_groups_config:
+                raise ValueError("Need to specify emulation groups to provide an sorting for observable group observables")
+            # Accumulate the include and exclude lists from all emulation groups
+            self._sort_observables_in_matrix = SortEmulationGroupObservables.learn_mapping(self)
+        return self._sort_observables_in_matrix
