@@ -59,10 +59,9 @@ def run_mcmc(config, closure_index=-1):
     )
     emulation_results = emulation_config.read_all_emulator_groups()
 
-    # FIXME: The experimental results are NOT in the same order as the emulator groups!
     # Load experimental data into arrays: experimental_results['y'/'y_err'] (n_features,)
     # In the case of a closure test, we use the pseudodata from the validation design point
-    experimental_results = data_IO.data_array_from_h5(config.output_dir, 'observables.h5', pseudodata_index=closure_index)
+    experimental_results = data_IO.data_array_from_h5(config.output_dir, 'observables.h5', pseudodata_index=closure_index, observable_filter=emulation_config.observable_filter)
 
     # TODO: By default the chain will be stored in memory as a numpy array
     #       If needed we can create a h5py dataset for compression/chunking
