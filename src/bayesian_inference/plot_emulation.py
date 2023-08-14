@@ -309,7 +309,7 @@ def _plot_emulator_residuals(results, config, plot_dir, validation_set=False):
             (
                 std_emulator,
                 np.ravel(
-                    np.sqrt(np.diag(emulator_predictions_dict['cov'][observable_label], axis1=1, axis2=2))
+                    np.sqrt(np.diagonal(emulator_predictions_dict['cov'][observable_label], axis1=1, axis2=2))
                 )
             )
         )
