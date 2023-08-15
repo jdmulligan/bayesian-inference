@@ -43,9 +43,9 @@ def fit_emulators(emulation_config: EmulationConfig) -> None:
     emulator_groups_output = {}
     for emulation_group_name, emulation_group_config in emulation_config.emulation_groups_config.items():
         emulator_groups_output[emulation_group_name] = fit_emulator_group(emulation_group_config)
-    for emulation_group_config, emulation_group_output in zip(emulation_config.emulation_groups_config.values(), emulator_groups_output.values()):
-        write_emulators(config=emulation_group_config, output_dict=emulation_group_output)
-
+        write_emulators(config=emulation_group_config, output_dict=emulator_groups_output[emulation_group_name])
+    # NOTE: We store everything in a dict so we can later return these if we decide it's helpful. However,
+    #       it doesn't appear to be at the moment (August 2023), so we leave as is.
 
 ####################################################################################################################
 def fit_emulator_group(config: EmulationGroupConfig) -> dict[str, Any]:
