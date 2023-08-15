@@ -23,10 +23,13 @@ logger = logging.getLogger(__name__)
 #---------------------------------------------------------------
 def plot_observable_panels(plot_list, labels, colors, columns, config, plot_dir, filename,
                            linewidth=2, observable_filter: data_IO.ObservableFilter | None = None,
-                           plot_exp_data=True, bar_plot=False, ymin=0, ymax=2, ylabel=''):
+                           plot_exp_data=True, bar_plot=False, ymin=0, ymax=2, ylabel='',
+                           legend_kwargs: dict | None = None):
     '''
     Plot observables before and after PCA -- for fixed n_pc
     '''
+    if legend_kwargs is None:
+        legend_kwargs = {}
     # Loop through observables and plot
     # Get sorted list of observables
     observables = data_IO.read_dict_from_h5(config.output_dir, 'observables.h5', verbose=False)
@@ -120,7 +123,7 @@ def plot_observable_panels(plot_list, labels, colors, columns, config, plot_dir,
 
         # Draw legend
         axs[row,col].legend(loc='upper right', title=observable_label,
-                            title_fontsize=fontsize, fontsize=fontsize, frameon=False)
+                            title_fontsize=fontsize, fontsize=fontsize, frameon=False, **legend_kwargs)
 
         # Increment subplot, and save if done with plot
         i_subplot += 1

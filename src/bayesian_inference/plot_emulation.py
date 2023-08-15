@@ -47,6 +47,7 @@ def plot(config):
         results = emulation_results[emulation_group_name]
         _plot_pca_reconstruction_error(results, plot_dir, emulation_group_config)
         _plot_pca_reconstruction_observables(results, emulation_group_config, plot_dir)
+        _plot_pca_reconstruction_observables_per_n_pc(results, emulation_group_config, plot_dir)
         # TODO: These deserve to be a global plot. Also nice to have for the group
         _plot_pca_explained_variance(results, plot_dir, emulation_group_config)
         _plot_pca_reconstruction_error_by_feature(results, plot_dir, emulation_group_config)
@@ -116,6 +117,7 @@ def _plot_pca_reconstruction_error(results, plot_dir, config):
     plt.close()
 
 
+#---------------------------------------------------------------
 def _plot_pca_reconstruction_error_by_feature(results, plot_dir, config, fixed_y_range: bool = False):
     """ Plot reconstruction (ie. truncated PCA) - nominal vs feature as a function of n_pc.
 
@@ -246,6 +248,48 @@ def _plot_pca_reconstruction_observables(results, config, plot_dir):
     design_point_index = 0
     filename = f'PCA_observables__design_point{design_point_index}'
     plot_utils.plot_observable_panels(plot_list, labels, colors, [design_point_index], config, plot_dir, filename, observable_filter=config.observable_filter)
+
+#---------------------------------------------------------------
+def _plot_pca_reconstruction_observables_per_n_pc(results, config, plot_dir):
+    '''
+    Plot observables before and after PCA as a function of n_pc.
+
+    This enable exploration of the behavior without having to retrain the emulator.
+    '''
+    # Setup
+    n_pc_max = 30
+    n_pc_per_figure = 10
+
+    # Get PCA results -- 2D arrays: (design_point_index, observable_bins)
+    pca = results['PCA']['pca']
+    Y = results['PCA']['Y']
+    Y_pca = results['PCA']['Y_pca']
+    scaler = results['PCA']['scaler']
+
+    # Translate matrix of stacked observables to a dict of matrices per observable
+    observables = data_IO.read_dict_from_h5(config.output_dir, 'observables.h5')
+    Y_dict = data_IO.observable_dict_from_matrix(Y, observables, config=config, validation_set=False, observable_filter=config.observable_filter)
+
+    for n_chunk in range(1, n_pc_max, n_pc_per_figure):
+        n_pc_range = list(range(n_chunk, n_chunk + n_pc_per_figure))
+        Y_list_truncated_reconstructed = []
+        for n_pc in n_pc_range:
+            # Need to invert PCA and undo the scaling
+            Y_reconstructed_truncated = scaler.inverse_transform(Y_pca[:, :n_pc].dot(pca.components_[:n_pc,:]))
+            # Translate matrix of stacked observables to a dict of matrices per observable
+            Y_list_truncated_reconstructed.append(
+                data_IO.observable_dict_from_matrix(Y_reconstructed_truncated, observables, validation_set=False, observable_filter=config.observable_filter)
+            )
+
+        # Pass in a list of dicts to plot, each of which has structure Y[observable_label][design_point_index]
+        plot_list = [Y_dict['central_value'], *[_y["central_value"] for _y in Y_list_truncated_reconstructed]]
+        labels = [r'JETSCAPE (before PCA)', *[rf'JETSCAPE (PCA {n_pc})' for n_pc in n_pc_range]]
+        colors = sns.color_palette("rocket", n_colors=len(labels))
+
+        design_point_index = 0
+        filename = f'PCA_observables__design_point{design_point_index}__n_pc_{n_pc_range[0]}_{n_pc_range[-1]}'
+        plot_utils.plot_observable_panels(plot_list, labels, colors, [design_point_index], config, plot_dir, filename, observable_filter=config.observable_filter, legend_kwargs={"ncol": 2})
+
 
 #-------------------------------------------------------------------------------------------
 def _plot_emulator_observables(results, config, plot_dir, validation_set=False):
