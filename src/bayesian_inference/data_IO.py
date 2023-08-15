@@ -241,6 +241,8 @@ def predictions_matrix_from_h5(output_dir, filename, validation_set=False, obser
             Y = values
         else:
             Y = np.concatenate([Y,values], axis=1)
+    if length_of_Y == 0:
+        raise ValueError(f"No observables found in the prediction file for {observable_filter}")
     logger.info(f'  Total shape of {prediction_label} data (n_samples, n_features): {Y.shape}')
 
     return Y
