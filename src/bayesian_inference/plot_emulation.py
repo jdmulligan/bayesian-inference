@@ -77,7 +77,7 @@ def _plot_pca_explained_variance(results, plot_dir, config):
     plt.ylabel('fraction explained variance', fontsize=16)
     plt.grid(True)
     plt.plot(x, y, linewidth=2, linestyle='-', alpha=1., color=sns.xkcd_rgb['dark sky blue'])
-    plt.plot([], [], ' ', label=f"n_pc = {n_pc_selected}")
+    plt.plot([], [], ' ', label=f"n_pc_selected= {n_pc_selected}")
     plt.legend(frameon=False)
     plt.tight_layout()
     plt.savefig(os.path.join(plot_dir, 'PCA_explained_variance.pdf'))
