@@ -15,10 +15,7 @@ from pathlib import Path
 from bayesian_inference import data_IO
 from bayesian_inference import emulation
 from bayesian_inference import mcmc
-from bayesian_inference import plot_emulation
-from bayesian_inference import plot_mcmc
-from bayesian_inference import plot_qhat
-from bayesian_inference import plot_closure
+from bayesian_inference import plot_input_data, plot_emulation, plot_mcmc, plot_qhat, plot_closure
 
 from bayesian_inference import common_base, helpers
 
@@ -165,10 +162,25 @@ class SteerAnalysis(common_base.CommonBase):
         for analysis_name,analysis_config in self.analyses.items():
             for parameterization in analysis_config['parameterizations']:
 
-                if self.plot['emulators']:
+                if any(self.plot.values()):
                     logger.info('========================================================================')
                     logger.info(f'Plotting for {analysis_name} ({parameterization} parameterization)...')
                     logger.info("")
+
+                if self.plot["input_data"]:
+                    logger.info('------------------------------------------------------------------------')
+                    logger.info(f'Plotting input data for {analysis_name}_{parameterization}...')
+                    emulation_config = emulation.EmulationConfig.from_config_file(
+                        analysis_name=analysis_name,
+                        parameterization=parameterization,
+                        analysis_config=analysis_config,
+                        config_file=self.config_file,
+                    )
+                    plot_input_data.plot(emulation_config)
+                    logger.info(f'Done!')
+                    logger.info("")
+
+                if self.plot['emulators']:
 
                     logger.info('------------------------------------------------------------------------')
                     logger.info(f'Plotting emulators for {analysis_name}_{parameterization}...')

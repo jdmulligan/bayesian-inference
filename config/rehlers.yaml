@@ -2,16 +2,17 @@
 #-------------------------------------------
 # General parameters
 
-output_dir: 'output/20230811'
+output_dir: 'output/20230814'
 
 initialize_observables: False
 fit_emulators: False
-run_mcmc: True
+run_mcmc: False
 run_closure_tests: False
 
 plot:
-  emulators: True
-  mcmc: True
+  input_data: True
+  emulators: False
+  mcmc: False
   qhat: False
   closure_tests: False
 
