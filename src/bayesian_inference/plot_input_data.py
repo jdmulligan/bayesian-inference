@@ -58,7 +58,13 @@ def _plot_pairplot_correlations(config: emulation.EmulationConfig, plot_dir: Pat
     df["design_point"] = np.arange(df.shape[0])
 
     # Plot
-    sns.pairplot(df, hue="design_point")
+    g = sns.pairplot(
+        df,
+        #hue="design_point",
+        #diag_kind='hist',
+        #plot_kws={'alpha':0.7, 's':3, 'color':'blue'},
+        #diag_kws={'color':'blue', 'fill':True, 'bins':20}
+    )
     #plt.tight_layout()
     plt.savefig(plot_dir / "pairplot_correlations.pdf")
     # Cleanup
