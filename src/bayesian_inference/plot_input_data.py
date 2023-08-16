@@ -52,19 +52,39 @@ def _plot_pairplot_correlations(config: emulation.EmulationConfig, plot_dir: Pat
     else:
         observables = data_IO.predictions_matrix_from_h5(config.output_dir, filename='observables.h5', validation_set=False, observable_filter=config.observable_filter)
 
+    # TODO: Assumes continuous design points for labels. Need to update when removing them...
+
     # We want a shape of (n_design_points, n_features)
-    df = pd.DataFrame(observables[:, :10])
+    df = pd.DataFrame(observables[:, :3])
+    #df = pd.DataFrame(observables[:, :10])
     # Add design point as a column so we can use it for hue
-    df["design_point"] = np.arange(df.shape[0])
+    #df["design_point"] = np.arange(df.shape[0])
 
     # Plot
-    g = sns.pairplot(
-        df,
-        #hue="design_point",
-        #diag_kind='hist',
-        #plot_kws={'alpha':0.7, 's':3, 'color':'blue'},
-        #diag_kws={'color':'blue', 'fill':True, 'bins':20}
-    )
+    #g = sns.pairplot(
+    #    df,
+    #    #hue="design_point",
+    #    #diag_kind='hist',
+    #    #plot_kws={'alpha':0.7, 's':3, 'color':'blue'},
+    #    #diag_kws={'color':'blue', 'fill':True, 'bins':20}
+    #)
+    g = sns.PairGrid(df, diag_sharey=False, corner=True)
+    #g.map_lower(sns.scatterplot)
+    # NOTE: Can ignore outliers via `robust=True`, although need to install statsmodel
+    g.map_lower(sns.regplot)
+    g.map_diag(sns.histplot)
+
+    # Annotate data points with labels
+    count = 0
+    for i, axis_row in enumerate(df.columns):
+        for j, axis_col in enumerate(df.columns):
+            if i < j:  # Skip the upper triangle + diagonal
+                current_ax = g.axes[j, i]
+                current_ax.text(0.1, 0.9, s=f"count={count}", fontsize=8, color='blue', transform=current_ax.transAxes)
+                count += 1
+                for design_point, (x, y) in enumerate(zip(df[axis_row], df[axis_col]), start=1):
+                    current_ax.annotate(design_point, (x, y), fontsize=8, color='red')
+
     #plt.tight_layout()
     plt.savefig(plot_dir / "pairplot_correlations.pdf")
     # Cleanup
