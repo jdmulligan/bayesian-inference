@@ -24,6 +24,7 @@ import os
 import logging
 from collections import defaultdict
 from operator import itemgetter
+from pathlib import Path
 
 import attrs
 import numpy as np
@@ -55,10 +56,12 @@ def initialize_observables_dict_from_tables(table_dir, analysis_config, paramete
                                             ['xmin'] -- bin lower edge (used only for plotting)
                                             ['xmax'] -- bin upper edge (used only for plotting)
        observables['Design'][parameterization] -- design points for a given parameterization
+       observables['Design_indices'][parameterization] -- indices of design points included for a given parameterization
        observables['Prediction'][observable_label]['y'] -- value
                                                   ['y_err'] -- statistical uncertainty
 
        observables['Design_validation']... -- design points for validation set
+       observables['Design_validation_indices'][parameterization] -- indices of validation design points included for a given parameterization
        observables['Prediction_validation']... -- predictions for validation set
 
        where observable_label follows the convention from the table filenames:
@@ -96,21 +99,31 @@ def initialize_observables_dict_from_tables(table_dir, analysis_config, paramete
 
     #----------------------
     # Read design points
-    exclude_design_point_indices = analysis_config.get('exclude_design_point_indices', [])
+    design_points_to_exclude = analysis_config.get('design_points_to_exclude', [])
     design_dir = os.path.join(table_dir, 'Design')
     for filename in os.listdir(design_dir):
 
         if _filename_to_labels(filename)[1] == parameterization:
-            design_points = np.loadtxt(os.path.join(design_dir, filename), ndmin=2)
+            # Explanation of variables:
+            #  - design_point_parameters: The parameters of the design points, with one per design point.
+            #  - design_points: List of the design points. If everything is filled out, this is just the trivial range(n_design_points).
+            #                   However, we have to handle this carefully because sometimes they are missing.
+
+            # Shape: (n_design_points, n_parameters)
+            design_point_parameters = np.loadtxt(os.path.join(design_dir, filename), ndmin=2)
 
             # Separate training and validation sets into separate dicts
-            training_indices_numpy, validation_indices_numpy = _split_training_validation_indices(validation_indices, table_dir, parameterization)
-            if exclude_design_point_indices:
-                training_indices_numpy = np.setdiff1d(training_indices_numpy, exclude_design_point_indices)
-                validation_indices_numpy = np.setdiff1d(validation_indices_numpy, exclude_design_point_indices)
+            design_points = _read_design_points_from_design_dat(table_dir, parameterization)
+            training_indices, training_design_points, validation_indices, validation_design_points = _split_training_validation_indices(
+                design_points=design_points,
+                validation_indices=validation_indices,
+                design_points_to_exclude=design_points_to_exclude,
+            )
 
-            observables['Design'] = design_points[training_indices_numpy]
-            observables['Design_validation'] = design_points[validation_indices_numpy]
+            observables['Design'] = design_point_parameters[training_indices]
+            observables['Design_indices'] = training_design_points
+            observables['Design_validation'] = design_point_parameters[validation_indices]
+            observables['Design_indices_validation'] = validation_design_points
 
     #----------------------
     # Read predictions and uncertainty
@@ -128,20 +141,21 @@ def initialize_observables_dict_from_tables(table_dir, analysis_config, paramete
                 prediction_errors = np.loadtxt(os.path.join(prediction_dir, filename_prediction_errors), ndmin=2)
 
                 # Separate training and validation sets into separate dicts
-                with open(os.path.join(prediction_dir, filename_prediction_values)) as f:
-                    for line in f.readlines():
-                        if 'design_point' in line:
-                            # NOTE: 12 == len("design_point"), so this strips out the leading
-                            #       "design_point" text to extract the design point index
-                            indices = set([int(s[12:]) for s in line.split('#')[1].split()])
-                training_indices_numpy = list(indices - set(validation_indices))
-                validation_indices_numpy = list(indices.intersection(set(validation_indices)))
+                design_points = _read_design_points_from_predictions_dat(
+                    prediction_dir=prediction_dir,
+                    filename_prediction_values=filename_prediction_values,
+                )
+                training_indices, _, validation_indices, _ = _split_training_validation_indices(
+                    design_points=design_points,
+                    validation_indices=validation_indices,
+                    design_points_to_exclude=design_points_to_exclude,
+                )
 
-                observables['Prediction'][observable_label]['y'] = np.take(prediction_values, training_indices_numpy, axis=1)
-                observables['Prediction'][observable_label]['y_err'] = np.take(prediction_errors, training_indices_numpy, axis=1)
+                observables['Prediction'][observable_label]['y'] = np.take(prediction_values, training_indices, axis=1)
+                observables['Prediction'][observable_label]['y_err'] = np.take(prediction_errors, training_indices, axis=1)
 
-                observables['Prediction_validation'][observable_label]['y'] = np.take(prediction_values, validation_indices_numpy, axis=1)
-                observables['Prediction_validation'][observable_label]['y_err'] = np.take(prediction_errors, validation_indices_numpy, axis=1)
+                observables['Prediction_validation'][observable_label]['y'] = np.take(prediction_values, validation_indices, axis=1)
+                observables['Prediction_validation'][observable_label]['y_err'] = np.take(prediction_errors, validation_indices, axis=1)
 
                 # TODO: Do something about bins that have value=0?
                 if 0 in prediction_values:
@@ -390,10 +404,18 @@ def observable_dict_from_matrix(Y, observables, cov=np.array([]), config=None, v
     if config:
 
         validation_range = config.analysis_config['validation_indices']
-        validation_indices = range(validation_range[0], validation_range[1])
-        training_indices_numpy, validation_indices = _split_training_validation_indices(validation_indices, config.observable_table_dir, config.parameterization)
+        validation_indices = list(range(validation_range[0], validation_range[1]))
+        design_points = _read_design_points_from_design_dat(
+            observable_table_dir=config.observable_table_dir,
+            parameterization=config.parameterization,
+        )
+        training_indices_numpy, _, validation_indices_numpy, _ = _split_training_validation_indices(
+            design_points=design_points,
+            validation_indices=validation_indices,
+            design_points_to_exclude=config.analysis_config.get('design_points_to_exclude', []),
+        )
         if validation_set:
-            indices_numpy = validation_indices
+            indices_numpy = validation_indices_numpy
         else:
             indices_numpy = training_indices_numpy
 
@@ -638,15 +660,16 @@ def _accept_observable(analysis_config, filename):
     return accept_observable
 
 #---------------------------------------------------------------
-def _split_training_validation_indices(validation_indices, observable_table_dir, parameterization) -> tuple[npt.NDArray[np.int64], npt.NDArray[np.int32], npt.NDArray[np.int64], npt.NDArray[np.int32]]:
-    '''
-    Get numpy indices of training and validation sets
+def _read_design_points_from_design_dat(
+    observable_table_dir: Path | str,
+    parameterization: str,
+) -> npt.NDArray[np.int32]:
+    """Retrieve the design points from the header of the design.dat file
 
-    :param list[int] validation_indices: list of validation indices
     :param str observable_table_dir: location of table dir
     :param str parameterization: qhat parameterization type
-    '''
-
+    :return ndarray: design points in their original order in the file
+    """
     # Get training set or validation set
     design_table_dir = os.path.join(observable_table_dir, 'Design')
     design_filename = f'Design__{parameterization}.dat'
@@ -662,17 +685,101 @@ def _split_training_validation_indices(validation_indices, observable_table_dir,
     # Validation
     assert len(design_points) == len(set(design_points)), "Design points are not unique! Check on the input file"
 
-    # Next, determine the training and validation masks, providing indices for selecting
+    return design_points
+
+
+#---------------------------------------------------------------
+def _read_design_points_from_predictions_dat(
+    prediction_dir: Path | str,
+    filename_prediction_values: str,
+) -> npt.NDArray[np.int32]:
+    """ Read design points from the header of a predictions *.dat file
+
+    :param str prediction_dir: location of prediction dir
+    :param str filename_prediction_values: name of the prediction values file
+    :return ndarray: design points in their original order in the file
+    """
+    prediction_dir = Path(prediction_dir)
+    len_design_point_label_str = len("design_point")
+    with open(os.path.join(prediction_dir, filename_prediction_values)) as f:
+        for line in f.readlines():
+            if 'design_point' in line:
+                # dtype doesn't really matter here - it's not a limiting factor, so just take int32 as a default
+                # NOTE: This strips out the leading "design_point" text to extract the design point index
+                design_points = np.array(
+                    [int(s[len_design_point_label_str:]) for s in line.split('#')[1].split()], dtype=np.int32
+                )
+                break
+
+    # Validation
+    assert len(design_points) == len(set(design_points)), "Design points are not unique! Check on the input file"
+
+    return design_points
+
+
+#---------------------------------------------------------------
+def _filter_design_points(
+    indices: npt.NDArray[np.int64],
+    design_points: npt.NDArray[np.int32],
+    design_points_to_exclude: list[int],
+) -> tuple[npt.NDArray[np.int64], npt.NDArray[np.int32]]:
+    """ Filter design point indices (and design points themselves).
+
+    :param ndarray indices: indices of the design points themselves to filter
+    :param ndarray design_points: design points in their original order in the file
+    :param list[int] design_points_to_exclude: list of design point indices to exclude (in the original design point)
+    :return tuple[ndarray, ndarray]: filtered indices and design points
+    """
+    # Determine filter
+    points_to_keep = np.isin(design_points, design_points_to_exclude, invert=True)
+    # And apply
+    indices = indices[points_to_keep]
+    design_points = design_points[points_to_keep]
+    return indices, design_points
+
+#---------------------------------------------------------------
+def _split_training_validation_indices(
+    design_points: npt.NDArray[np.int32],
+    validation_indices: list[int],
+    design_points_to_exclude: list[int] | None = None,
+) -> tuple[npt.NDArray[np.int64], npt.NDArray[np.int32], npt.NDArray[np.int64], npt.NDArray[np.int32]]:
+    ''' Get numpy indices of training and validation sets
+
+    :param npt.NDArray[np.int32] design_points: list of design points (in their original order in the file).
+    :param list[int] validation_indices: list of validation indices
+    :param list[int] design_points_to_exclude: list of design point indices to exclude (in the original design point)
+    :return tuple[npt.NDArray[np.int64], npt.NDArray[np.int32], npt.NDArray[np.int64], npt.NDArray[np.int32]]: numpy indices of training, design points, numpy indices of validation sets, validation design points
+    '''
+    # Determine the training and validation masks, providing indices for selecting
     # the relevant design points parameters and associated values
     training_mask = np.isin(design_points, validation_indices, invert=True)
     validation_mask = ~training_mask
 
-    training_indices = np.where(training_mask)[0]
-    validation_indices = np.where(validation_mask)[0]
+    np_training_indices = np.where(training_mask)[0]
+    np_validation_indices = np.where(validation_mask)[0]
+
+    training_design_points = design_points[np_training_indices]
+    validation_design_points = design_points[np_validation_indices]
+
+    if design_points_to_exclude:
+        # Determine which design points to keep, and then apply those masks to the indices and design points themselves:
+        # For training
+        np_training_indices, training_design_points = _filter_design_points(
+            indices=np_training_indices,
+            design_points=training_design_points,
+            design_points_to_exclude=design_points_to_exclude,
+        )
+        # And validation
+        np_validation_indices, validation_design_points = _filter_design_points(
+            indices=np_validation_indices,
+            design_points=validation_design_points,
+            design_points_to_exclude=design_points_to_exclude,
+        )
 
     # Most useful is to have the training and validation indices. However, we also sometimes
     # need the design points themselves (for excluding design points), so we return those as well
-    return training_indices, design_points[training_indices], validation_indices, design_points[validation_indices]
+    return np_training_indices, training_design_points, np_validation_indices, validation_design_points
+
 
 #---------------------------------------------------------------
 def _recursive_defaultdict():

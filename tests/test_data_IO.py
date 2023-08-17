@@ -32,7 +32,7 @@ def test_observable_matrix_round_trip(caplog: Any) -> None:
     np.testing.assert_allclose(Y, Y_round_trip)
 
 @pytest.mark.parametrize(
-    "exclude_design_point_indices",
+    "design_points_to_exclude",
     [[17, 43, 203], []],
     ids=["exclude", "no_exclude"],
 )
@@ -41,7 +41,7 @@ def test_observable_matrix_round_trip(caplog: Any) -> None:
     ["test1", "test2"],
     ids=["continuous", "discontinuous"],
 )
-def test_exclude_design_points(caplog: Any, exclude_design_point_indices: list[int], parameterization: str) -> None:
+def test_exclude_design_points(caplog: Any, design_points_to_exclude: list[int], parameterization: str) -> None:
     """ Test excluding design point indices.
 
     We require a bit of care here to ensure that we don't confuse indices vs design points.
@@ -52,7 +52,7 @@ def test_exclude_design_points(caplog: Any, exclude_design_point_indices: list[i
     caplog.set_level(logging.DEBUG)
     excluded_values = {
         i: list(range(i * 6, i * 6 + 6))
-        for i in exclude_design_point_indices
+        for i in design_points_to_exclude
     }
 
     read_design_point_parameters = np.loadtxt(_data_dir / "tables" / "Design" / f"Design__{parameterization}.dat", ndmin=2)
@@ -65,31 +65,20 @@ def test_exclude_design_points(caplog: Any, exclude_design_point_indices: list[i
 
     # NOTE: This extracts the design points and tries to use them as indices, but this isn't so trivial
     #       because we may be missing some design points. Thus, they aren't indices.
-    #training_indices, validation_indices = data_IO._split_training_validation_indices(
+    design_points = data_IO._read_design_points_from_design_dat(_data_dir / "tables", parameterization)
     training_indices, training_design_points, validation_indices, validation_design_points = data_IO._split_training_validation_indices(
-        list(range(200, 230)),
-        _data_dir / "tables",
-        parameterization,
+        design_points=design_points,
+        validation_indices=list(range(200, 230)),
+        design_points_to_exclude=design_points_to_exclude
     )
-
-    if exclude_design_point_indices:
-        # Determine which design points to keep, and then apply those masks to the indices and design points themselves:
-        # For training
-        training_points_to_keep = np.isin(training_design_points, exclude_design_point_indices, invert=True)
-        training_indices = training_indices[training_points_to_keep]
-        training_design_points = training_design_points[training_points_to_keep]
-        # And validation
-        validation_points_to_keep = np.isin(validation_design_points, exclude_design_point_indices, invert=True)
-        validation_indices = validation_indices[validation_points_to_keep]
-        validation_design_points = validation_design_points[validation_points_to_keep]
 
     # Determine the design point parameters for the training and validation sets
     design_points_parameters = read_design_point_parameters[training_indices]
     design_points_parameters_validation = read_design_point_parameters[validation_indices]
 
     # Check shape
-    excluded_values_in_main_points = [i for i in exclude_design_point_indices if i < 200]
-    excluded_values_in_validation_points = [i for i in exclude_design_point_indices if i >= 200]
+    excluded_values_in_main_points = [i for i in design_points_to_exclude if i < 200]
+    excluded_values_in_validation_points = [i for i in design_points_to_exclude if i >= 200]
     assert design_points_parameters.shape == (200 - len(excluded_values_in_main_points) - n_points_missing, 6)
     assert design_points_parameters_validation.shape == (30 - len(excluded_values_in_validation_points), 6)
 
