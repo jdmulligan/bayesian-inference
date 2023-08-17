@@ -60,47 +60,59 @@ def _plot_pairplot_correlations(
 
     # We want a shape of (n_design_points, n_features)
     #df = pd.DataFrame(observables[:, :3])
-    df = pd.DataFrame(observables[:, :10])
+    df = pd.DataFrame(observables)
     # Add design point as a column so we can use it (eg. with hue)
     all_observables_dict = data_IO.read_dict_from_h5(config.output_dir, 'observables.h5')
     design_points = np.array(all_observables_dict["Design_indices"])
     df["design_point"] = design_points
 
-    # Plot
-    #g = sns.pairplot(
-    #    df,
-    #    #hue="design_point",
-    #    #diag_kind='hist',
-    #    #plot_kws={'alpha':0.7, 's':3, 'color':'blue'},
-    #    #diag_kws={'color':'blue', 'fill':True, 'bins':20}
-    #)
-    # Manually creating the same type of pair plot, but with more control
-    variables = list(df.columns)
-    # Need to drop the design_point column, as we just want it for labeling
-    variables.remove("design_point")
-    # And finally plot
-    g = sns.PairGrid(df, vars=variables)
-    #g.map_lower(sns.scatterplot)
-    # NOTE: Can ignore outliers via `robust=True`, although need to install statsmodel
-    g.map_lower(sns.regplot)
-    g.map_diag(sns.histplot)
+    current_index = 0
+    n_features_per_group = 20
+    for i_group in range(observables.shape[1] // n_features_per_group):
+        # See: https://stackoverflow.com/a/39393929
+        current_df = df.iloc[:, np.r_[current_index:current_index + n_features_per_group, -1]]
 
-    # Annotate data points with labels
-    if annotate_design_points:
-        count = 0
-        for i, axis_row in enumerate(variables):
-            for j, axis_col in enumerate(variables):
-                if i < j:  # Skip the upper triangle + diagonal
-                    current_ax = g.axes[j, i]
-                    current_ax.text(0.1, 0.9, s=f"count={count}", fontsize=8, color='blue', transform=current_ax.transAxes)
-                    count += 1
-                    for (design_point, x, y) in zip(df["design_point"], df[axis_row], df[axis_col]):
-                        current_ax.annotate(design_point, (x, y), fontsize=8, color='red')
+        # TEMP
+        if i_group > 2:
+            break
 
-    #plt.tight_layout()
-    filename = "pairplot_correlations"
-    if annotate_design_points:
-        filename += "_annotated"
-    plt.savefig(plot_dir / f"{filename}.pdf")
-    # Cleanup
-    plt.close('all')
+        # Plot
+        #g = sns.pairplot(
+        #    df,
+        #    #hue="design_point",
+        #    #diag_kind='hist',
+        #    #plot_kws={'alpha':0.7, 's':3, 'color':'blue'},
+        #    #diag_kws={'color':'blue', 'fill':True, 'bins':20}
+        #)
+        # Manually creating the same type of pair plot, but with more control
+        variables = list(current_df.columns)
+        # Need to drop the design_point column, as we just want it for labeling
+        variables.remove("design_point")
+        # And finally plot
+        g = sns.PairGrid(current_df, vars=variables)
+        #g.map_lower(sns.scatterplot)
+        # NOTE: Can ignore outliers via `robust=True`, although need to install statsmodel
+        g.map_lower(sns.regplot)
+        g.map_diag(sns.histplot)
+
+        # Annotate data points with labels
+        if annotate_design_points:
+            count = 0
+            for i, axis_row in enumerate(variables):
+                for j, axis_col in enumerate(variables):
+                    if i < j:  # Skip the upper triangle + diagonal
+                        current_ax = g.axes[j, i]
+                        current_ax.text(0.1, 0.9, s=f"count={count}", fontsize=8, color='blue', transform=current_ax.transAxes)
+                        count += 1
+                        for (design_point, x, y) in zip(current_df["design_point"], current_df[axis_row], current_df[axis_col]):
+                            current_ax.annotate(design_point, (x, y), fontsize=8, color='red')
+
+        #plt.tight_layout()
+        filename = "pairplot_correlations"
+        if annotate_design_points:
+            filename += "_annotated"
+        plt.savefig(plot_dir / f"{filename}__group_{i_group}.pdf")
+        # Cleanup
+        plt.close('all')
+
+        current_index += n_features_per_group
