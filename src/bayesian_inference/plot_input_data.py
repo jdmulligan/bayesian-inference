@@ -55,8 +55,8 @@ def _plot_pairplot_correlations(config: emulation.EmulationConfig, plot_dir: Pat
     # TODO: Assumes continuous design points for labels. Need to update when removing them...
 
     # We want a shape of (n_design_points, n_features)
-    df = pd.DataFrame(observables[:, :3])
-    #df = pd.DataFrame(observables[:, :10])
+    #df = pd.DataFrame(observables[:, :3])
+    df = pd.DataFrame(observables[:, :10])
     # Add design point as a column so we can use it for hue
     #df["design_point"] = np.arange(df.shape[0])
 
@@ -68,7 +68,7 @@ def _plot_pairplot_correlations(config: emulation.EmulationConfig, plot_dir: Pat
     #    #plot_kws={'alpha':0.7, 's':3, 'color':'blue'},
     #    #diag_kws={'color':'blue', 'fill':True, 'bins':20}
     #)
-    g = sns.PairGrid(df, diag_sharey=False, corner=True)
+    g = sns.PairGrid(df)
     #g.map_lower(sns.scatterplot)
     # NOTE: Can ignore outliers via `robust=True`, although need to install statsmodel
     g.map_lower(sns.regplot)
