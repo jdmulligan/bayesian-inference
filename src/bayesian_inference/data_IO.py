@@ -96,6 +96,7 @@ def initialize_observables_dict_from_tables(table_dir, analysis_config, paramete
 
     #----------------------
     # Read design points
+    exclude_design_point_indices = analysis_config.get('exclude_design_point_indices', [])
     design_dir = os.path.join(table_dir, 'Design')
     for filename in os.listdir(design_dir):
 
@@ -104,6 +105,10 @@ def initialize_observables_dict_from_tables(table_dir, analysis_config, paramete
 
             # Separate training and validation sets into separate dicts
             training_indices_numpy, validation_indices_numpy = _split_training_validation_indices(validation_indices, table_dir, parameterization)
+            if exclude_design_point_indices:
+                training_indices_numpy = np.setdiff1d(training_indices_numpy, exclude_design_point_indices)
+                validation_indices_numpy = np.setdiff1d(validation_indices_numpy, exclude_design_point_indices)
+
             observables['Design'] = design_points[training_indices_numpy]
             observables['Design_validation'] = design_points[validation_indices_numpy]
 
@@ -633,7 +638,7 @@ def _accept_observable(analysis_config, filename):
     return accept_observable
 
 #---------------------------------------------------------------
-def _split_training_validation_indices(validation_indices, observable_table_dir, parameterization):
+def _split_training_validation_indices(validation_indices, observable_table_dir, parameterization) -> tuple[npt.NDArray[np.int64], npt.NDArray[np.int32], npt.NDArray[np.int64], npt.NDArray[np.int32]]:
     '''
     Get numpy indices of training and validation sets
 
@@ -648,11 +653,26 @@ def _split_training_validation_indices(validation_indices, observable_table_dir,
     with open(os.path.join(design_table_dir, design_filename)) as f:
         for line in f.readlines():
             if 'Design point indices' in line:
-                indices = set([int(s) for s in line.split(':')[1].split()])
-    training_indices_numpy = list(indices - set(validation_indices))
-    validation_indices_numpy = list(indices.intersection(set(validation_indices)))
+                # dtype doesn't really matter here - it's not a limiting factor, so just take int32 as a default
+                design_points = np.array(
+                    [int(s) for s in line.split(':')[1].split()], dtype=np.int32
+                )
+                break
 
-    return training_indices_numpy, validation_indices_numpy
+    # Validation
+    assert len(design_points) == len(set(design_points)), "Design points are not unique! Check on the input file"
+
+    # Next, determine the training and validation masks, providing indices for selecting
+    # the relevant design points parameters and associated values
+    training_mask = np.isin(design_points, validation_indices, invert=True)
+    validation_mask = ~training_mask
+
+    training_indices = np.where(training_mask)[0]
+    validation_indices = np.where(validation_mask)[0]
+
+    # Most useful is to have the training and validation indices. However, we also sometimes
+    # need the design points themselves (for excluding design points), so we return those as well
+    return training_indices, design_points[training_indices], validation_indices, design_points[validation_indices]
 
 #---------------------------------------------------------------
 def _recursive_defaultdict():
