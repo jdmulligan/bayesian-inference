@@ -5,6 +5,7 @@ authors: J.Mulligan, R.Ehlers
 
 from __future__ import annotations
 
+import inspect
 import logging
 from pathlib import Path
 
@@ -125,8 +126,6 @@ def _plot_pairplot_correlations(
 
         current_index += n_features_per_group
 
-from inspect import signature
-
 class PairGridWithRegression(sns.PairGrid):
     """ PairGrid where we can return the regression results.
 
@@ -230,14 +229,14 @@ class PairGridWithRegression(sns.PairGrid):
             logger.info(f"{i=}, {j=}, {results[(i, j)]=}, {func=}")
         self._add_axis_labels()
 
-        if "hue" in signature(func).parameters:
+        if "hue" in inspect.signature(func).parameters:
             self.hue_names = list(self._legend_data)
 
         return results
 
     def _plot_bivariate(self, x_var, y_var, ax, func, **kwargs):
         """Draw a bivariate plot on the specified axes."""
-        if "hue" not in signature(func).parameters:
+        if "hue" not in inspect.signature(func).parameters:
             logger.info("here")
             results = self._plot_bivariate_iter_hue(x_var, y_var, ax, func, **kwargs)
             return results
@@ -330,39 +329,6 @@ class PairGridWithRegression(sns.PairGrid):
         self._update_legend_data(ax)
 
         return results
-
-
-def _pairgrid_with_regression(
-    df: pd.DataFrame,
-    x_vars: list[str],
-    y_vars: list[str],
-    height: float = 2.5,
-    aspect: float = 1.,
-    corner: bool = False,
-) -> dict[tuple[int, int], sm.FitResults]:
-    """ PairGrid where we can return the regression results.
-
-    Sadly, this isn't possible with seaborn, so we have to work it out ourselves.
-    Based heavily on https://stackoverflow.com/a/59756979
-
-    Note:
-        The args are frequently based on sns.PairGrid
-    """
-    fig, axes = plt.subplots(
-        nrows=len(y_vars),
-        ncols=len(x_vars),
-        sharex="col",
-        sharey="row",
-        figsize=(height * aspect * len(x_vars), height * len(y_vars))
-    )
-
-    results: dict[tuple[int, int], sm.FitResults] = {}
-    for i_col, var_row in enumerate(x_vars):
-        for j_row, var_col in enumerate(y_vars):
-            current_ax = axes[j_row, i_col]
-            current_ax.scatter(df[var_row], df[var_col], s=3, alpha=0.7, color='blue')
-
-    return results
 
 
 def simple_regplot(
