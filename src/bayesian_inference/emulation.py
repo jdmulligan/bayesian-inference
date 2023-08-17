@@ -273,11 +273,11 @@ class SortEmulationGroupObservables:
             shape=shape,
         )
 
-    def convert(self, group_matrices: dict[str, npt.NDArray[np.float64]]) -> dict[str, npt.NDArray[np.float64]]:
+    def convert(self, group_matrices: dict[str, dict[str, npt.NDArray[np.float64]]]) -> dict[str, npt.NDArray[np.float64]]:
         """ Convert a matrix to match the sorted observables.
 
         :param group_matrices: Matrixes to convert by emulation group. eg:
-            {"group_1": {"central_value": [...], "cov": [...]}, "group_2": ...}
+            {"group_1": {"central_value": np.array, "cov": [...]}, "group_2": np.array}
         :return: Converted matrix for each available value type.
         """
         if self._available_value_types is None:
@@ -290,6 +290,7 @@ class SortEmulationGroupObservables:
         output = {}
         # Requires special handling since we're adding matrices
         if "cov" in self._available_value_types:
+            # FIXME: This doesn't reorder the group_matrix outputs as needed...
             output["cov"] = nd_block_diag([m["cov"] for m in group_matrices.values()])
         # Handle the rest (as of 14 August 2023, it's just "central_value")
         for value_type in self._available_value_types:
@@ -537,7 +538,7 @@ class EmulationConfig(common_base.CommonBase):
         }
         return c
 
-    def read_all_emulator_groups(self) -> dict[str, dict[str, npt.NDarray[np.float64]]]:
+    def read_all_emulator_groups(self) -> dict[str, dict[str, npt.NDArray[np.float64]]]:
         """ Read all emulator groups.
 
         Just a convenience function.
@@ -553,11 +554,11 @@ class EmulationConfig(common_base.CommonBase):
             if not self.emulation_groups_config:
                 raise ValueError("Need to specify emulation groups to provide an observable filter")
             # Accumulate the include and exclude lists from all emulation groups
-            include_list = []
-            exclude_list = self.config.get("global_observable_exclude_list", [])
+            include_list: list[str] = []
+            exclude_list: list[str] = self.config.get("global_observable_exclude_list", [])
             for emulation_group_config in self.emulation_groups_config.values():
-                include_list.extend(emulation_group_config.observable_filter.include_list)
-                exclude_list.extend(emulation_group_config.observable_filter.exclude_list)
+                include_list.extend(emulation_group_config.observable_filter.include_list)  # type: ignore[union-attr]
+                exclude_list.extend(emulation_group_config.observable_filter.exclude_list)  # type: ignore[union-attr]
 
             self._observable_filter = data_IO.ObservableFilter(
                 include_list=include_list,
