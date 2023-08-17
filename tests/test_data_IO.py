@@ -73,21 +73,17 @@ def test_exclude_design_points(caplog: Any, exclude_design_point_indices: list[i
     )
 
     if exclude_design_point_indices:
+        # Determine which design points to keep, and then apply those masks to the indices and design points themselves:
+        # For training
         training_points_to_keep = np.isin(training_design_points, exclude_design_point_indices, invert=True)
-        logger.info(f"{training_points_to_keep.shape=}")
         training_indices = training_indices[training_points_to_keep]
+        training_design_points = training_design_points[training_points_to_keep]
+        # And validation
         validation_points_to_keep = np.isin(validation_design_points, exclude_design_point_indices, invert=True)
         validation_indices = validation_indices[validation_points_to_keep]
-
-        training_design_points = training_design_points[training_points_to_keep]
         validation_design_points = validation_design_points[validation_points_to_keep]
 
-        #design_points = read_design_point_parameters[training_indices]
-        #design_points_validation = read_design_point_parameters[validation_indices]
-
-        #training_indices_numpy = np.setdiff1d(training_indices_numpy, exclude_design_point_indices)
-        #validation_indices_numpy = np.setdiff1d(validation_indices_numpy, exclude_design_point_indices)
-
+    # Determine the design point parameters for the training and validation sets
     design_points_parameters = read_design_point_parameters[training_indices]
     design_points_parameters_validation = read_design_point_parameters[validation_indices]
 
@@ -97,9 +93,7 @@ def test_exclude_design_points(caplog: Any, exclude_design_point_indices: list[i
     assert design_points_parameters.shape == (200 - len(excluded_values_in_main_points) - n_points_missing, 6)
     assert design_points_parameters_validation.shape == (30 - len(excluded_values_in_validation_points), 6)
 
-    #logger.info(f"{training_indices_numpy=}")
-
-    # Check that values are not present
+    # Check that excluded values are not present
     for excluded_point, values in excluded_values.items():
         assert excluded_point not in training_design_points
         assert excluded_point not in validation_design_points
