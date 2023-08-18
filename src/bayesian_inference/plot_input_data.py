@@ -10,6 +10,7 @@ import logging
 from pathlib import Path
 
 import numpy as np
+import numpy.typing as npt
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
@@ -34,7 +35,7 @@ def plot(config: emulation.EmulationConfig):
     plot_dir.mkdir(parents=True, exist_ok=True)
 
     _plot_pairplot_correlations(config=config, plot_dir=plot_dir, annotate_design_points=False)
-    _plot_pairplot_correlations(config=config, plot_dir=plot_dir, annotate_design_points=True)
+    _plot_pairplot_correlations(config=config, plot_dir=plot_dir, annotate_design_points=False, calculate_RMS_distance=True)
 
 
 ####################################################################################################################
@@ -42,6 +43,8 @@ def _plot_pairplot_correlations(
     config: emulation.EmulationConfig,
     plot_dir: Path,
     annotate_design_points: bool,
+    calculate_RMS_distance: bool = False,
+    outliers_n_RMS_away_from_fit: float = 2.,
     use_experimental_data: bool = False,
 ) -> None:
     """
@@ -49,6 +52,9 @@ def _plot_pairplot_correlations(
     :param EmulationConfig config: we take an instance of EmulationConfig as an argument to keep track of config info.
     :param Path plot_dir: Directory in which to save the plots.
     :param bool annotate_design_points: If true, annotate the data points with their design point index.
+    :param bool calculate_RMS_distance: If true, calculate the RMS distance of each point from the fit line, and
+        identify outliers as those more than `outliers_n_RMS_away_from_fit` away from the fit.
+    :param float outliers_n_RMS_away_from_fit: Number of RMS away from the fit to identify outliers. Default: 2.
     :param bool use_experimental_data: If true, use experimental data. Otherwise, use predictions. Default: False.
         The experimental data isn't especially useful, but was helpful for initial conceptual development.
     """
@@ -102,7 +108,51 @@ def _plot_pairplot_correlations(
         #g.map_lower(sns.regplot)
         g.map_diag(sns.histplot)
 
-        import IPython; IPython.embed()
+        #import IPython; IPython.embed()
+
+        # Calculate RMS distance to identify outliers
+        if calculate_RMS_distance:
+            for i_col, x_column in enumerate(variables):
+                for i_row, y_column in enumerate(variables):
+                    if i_col < i_row:  # Skip the upper triangle + diagonal
+                        current_ax = g.axes[i_row, i_col]
+
+                        fit_result = regression_results[(i_row, i_col)]
+                        #import IPython; IPython.embed()
+                        logger.info(f"{fit_result=}, {fit_result.params=}")
+                        # NOTE: The slope_key is the apparently taken from one of the columns of the df.
+                        #       It's easier to just search for the right one here.
+                        slope_key = [key for key in fit_result.params.keys() if key != "const"][0]
+                        distances = _distance_from_line(
+                            x=current_df[x_column],
+                            y=current_df[y_column],
+                            m=fit_result.params[slope_key],
+                            b=fit_result.params["const"],
+                        )
+                        rms = np.sqrt(np.mean(distances**2))
+                        logger.info(f"RMS distance: {rms:.2f}")
+
+                        # Identify outliers by distance > outliers_n_RMS_away_from_fit * RMS
+                        outlier_indices = np.where(distances > outliers_n_RMS_away_from_fit * rms)[0]
+
+                        # Draw RMS on plot for reference
+                        # NOTE: This isn't super precise, so don't be surprised if it doesn't perfectly match the outliers right along the line
+                        # NOTE: Number of points is arbitrarily chosen - just want it to be dense
+                        _x = np.linspace(np.min(current_df[x_column]), np.max(current_df[x_column]), 100)
+                        # I'm sure that there's a way to do this directly from statsmodels, but I find their docs to be difficult to read.
+                        # Since this is a simple case, we'll just do it by hand
+                        linear_fit = fit_result.params[slope_key] * _x + fit_result.params["const"]
+                        current_ax.plot(_x, linear_fit + 2 * rms, color='red', linestyle="dashed", linewidth=1.5)
+                        current_ax.plot(_x, linear_fit - 2 * rms, color='red', linestyle="dashed", linewidth=1.5)
+
+                        for (design_point, x, y) in zip(
+                            current_df["design_point"][outlier_indices],
+                            current_df[x_column][outlier_indices],
+                            current_df[y_column][outlier_indices],
+                        ):
+                            logger.info(f"Outlier at {design_point=}")
+                            current_ax.annotate(f"outlier! {design_point}", (x, y), fontsize=8, color=sns.xkcd_rgb['dark sky blue'])
+
 
         # Annotate data points with labels
         if annotate_design_points:
@@ -116,6 +166,7 @@ def _plot_pairplot_correlations(
                         for (design_point, x, y) in zip(current_df["design_point"], current_df[axis_row], current_df[axis_col]):
                             current_ax.annotate(design_point, (x, y), fontsize=8, color='red')
 
+
         #plt.tight_layout()
         filename = "pairplot_correlations"
         if annotate_design_points:
@@ -125,6 +176,19 @@ def _plot_pairplot_correlations(
         plt.close('all')
 
         current_index += n_features_per_group
+
+def _distance_from_line(x: npt.NDArray[np.number], y: npt.NDArray[np.number], m: float, b: float) -> np.ndarray:
+    """ Calculate the distance of each point from a line.
+
+    :param np.ndarray x: x values of points.
+    :param np.ndarray y: y values of points.
+    :param float m: slope of line.
+    :param float b: y-intercept of line.
+    :returns: distance of each point from the line.
+    :rtype: np.ndarray
+    """
+    return np.abs(m * x - y + b) / np.sqrt(m**2 + 1)
+
 
 class PairGridWithRegression(sns.PairGrid):
     """ PairGrid where we can return the regression results.
@@ -164,7 +228,6 @@ class PairGridWithRegression(sns.PairGrid):
 
         """
         indices = zip(*np.tril_indices_from(self.axes, -1))
-        logger.warning(f"map_lower: {func=}")
         results = self._map_bivariate(func, indices, **kwargs)
         return results
 
