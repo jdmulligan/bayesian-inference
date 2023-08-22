@@ -153,19 +153,17 @@ def _plot_pairplot_correlations(
                             logger.info(f"Outlier at {design_point=}")
                             current_ax.annotate(f"outlier! {design_point}", (x, y), fontsize=8, color=sns.xkcd_rgb['dark sky blue'])
 
-
         # Annotate data points with labels
         if annotate_design_points:
             count = 0
-            for i, axis_row in enumerate(variables):
-                for j, axis_col in enumerate(variables):
-                    if i < j:  # Skip the upper triangle + diagonal
-                        current_ax = g.axes[j, i]
+            for i_col, x_column in enumerate(variables):
+                for i_row, y_column in enumerate(variables):
+                    if i_col < i_row:  # Skip the upper triangle + diagonal
+                        current_ax = g.axes[i_row, i_col]
                         current_ax.text(0.1, 0.9, s=f"count={count}", fontsize=8, color='blue', transform=current_ax.transAxes)
                         count += 1
-                        for (design_point, x, y) in zip(current_df["design_point"], current_df[axis_row], current_df[axis_col]):
+                        for (design_point, x, y) in zip(current_df["design_point"], current_df[x_column], current_df[y_column]):
                             current_ax.annotate(design_point, (x, y), fontsize=8, color='red')
-
 
         #plt.tight_layout()
         filename = "pairplot_correlations"
