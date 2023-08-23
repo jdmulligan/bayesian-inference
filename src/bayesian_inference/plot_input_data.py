@@ -35,6 +35,9 @@ def plot(config: emulation.EmulationConfig):
     plot_dir = Path(config.output_dir) / 'plot_input_data'
     plot_dir.mkdir(parents=True, exist_ok=True)
 
+    # Identify outliers via large statistical uncertainties
+    _identify_large_statistical_uncertainty_points(config=config, validation_set=False)
+
     # First, plot the pair correlations for each observables
     _plot_pairplot_correlations(
         config=config,
@@ -56,6 +59,48 @@ def plot(config: emulation.EmulationConfig):
         outliers_config=OutliersConfig(),
     )
 
+
+####################################################################################################################
+def _identify_large_statistical_uncertainty_points(config: emulation.EmulationConfig, validation_set: bool) -> None:
+    # Setup
+    prediction_key = "Prediction"
+    if validation_set:
+        prediction_key += "_validation"
+
+    # Retrieve all observables, and check each for large statistical uncertainty points
+    all_observables = data_IO.read_dict_from_h5(config.output_dir, 'observables.h5')
+    for observable_key in data_IO.sorted_observable_list_from_dict(
+        all_observables[prediction_key],
+    ):
+        outliers = _large_statistical_uncertainty_points(
+            values=all_observables[prediction_key][observable_key]["y"],
+            y_err=all_observables[prediction_key][observable_key]["y_err"],
+        )
+        logger.info(f"{observable_key=}, {outliers=}")
+
+        # Check whether we have any design points where we have two points in a row.
+        # In that case, extrapolation may be more problematic.
+        outlier_features_per_design_point: dict[int, set[int]] = {v: set() for v in outliers[1]}
+        for i_feature, i_design_point in zip(*outliers):
+            outlier_features_per_design_point[i_design_point].update([i_feature])
+
+        for k, v in outlier_features_per_design_point.items():
+            if len(v) > 1 and np.all(np.diff(list(v)) == 1):
+                logger.warning(f"Observable {observable_key}, Design point {k} has two consecutive outliers: {v}")
+
+####################################################################################################################
+def _large_statistical_uncertainty_points(values: npt.NDArray[np.float64], y_err: npt.NDArray[np.float64]) -> tuple[npt.NDArray[np.intp], npt.NDArray[np.intp]]:
+    """
+
+    Best to do this observable-by-observable because the relative uncertainty will vary for each one.
+    """
+    relative_error = y_err / values
+    rms = np.sqrt(np.mean(relative_error**2, axis=-1))
+    #import IPython; IPython.embed()
+    # NOTE: shape is (n_features, n_design_points).
+    #       Remember that np.where returns (n_feature_index, n_design_point_index) as separate arrays
+    outliers = np.where(relative_error > 2 * rms[:, np.newaxis])
+    return outliers  # type: ignore[return-value]
 
 @attrs.frozen
 class OutliersConfig:
