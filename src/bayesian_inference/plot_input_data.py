@@ -9,6 +9,7 @@ import inspect
 import logging
 from pathlib import Path
 
+import attrs
 import numpy as np
 import numpy.typing as npt
 import matplotlib.pyplot as plt
@@ -34,23 +35,53 @@ def plot(config: emulation.EmulationConfig):
     plot_dir = Path(config.output_dir) / 'plot_input_data'
     plot_dir.mkdir(parents=True, exist_ok=True)
 
-    _plot_pairplot_correlations(config=config, plot_dir=plot_dir, annotate_design_points=False)
-    _plot_pairplot_correlations(config=config, plot_dir=plot_dir, annotate_design_points=False, calculate_RMS_distance=True)
+    # First, plot the pair correlations for each observables
+    _plot_pairplot_correlations(
+        config=config,
+        plot_dir=plot_dir,
+        observable_grouping=ObservableGrouping(observable_by_observable=True),
+        annotate_design_points=False,
+    )
+    # And an annotated version
+    _plot_pairplot_correlations(
+        config=config,
+        plot_dir=plot_dir,
+        observable_grouping=ObservableGrouping(observable_by_observable=True),
+        annotate_design_points=True,
+    )
+    #
+    _plot_pairplot_correlations(
+        config=config,
+        plot_dir=plot_dir,
+        outliers_config=OutliersConfig(),
+    )
 
+
+@attrs.frozen
+class OutliersConfig:
+    outliers_n_RMS_away_from_fit: float = 2.
+
+@attrs.frozen
+class ObservableGrouping:
+    observable_by_observable: bool = False
+    fixed_size: int | None = None
 
 ####################################################################################################################
 def _plot_pairplot_correlations(
     config: emulation.EmulationConfig,
     plot_dir: Path,
-    annotate_design_points: bool,
-    calculate_RMS_distance: bool = False,
-    outliers_n_RMS_away_from_fit: float = 2.,
+    observable_grouping: ObservableGrouping | None = None,
+    outliers_config: OutliersConfig | None = None,
+    annotate_design_points: bool = False,
     use_experimental_data: bool = False,
 ) -> None:
-    """
+    """ Plot pair correlations.
+
+    Note that there are many configuration options, and they may not all be compatible with each other.
 
     :param EmulationConfig config: we take an instance of EmulationConfig as an argument to keep track of config info.
     :param Path plot_dir: Directory in which to save the plots.
+    :param bool observable_by_observable: If true, plot each observable separately. Otherwise, plot for fixed size of observables.
     :param bool annotate_design_points: If true, annotate the data points with their design point index.
     :param bool calculate_RMS_distance: If true, calculate the RMS distance of each point from the fit line, and
         identify outliers as those more than `outliers_n_RMS_away_from_fit` away from the fit.
@@ -58,6 +89,11 @@ def _plot_pairplot_correlations(
     :param bool use_experimental_data: If true, use experimental data. Otherwise, use predictions. Default: False.
         The experimental data isn't especially useful, but was helpful for initial conceptual development.
     """
+    # Validation
+    if observable_grouping is None:
+        observable_grouping = ObservableGrouping(fixed_size=5)
+
+    # Setup
     if use_experimental_data:
         observables = data_IO.data_array_from_h5(config.output_dir, filename='observables.h5', observable_filter=config.observable_filter)
         # Focus on central values
@@ -65,6 +101,18 @@ def _plot_pairplot_correlations(
         # In the case of data, this is trivially one "design point"
     else:
         observables = data_IO.predictions_matrix_from_h5(config.output_dir, filename='observables.h5', validation_set=False, observable_filter=config.observable_filter)
+
+    # Determine output name
+    filename = "pairplot_correlations"
+    if observable_grouping is not None:
+        if observable_grouping.observable_by_observable:
+            filename += "__observable_by_observable"
+        elif observable_grouping.fixed_size is not None:
+            filename += f"__observable_group_by_{observable_grouping.fixed_size}"
+    if annotate_design_points:
+        filename += "__annotated"
+    if outliers_config is not None:
+        filename += "__outliers"
 
     # We want a shape of (n_design_points, n_features)
     #df = pd.DataFrame(observables[:, :3])
@@ -110,8 +158,8 @@ def _plot_pairplot_correlations(
 
         #import IPython; IPython.embed()
 
-        # Calculate RMS distance to identify outliers
-        if calculate_RMS_distance:
+        # Determine outliers by calculating the RMS distance from a linear fit
+        if outliers_config:
             for i_col, x_column in enumerate(variables):
                 for i_row, y_column in enumerate(variables):
                     if i_col < i_row:  # Skip the upper triangle + diagonal
@@ -133,7 +181,7 @@ def _plot_pairplot_correlations(
                         logger.info(f"RMS distance: {rms:.2f}")
 
                         # Identify outliers by distance > outliers_n_RMS_away_from_fit * RMS
-                        outlier_indices = np.where(distances > outliers_n_RMS_away_from_fit * rms)[0]
+                        outlier_indices = np.where(distances > outliers_config.outliers_n_RMS_away_from_fit * rms)[0]
 
                         # Draw RMS on plot for reference
                         # NOTE: This isn't super precise, so don't be surprised if it doesn't perfectly match the outliers right along the line
@@ -166,9 +214,6 @@ def _plot_pairplot_correlations(
                             current_ax.annotate(design_point, (x, y), fontsize=8, color='red')
 
         #plt.tight_layout()
-        filename = "pairplot_correlations"
-        if annotate_design_points:
-            filename += "_annotated"
         plt.savefig(plot_dir / f"{filename}__group_{i_group}.pdf")
         # Cleanup
         plt.close('all')
