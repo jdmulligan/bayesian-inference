@@ -42,9 +42,26 @@ def plot(config: emulation.EmulationConfig):
     plot_dir.mkdir(parents=True, exist_ok=True)
 
     # Compare smoothed predictions for all design points
-    _plot_compare_preprocessed_predictions_for_all_design_points(
+    # Start with individual so we can look in detail
+    _plot_predictions_for_all_design_points(
         config=config,
         plot_dir=plot_dir,
+        select_which_to_plot=["standard"],
+        grid_size=(3, 3),
+        validation_set=False,
+    )
+    _plot_predictions_for_all_design_points(
+        config=config,
+        plot_dir=plot_dir,
+        select_which_to_plot=["preprocessed"],
+        grid_size=(3, 3),
+        validation_set=False,
+    )
+    # And then combined for convenient comparison
+    _plot_predictions_for_all_design_points(
+        config=config,
+        plot_dir=plot_dir,
+        select_which_to_plot=["standard", "preprocessed"],
         grid_size=(3, 3),
         validation_set=False,
     )
@@ -72,9 +89,10 @@ def plot(config: emulation.EmulationConfig):
 
 
 ####################################################################################################################
-def _plot_compare_preprocessed_predictions_for_all_design_points(
+def _plot_predictions_for_all_design_points(
     config: emulation.EmulationConfig,
     plot_dir: Path,
+    select_which_to_plot: list[str],
     grid_size: tuple[int, int] | None = None,
     validation_set: bool = False,
     legend_kwargs: dict[str, Any] | None = None,
@@ -87,7 +105,7 @@ def _plot_compare_preprocessed_predictions_for_all_design_points(
         legend_kwargs = {}
 
     # Setup
-    logger.info("Plotting standard vs preprocessed predictions")
+    logger.info(f"Plotting standard vs preprocessed predictions for {select_which_to_plot=}")
     fontsize = 14. / grid_size[0]
     prediction_key = "Prediction"
     if validation_set:
@@ -123,6 +141,8 @@ def _plot_compare_preprocessed_predictions_for_all_design_points(
             observable_preprocessed = all_observables_preprocessed[prediction_key][observable_key]["y"]
             for i_design_point in range(observable.shape[1]):
                 for label, color, obs in zip(["standard", "preprocessed"], colors, [observable, observable_preprocessed]):
+                    if label not in select_which_to_plot:
+                        continue
                     ax.plot(
                         x,
                         obs[:, i_design_point],
@@ -145,7 +165,8 @@ def _plot_compare_preprocessed_predictions_for_all_design_points(
             )
 
         # Write figure to file and move to next one
-        _path = plot_dir / f"compare_preprocessed_predictions_all_design_points__{counter}.pdf"
+        select_which_to_plot_str = "_".join(select_which_to_plot)
+        _path = plot_dir / f"compare_predictions_all_design_points__{select_which_to_plot_str}__{counter}.pdf"
         fig.savefig(_path)
         plt.close(fig)
 
