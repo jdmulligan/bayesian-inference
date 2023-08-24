@@ -18,15 +18,10 @@ import pandas as pd
 import seaborn as sns
 import statsmodels.api as sm
 
-from bayesian_inference import data_IO, emulation
+from bayesian_inference import data_IO, emulation, preprocess_input_data
 
 
 logger = logging.getLogger(__name__)
-
-
-@attrs.frozen
-class OutliersConfig:
-    outliers_n_RMS_away_from_fit: float = 2.
 
 @attrs.frozen
 class ObservableGrouping:
@@ -46,9 +41,6 @@ def plot(config: emulation.EmulationConfig):
     plot_dir = Path(config.output_dir) / 'plot_input_data'
     plot_dir.mkdir(parents=True, exist_ok=True)
 
-    # Identify outliers via large statistical uncertainties
-    _identify_large_statistical_uncertainty_points(config=config, validation_set=False)
-
     # First, plot the pair correlations for each observables
     _plot_pairplot_correlations(
         config=config,
@@ -67,105 +59,12 @@ def plot(config: emulation.EmulationConfig):
     _plot_pairplot_correlations(
         config=config,
         plot_dir=plot_dir,
-        outliers_config=OutliersConfig(),
+        outliers_config=preprocess_input_data.OutliersConfig(),
     )
 
 
-####################################################################################################################
-def _identify_large_statistical_uncertainty_points(
-    config: emulation.EmulationConfig,
-    validation_set: bool,
-    simple_interpolation: bool = True,
-) -> None:
-    # Setup
-    prediction_key = "Prediction"
-    if validation_set:
-        prediction_key += "_validation"
-
-    # Retrieve all observables, and check each for large statistical uncertainty points
-    all_observables = data_IO.read_dict_from_h5(config.output_dir, 'observables.h5')
-    new_observables: dict[str, dict[str, dict[str, Any]]] = {prediction_key: {}}
-    for observable_key in data_IO.sorted_observable_list_from_dict(
-        all_observables[prediction_key],
-    ):
-        outliers = _large_statistical_uncertainty_points(
-            values=all_observables[prediction_key][observable_key]["y"],
-            y_err=all_observables[prediction_key][observable_key]["y_err"],
-        )
-        logger.info(f"{observable_key=}, {outliers=}")
-
-        # Check whether we have any design points where we have two points in a row.
-        # In that case, extrapolation may be more problematic.
-        outlier_features_per_design_point: dict[int, set[int]] = {v: set() for v in outliers[1]}
-        for i_feature, i_design_point in zip(*outliers):
-            outlier_features_per_design_point[i_design_point].update([i_feature])
-
-        outlier_features_to_interpolate = {}
-        for k, v in outlier_features_per_design_point.items():
-            if len(v) > 1 and np.all(np.diff(list(v)) == 1):
-                logger.warning(f"Observable {observable_key}, Design point {k} has two consecutive outliers: {v}")
-                # TEMP: Don't propagate these points
-            else:
-                outlier_features_to_interpolate[k] = list(v)
-
-        # Interpolate to find the value and error at the outlier point(s)
-        new_observables[prediction_key][observable_key] = {}
-        for key_type in ["y", "y_err"]:
-            new_observables[prediction_key][observable_key][key_type] = np.array(
-                all_observables[prediction_key][observable_key][key_type], copy=True,
-            )
-            observable_bin_centers = (
-                all_observables["Data"][observable_key]["xmin"] + (
-                    all_observables["Data"][observable_key]["xmax"] -
-                    all_observables["Data"][observable_key]["xmin"]
-                ) / 2.
-            )
-            if len(observable_bin_centers) == 1:
-                # Skip - we can't interpolate one point.
-                logger.debug(f"Skipping observable {observable_key} because it has only one point.")
-                continue
-
-            for design_point, points_to_interpolate in outlier_features_to_interpolate.items():
-                mask = np.ones_like(observable_bin_centers, dtype=bool)
-                # We don't want to data points that we points to interpolate to the interpolation function.
-                # Otherwise, it will negatively impact the interpolation.
-                mask[points_to_interpolate] = False
-                # NOTE: ROOT::Interpolator uses a Cubic Spline, so this might be a reasonable future approach
-                #       However, I think it's slower, so we'll start with this simple approach.
-                if simple_interpolation:
-                    interpolated_values = np.interp(
-                        observable_bin_centers[points_to_interpolate],
-                        observable_bin_centers[mask],
-                        new_observables[prediction_key][observable_key][key_type][:, design_point][mask],
-                    )
-                else:
-                    import scipy.interpolate
-                    cs = scipy.interpolate.CubicSpline(
-                        observable_bin_centers[mask],
-                        new_observables[prediction_key][observable_key][key_type][:, design_point][mask],
-                    )
-                    interpolated_values = cs(observable_bin_centers[points_to_interpolate])
-
-                new_observables[prediction_key][observable_key][key_type][points_to_interpolate, design_point] = interpolated_values
-
-        # Store the interpolated values in a new observables.h5 file
-
-        # TODO: Need to make the observables.h5 file an input option
 
 
-####################################################################################################################
-def _large_statistical_uncertainty_points(values: npt.NDArray[np.float64], y_err: npt.NDArray[np.float64]) -> tuple[npt.NDArray[np.intp], npt.NDArray[np.intp]]:
-    """
-
-    Best to do this observable-by-observable because the relative uncertainty will vary for each one.
-    """
-    relative_error = y_err / values
-    rms = np.sqrt(np.mean(relative_error**2, axis=-1))
-    #import IPython; IPython.embed()
-    # NOTE: shape is (n_features, n_design_points).
-    #       Remember that np.where returns (n_feature_index, n_design_point_index) as separate arrays
-    outliers = np.where(relative_error > 2 * rms[:, np.newaxis])
-    return outliers  # type: ignore[return-value]
 
 
 ####################################################################################################################
@@ -173,7 +72,7 @@ def _plot_pairplot_correlations(
     config: emulation.EmulationConfig,
     plot_dir: Path,
     observable_grouping: ObservableGrouping | None = None,
-    outliers_config: OutliersConfig | None = None,
+    outliers_config: preprocess_input_data.OutliersConfig | None = None,
     annotate_design_points: bool = False,
     use_experimental_data: bool = False,
 ) -> None:
@@ -283,7 +182,7 @@ def _plot_pairplot_correlations(
                         logger.info(f"RMS distance: {rms:.2f}")
 
                         # Identify outliers by distance > outliers_n_RMS_away_from_fit * RMS
-                        outlier_indices = np.where(distances > outliers_config.outliers_n_RMS_away_from_fit * rms)[0]
+                        outlier_indices = np.where(distances > outliers_config.n_RMS * rms)[0]
 
                         # Draw RMS on plot for reference
                         # NOTE: This isn't super precise, so don't be surprised if it doesn't perfectly match the outliers right along the line
