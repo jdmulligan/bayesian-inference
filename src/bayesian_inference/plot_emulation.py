@@ -140,7 +140,7 @@ def _plot_pca_reconstruction_error_by_feature(results, plot_dir, config, fixed_y
     colors = [sns.xkcd_rgb['denim blue'], sns.xkcd_rgb['dark sky blue'], sns.xkcd_rgb['light blue'], sns.xkcd_rgb['pale red'], sns.xkcd_rgb['medium green']]
 
     # Needed to add an axis that maps from index to observable label
-    all_observables = data_IO.read_dict_from_h5(config.output_dir, 'observables.h5')
+    all_observables = data_IO.read_dict_from_h5(config.output_dir, config.observables_filename)
     # The validation set doesn't matter for this plot - we just need some predictions to get the feature mapping from
     Y_dict = data_IO.observable_dict_from_matrix(Y, observables=all_observables, config=config, validation_set=False, observable_filter=config.observable_filter)
 
@@ -236,7 +236,7 @@ def _plot_pca_reconstruction_observables(results, config, plot_dir):
     Y = results['PCA']['Y']
     Y_reconstructed_truncated = results['PCA']['Y_reconstructed_truncated_unscaled']
     # Translate matrix of stacked observables to a dict of matrices per observable
-    observables = data_IO.read_dict_from_h5(config.output_dir, 'observables.h5')
+    observables = data_IO.read_dict_from_h5(config.output_dir, config.observables_filename)
     Y_dict = data_IO.observable_dict_from_matrix(Y, observables, config=config, validation_set=False, observable_filter=config.observable_filter)
     Y_dict_truncated_reconstructed = data_IO.observable_dict_from_matrix(Y_reconstructed_truncated, observables, validation_set=False, observable_filter=config.observable_filter)
 
@@ -267,7 +267,7 @@ def _plot_pca_reconstruction_observables_per_n_pc(results, config, plot_dir):
     scaler = results['PCA']['scaler']
 
     # Translate matrix of stacked observables to a dict of matrices per observable
-    observables = data_IO.read_dict_from_h5(config.output_dir, 'observables.h5')
+    observables = data_IO.read_dict_from_h5(config.output_dir, config.observables_filename)
     Y_dict = data_IO.observable_dict_from_matrix(Y, observables, config=config, validation_set=False, observable_filter=config.observable_filter)
 
     for n_chunk in range(1, n_pc_max, n_pc_per_figure):
@@ -298,13 +298,13 @@ def _plot_emulator_observables(results, config, plot_dir, validation_set=False):
     '''
 
     # Get observables
-    observables = data_IO.read_dict_from_h5(config.output_dir, 'observables.h5', verbose=False)
+    observables = data_IO.read_dict_from_h5(config.output_dir, config.observables_filename, verbose=False)
 
     # Get design points
-    design = data_IO.design_array_from_h5(config.output_dir, filename='observables.h5', validation_set=validation_set)
+    design = data_IO.design_array_from_h5(config.output_dir, filename=config.observables_filename, validation_set=validation_set)
 
     # Get JETSCAPE predictions
-    Y = data_IO.predictions_matrix_from_h5(config.output_dir, filename='observables.h5', validation_set=validation_set, observable_filter=config.observable_filter)
+    Y = data_IO.predictions_matrix_from_h5(config.output_dir, filename=config.observables_filename, validation_set=validation_set, observable_filter=config.observable_filter)
     # Translate matrix of stacked observables to a dict of matrices per observable
     Y_dict = data_IO.observable_dict_from_matrix(Y, observables, config=config, validation_set=validation_set, observable_filter=config.observable_filter)
 
@@ -342,13 +342,13 @@ def _plot_emulator_residuals(results, config, plot_dir, validation_set=False):
     '''
 
     # Get observables
-    observables = data_IO.read_dict_from_h5(config.output_dir, 'observables.h5', verbose=False)
+    observables = data_IO.read_dict_from_h5(config.output_dir, config.observables_filename, verbose=False)
 
     # Get design points
-    design = data_IO.design_array_from_h5(config.output_dir, filename='observables.h5', validation_set=validation_set)
+    design = data_IO.design_array_from_h5(config.output_dir, filename=config.observables_filename, validation_set=validation_set)
 
     # Get JETSCAPE predictions
-    Y = data_IO.predictions_matrix_from_h5(config.output_dir, filename='observables.h5', validation_set=validation_set, observable_filter=config.observable_filter)
+    Y = data_IO.predictions_matrix_from_h5(config.output_dir, filename=config.observables_filename, validation_set=validation_set, observable_filter=config.observable_filter)
     # Translate matrix of stacked observables to a dict of matrices per observable
     Y_dict = data_IO.observable_dict_from_matrix(Y, observables, config=config, validation_set=validation_set, observable_filter=config.observable_filter)
 

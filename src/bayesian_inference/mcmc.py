@@ -318,6 +318,7 @@ class MCMCConfig(common_base.CommonBase):
 
         self.observable_table_dir = config['observable_table_dir']
         self.observable_config_dir = config['observable_config_dir']
+        self.observables_filename = config["observables_filename"]
 
         mcmc_configuration = analysis_config["parameters"]["mcmc"]
         self.n_walkers = mcmc_configuration['n_walkers']

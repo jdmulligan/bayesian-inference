@@ -26,6 +26,10 @@ observable_table_dir: 'data/20230116/tables'
 # We make use of some info in the JETSCAPE-analysis config that was used to aggregate/plot observables
 observable_config_dir: '../JETSCAPE-analysis/config'
 
+# Filename of the observables file that we will use. This could be the standard one, or it could
+# have some predictions preprocessing applied to it.
+observables_filename: "observables.h5"
+
 #-------------------------------------------
 # Default parameter settings
 parameters:
