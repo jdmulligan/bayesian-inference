@@ -8,6 +8,7 @@ from __future__ import annotations
 import inspect
 import logging
 from pathlib import Path
+from typing import Any
 
 import attrs
 import numpy as np
@@ -21,6 +22,16 @@ from bayesian_inference import data_IO, emulation
 
 
 logger = logging.getLogger(__name__)
+
+
+@attrs.frozen
+class OutliersConfig:
+    outliers_n_RMS_away_from_fit: float = 2.
+
+@attrs.frozen
+class ObservableGrouping:
+    observable_by_observable: bool = False
+    fixed_size: int | None = None
 
 ####################################################################################################################
 def plot(config: emulation.EmulationConfig):
@@ -61,7 +72,11 @@ def plot(config: emulation.EmulationConfig):
 
 
 ####################################################################################################################
-def _identify_large_statistical_uncertainty_points(config: emulation.EmulationConfig, validation_set: bool) -> None:
+def _identify_large_statistical_uncertainty_points(
+    config: emulation.EmulationConfig,
+    validation_set: bool,
+    simple_interpolation: bool = True,
+) -> None:
     # Setup
     prediction_key = "Prediction"
     if validation_set:
@@ -69,6 +84,7 @@ def _identify_large_statistical_uncertainty_points(config: emulation.EmulationCo
 
     # Retrieve all observables, and check each for large statistical uncertainty points
     all_observables = data_IO.read_dict_from_h5(config.output_dir, 'observables.h5')
+    new_observables: dict[str, dict[str, dict[str, Any]]] = {prediction_key: {}}
     for observable_key in data_IO.sorted_observable_list_from_dict(
         all_observables[prediction_key],
     ):
@@ -84,9 +100,55 @@ def _identify_large_statistical_uncertainty_points(config: emulation.EmulationCo
         for i_feature, i_design_point in zip(*outliers):
             outlier_features_per_design_point[i_design_point].update([i_feature])
 
+        outlier_features_to_interpolate = {}
         for k, v in outlier_features_per_design_point.items():
             if len(v) > 1 and np.all(np.diff(list(v)) == 1):
                 logger.warning(f"Observable {observable_key}, Design point {k} has two consecutive outliers: {v}")
+                # TEMP: Don't propagate these points
+            else:
+                outlier_features_to_interpolate[k] = list(v)
+
+        # Interpolate to find the value and error at the outlier point(s)
+        new_observables[prediction_key][observable_key] = {}
+        for key_type in ["y", "y_err"]:
+            new_observables[prediction_key][observable_key][key_type] = np.array(
+                all_observables[prediction_key][observable_key][key_type], copy=True,
+            )
+            observable_bin_centers = (
+                all_observables["Data"][observable_key]["xmin"] + (
+                    all_observables["Data"][observable_key]["xmax"] -
+                    all_observables["Data"][observable_key]["xmin"]
+                ) / 2.
+            )
+            for design_point, points_to_interpolate in outlier_features_to_interpolate.items():
+                mask = np.ones_like(observable_bin_centers, dtype=bool)
+                # We don't want to data points that we points to interpolate to the interpolation function.
+                # Otherwise, it will negatively impact the interpolation.
+                mask[points_to_interpolate] = False
+                # NOTE: ROOT::Interpolator uses a Cubic Spline, so this might be a reasonable future approach
+                #       However, I think it's slower, so we'll start with this simple approach.
+                if simple_interpolation:
+                    interpolated_values = np.interp(
+                        observable_bin_centers[points_to_interpolate],
+                        observable_bin_centers[mask],
+                        new_observables[prediction_key][observable_key][key_type][:, design_point][mask],
+                    )
+                else:
+                    import scipy.interpolate
+                    cs = scipy.interpolate.CubicSpline(
+                        observable_bin_centers[mask],
+                        new_observables[prediction_key][observable_key][key_type][:, design_point][mask],
+                    )
+                    interpolated_values = cs(observable_bin_centers[points_to_interpolate])
+
+                new_observables[prediction_key][observable_key][key_type][points_to_interpolate, design_point] = interpolated_values
+
+            import IPython; IPython.embed()
+
+        # Store the interpolated values in a new observables.h5 file
+
+        # TODO: Need to make the observables.h5 file an input option
+
 
 ####################################################################################################################
 def _large_statistical_uncertainty_points(values: npt.NDArray[np.float64], y_err: npt.NDArray[np.float64]) -> tuple[npt.NDArray[np.intp], npt.NDArray[np.intp]]:
@@ -102,14 +164,6 @@ def _large_statistical_uncertainty_points(values: npt.NDArray[np.float64], y_err
     outliers = np.where(relative_error > 2 * rms[:, np.newaxis])
     return outliers  # type: ignore[return-value]
 
-@attrs.frozen
-class OutliersConfig:
-    outliers_n_RMS_away_from_fit: float = 2.
-
-@attrs.frozen
-class ObservableGrouping:
-    observable_by_observable: bool = False
-    fixed_size: int | None = None
 
 ####################################################################################################################
 def _plot_pairplot_correlations(
