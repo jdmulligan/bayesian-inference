@@ -120,6 +120,11 @@ def _identify_large_statistical_uncertainty_points(
                     all_observables["Data"][observable_key]["xmin"]
                 ) / 2.
             )
+            if len(observable_bin_centers) == 1:
+                # Skip - we can't interpolate one point.
+                logger.debug(f"Skipping observable {observable_key} because it has only one point.")
+                continue
+
             for design_point, points_to_interpolate in outlier_features_to_interpolate.items():
                 mask = np.ones_like(observable_bin_centers, dtype=bool)
                 # We don't want to data points that we points to interpolate to the interpolation function.
@@ -142,8 +147,6 @@ def _identify_large_statistical_uncertainty_points(
                     interpolated_values = cs(observable_bin_centers[points_to_interpolate])
 
                 new_observables[prediction_key][observable_key][key_type][points_to_interpolate, design_point] = interpolated_values
-
-            import IPython; IPython.embed()
 
         # Store the interpolated values in a new observables.h5 file
 
