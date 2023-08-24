@@ -41,6 +41,14 @@ def plot(config: emulation.EmulationConfig):
     plot_dir = Path(config.output_dir) / 'plot_input_data'
     plot_dir.mkdir(parents=True, exist_ok=True)
 
+    # Compare smoothed predictions for all design points
+    _plot_compare_preprocessed_predictions_for_all_design_points(
+        config=config,
+        plot_dir=plot_dir,
+        grid_size=(3, 3),
+        validation_set=False,
+    )
+
     # First, plot the pair correlations for each observables
     _plot_pairplot_correlations(
         config=config,
@@ -63,8 +71,85 @@ def plot(config: emulation.EmulationConfig):
     )
 
 
+####################################################################################################################
+def _plot_compare_preprocessed_predictions_for_all_design_points(
+    config: emulation.EmulationConfig,
+    plot_dir: Path,
+    grid_size: tuple[int, int] | None = None,
+    validation_set: bool = False,
+    legend_kwargs: dict[str, Any] | None = None,
+) -> None:
+    """ Plot comparison of predictions for all design points. """
+    # Validation
+    if grid_size is None:
+        grid_size = (4, 4)
+    if legend_kwargs is None:
+        legend_kwargs = {}
 
+    # Setup
+    logger.info("Plotting standard vs preprocessed predictions")
+    fontsize = 14. / grid_size[0]
+    prediction_key = "Prediction"
+    if validation_set:
+        prediction_key += "_validation"
 
+    # Get data (Note: this is where the bin values are stored)
+    # NOTE: It doesn't matter which filename we use here - it's the same for both
+    data = data_IO.data_dict_from_h5(config.output_dir, filename='observables.h5',
+                                      observable_table_dir=config.config["observable_table_dir"])
+
+    # Grab the observables to compare
+    all_observables = data_IO.read_dict_from_h5(config.output_dir, 'observables.h5')
+    all_observables_preprocessed = data_IO.read_dict_from_h5(config.output_dir, 'observables_preprocessed.h5')
+    colors = [sns.xkcd_rgb['dark sky blue'], sns.xkcd_rgb['medium green']]
+
+    sorted_observable_keys_iter = iter(list(data_IO.sorted_observable_list_from_dict( all_observables[prediction_key],)))
+    counter = 0
+    while True:
+        fig, axes = plt.subplots(grid_size[0], grid_size[1], constrained_layout=True)
+        # This feels really not pythonic, but I guess the zip captures the StopIteration,
+        # so we can't just rely on that to break the loop.
+        observable_key_ax_pairs = list(zip(sorted_observable_keys_iter, axes.flat))
+        # Out of observables - time to stop
+        if len(observable_key_ax_pairs) == 0:
+            break
+        for observable_key, ax in observable_key_ax_pairs:
+            # Use data to get the bin centers
+            xmin = data[observable_key]['xmin']
+            xmax = data[observable_key]['xmax']
+            x = (xmin + xmax) / 2
+            # Plot each design point separately
+            observable = all_observables[prediction_key][observable_key]["y"]
+            observable_preprocessed = all_observables_preprocessed[prediction_key][observable_key]["y"]
+            for i_design_point in range(observable.shape[1]):
+                for label, color, obs in zip(["standard", "preprocessed"], colors, [observable, observable_preprocessed]):
+                    ax.plot(
+                        x,
+                        obs[:, i_design_point],
+                        linewidth=2,
+                        alpha=0.2,
+                        color=color,
+                        label=label if i_design_point == 0 else None
+                    )
+
+            # This should practically cover reasonable observable ranges, but prevent giant outliers
+            # from obscuring the details that we're interested in
+            ax.set_ylim([0, 2])
+            ax.legend(
+                loc='upper right',
+                title=observable_key,
+                title_fontsize=fontsize,
+                fontsize=fontsize,
+                frameon=False,
+                **legend_kwargs
+            )
+
+        # Write figure to file and move to next one
+        _path = plot_dir / f"compare_preprocessed_predictions_all_design_points__{counter}.pdf"
+        fig.savefig(_path)
+        plt.close(fig)
+
+        counter += 1
 
 
 ####################################################################################################################
