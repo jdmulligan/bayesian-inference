@@ -5,6 +5,7 @@
 output_dir: 'output/20230814'
 
 initialize_observables: False
+preprocess_input_data: False
 fit_emulators: False
 run_mcmc: False
 run_closure_tests: False
