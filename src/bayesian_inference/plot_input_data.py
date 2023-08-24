@@ -333,7 +333,6 @@ class PairGridWithRegression(sns.PairGrid):
             if ax is None:  # i.e. we are in corner mode
                 continue
             results[(i, j)] = self._plot_bivariate(x_var, y_var, ax, func, **kws)
-            logger.info(f"{i=}, {j=}, {results[(i, j)]=}, {func=}")
         self._add_axis_labels()
 
         if "hue" in inspect.signature(func).parameters:
@@ -344,7 +343,6 @@ class PairGridWithRegression(sns.PairGrid):
     def _plot_bivariate(self, x_var, y_var, ax, func, **kwargs):
         """Draw a bivariate plot on the specified axes."""
         if "hue" not in inspect.signature(func).parameters:
-            logger.info("here")
             results = self._plot_bivariate_iter_hue(x_var, y_var, ax, func, **kwargs)
             return results
 
@@ -377,7 +375,6 @@ class PairGridWithRegression(sns.PairGrid):
             kwargs.update({
                 "hue": hue, "hue_order": self._hue_order, "palette": self._orig_palette,
             })
-        logger.warning(f"{func=}")
         result = func(x=x, y=y, **kwargs)
 
         self._update_legend_data(ax)
