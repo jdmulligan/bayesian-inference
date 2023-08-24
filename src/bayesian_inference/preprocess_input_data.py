@@ -34,7 +34,6 @@ def preprocess(
         outliers_config=OutliersConfig(n_RMS=2.),
     )
 
-    # TODO: Need to make the observables.h5 file an input option
     return observables
 
 
@@ -43,22 +42,29 @@ def smooth_statistical_outliers_in_predictions(
     simple_interpolation: bool,
     outliers_config: OutliersConfig,
 ) -> dict[str, Any]:
+    """ Steer smoothing of statistical outliers in predictions. """
     # Setup
     all_observables = data_IO.read_dict_from_h5(config.output_dir, 'observables.h5')
     new_observables = {}
-    new_observables["Prediction"] = _smooth_statistical_outliers_in_predictions(
-        config=config,
-        all_observables=all_observables,
-        validation_set=False,
-        simple_interpolation=simple_interpolation,
-        outliers_config=outliers_config,
+    # Adds the outputs under the "Prediction" key
+    new_observables.update(
+        _smooth_statistical_outliers_in_predictions(
+            config=config,
+            all_observables=all_observables,
+            validation_set=False,
+            simple_interpolation=simple_interpolation,
+            outliers_config=outliers_config,
+        )
     )
-    new_observables["Prediction_validation"] = _smooth_statistical_outliers_in_predictions(
-        config=config,
-        all_observables=all_observables,
-        validation_set=True,
-        simple_interpolation=simple_interpolation,
-        outliers_config=outliers_config,
+    # Adds the outputs under the "Prediction_validation" key
+    new_observables.update(
+        _smooth_statistical_outliers_in_predictions(
+            config=config,
+            all_observables=all_observables,
+            validation_set=True,
+            simple_interpolation=simple_interpolation,
+            outliers_config=outliers_config,
+        )
     )
 
     # And then fill in the rest of the observable quantities.
@@ -94,7 +100,7 @@ def _smooth_statistical_outliers_in_predictions(
             y_err=all_observables[prediction_key][observable_key]["y_err"],
             outliers_config=outliers_config,
         )
-        logger.info(f"{observable_key=}, {outliers=}")
+        #logger.info(f"{observable_key=}, {outliers=}")
 
         # Check whether we have any design points where we have two points in a row.
         # In that case, extrapolation may be more problematic.
@@ -102,11 +108,13 @@ def _smooth_statistical_outliers_in_predictions(
         for i_feature, i_design_point in zip(*outliers):
             outlier_features_per_design_point[i_design_point].update([i_feature])
 
+        # If there are multiple points in a row, we skip extrapolation since it's not clear that we
+        # can reliably extrapolate.
+        # TODO: In this case, we should probably consider excluding the observable for this design point.
         outlier_features_to_interpolate = {}
         for k, v in outlier_features_per_design_point.items():
             if len(v) > 1 and np.all(np.diff(list(v)) == 1):
-                logger.warning(f"Observable {observable_key}, Design point {k} has two consecutive outliers: {v}")
-                # TEMP: Don't propagate these points
+                logger.warning(f"Observable {observable_key}, Design point {k} has multiple consecutive outliers: {v}")
             else:
                 outlier_features_to_interpolate[k] = list(v)
 
