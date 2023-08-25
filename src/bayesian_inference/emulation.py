@@ -102,7 +102,11 @@ def fit_emulator_group(config: EmulationGroupConfig) -> dict[str, Any]:
     #
     # TODO: do we want whiten=True? (NOTE: beware that inverse_transform also undoes whitening)
     scaler = sklearn_preprocessing.StandardScaler()
-    pca = sklearn_decomposition.PCA(svd_solver='full', whiten=False) # Include all PCs here, so we can access them later
+    # This adopts the sklearn convention, but then sets a max cap of 30 PCs (arbitrarily chosen) to
+    # reduce computation time.
+    max_n_components = np.min([30, *Y.shape])
+    logger.info(f"Running with max n_pc={max_n_components}")
+    pca = sklearn_decomposition.PCA(n_components=max_n_components, svd_solver='full', whiten=False) # Include all PCs here, so we can access them later
     # Scale data and perform PCA
     Y_pca = pca.fit_transform(scaler.fit_transform(Y))
     Y_pca_truncated = Y_pca[:,:config.n_pc]    # Select PCs here
