@@ -108,15 +108,23 @@ class SteerAnalysis(common_base.CommonBase):
                         logger.info('------------------------------------------------------------------------')
                         logger.info(f'Preprocessing input data: {analysis_name} ({parameterization} parameterization)...')
 
-                        # Not used for emulation here, but it's a convenient configuration objet, so we use it here
-                        emulation_config = emulation.EmulationConfig.from_config_file(
+                        preprocessing_config = preprocess_input_data.PreprocessingConfig(
                             analysis_name=analysis_name,
                             parameterization=parameterization,
                             analysis_config=analysis_config,
                             config_file=self.config_file,
                         )
+                        # NOTE: Strictly speaking, we don't want the emulation config here. However,
+                        #       We often need the observable filter, and it doesn't cost anything to
+                        #       construct here, so we just go for it.
+                        #emulation_config = emulation.EmulationConfig.from_config_file(
+                        #    analysis_name=analysis_name,
+                        #    parameterization=parameterization,
+                        #    analysis_config=analysis_config,
+                        #    config_file=self.config_file,
+                        #)
                         observables_smoothed = preprocess_input_data.preprocess(
-                            config=emulation_config,
+                            preprocessing_config=preprocessing_config,
                         )
                         data_IO.write_dict_to_h5(observables_smoothed,
                                                 os.path.join(self.output_dir, f'{analysis_name}_{parameterization}'),

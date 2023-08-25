@@ -3,15 +3,18 @@
 authors: J.Mulligan, R.Ehlers
 """
 
+from __future__ import annotations
+
 import logging
+from pathlib import Path
 from typing import Any
-from itertools import groupby
 
 import attrs
 import numpy as np
 import numpy.typing as npt
+import yaml
 
-from bayesian_inference import data_IO, emulation
+from bayesian_inference import common_base, data_IO
 
 logger = logging.getLogger(__name__)
 
@@ -25,45 +28,39 @@ class OutliersConfig:
 
 
 def preprocess(
-    config: emulation.EmulationConfig,
+    preprocessing_config: PreprocessingConfig,
 ) -> dict[str, Any]:
-    # First, remove outliers
+    # First, smooth predictions
     observables = smooth_statistical_outliers_in_predictions(
-        config=config,
-        simple_interpolation=True,
-        outliers_config=OutliersConfig(n_RMS=2.),
+        preprocessing_config=preprocessing_config,
     )
 
     return observables
 
 
 def smooth_statistical_outliers_in_predictions(
-    config: emulation.EmulationConfig,
-    simple_interpolation: bool,
-    outliers_config: OutliersConfig,
+    preprocessing_config: PreprocessingConfig,
 ) -> dict[str, Any]:
     """ Steer smoothing of statistical outliers in predictions. """
-    # Setup
-    all_observables = data_IO.read_dict_from_h5(config.output_dir, 'observables.h5')
+    # Setup parameters
+
+    # Setup for observables
+    all_observables = data_IO.read_dict_from_h5(preprocessing_config.output_dir, 'observables.h5')
     new_observables = {}
     # Adds the outputs under the "Prediction" key
     new_observables.update(
         _smooth_statistical_outliers_in_predictions(
-            config=config,
             all_observables=all_observables,
             validation_set=False,
-            simple_interpolation=simple_interpolation,
-            outliers_config=outliers_config,
+            preprocessing_config=preprocessing_config,
         )
     )
     # Adds the outputs under the "Prediction_validation" key
     new_observables.update(
         _smooth_statistical_outliers_in_predictions(
-            config=config,
             all_observables=all_observables,
             validation_set=True,
-            simple_interpolation=simple_interpolation,
-            outliers_config=outliers_config,
+            preprocessing_config=preprocessing_config,
         )
     )
 
@@ -75,16 +72,19 @@ def smooth_statistical_outliers_in_predictions(
 
     return new_observables
 
+
 def _smooth_statistical_outliers_in_predictions(
     all_observables: dict[str, dict[str, dict[str, Any]]],
-    config: emulation.EmulationConfig,
     validation_set: bool,
-    simple_interpolation: bool,
-    outliers_config: OutliersConfig | None = None,
+    preprocessing_config: PreprocessingConfig,
 ) -> dict[str, Any]:
-    # Validation
-    if outliers_config is None:
-        outliers_config = OutliersConfig()
+    """Smooth out statistical outliers in predictions.
+
+    Args:
+        all_observables: Dictionary of observables from read_dict_from_h5.
+        validation_set: Whether to use the validation set or not.
+        preprocessing_config: Configuration for preprocessing.
+    """
     # Setup
     prediction_key = "Prediction"
     if validation_set:
@@ -98,7 +98,7 @@ def _smooth_statistical_outliers_in_predictions(
         outliers = _find_large_statistical_uncertainty_points(
             values=all_observables[prediction_key][observable_key]["y"],
             y_err=all_observables[prediction_key][observable_key]["y_err"],
-            outliers_config=outliers_config,
+            outliers_config=preprocessing_config.smoothing_outliers_config,
         )
         logger.error("=====================================")
         logger.error(f"{observable_key=}, {outliers=}")
@@ -119,9 +119,6 @@ def _smooth_statistical_outliers_in_predictions(
         # can reliably extrapolate.
         # TODO: If we have to skip, we should probably consider excluding the observable for this design point.
         outlier_features_to_interpolate_per_design_point: dict[int, list[int]] = {}
-        # TODO: Make this configurable
-        # TODO: Default to 1 to be conservative!
-        max_points_in_row_to_interpolate = 2
         for k, v in outlier_features_per_design_point.items():
             logger.warning("------------------------")
             logger.warning(f"{k=}, {v=}")
@@ -139,7 +136,7 @@ def _smooth_statistical_outliers_in_predictions(
                     #       eg. one distance(s) of 1 -> two points
                     #           two distance(s) of 1 -> three points (due to set)
                     #           three distance(s) of 1 -> four points (due to set)
-                    if len(indices_of_outliers_that_are_one_apart) > max_points_in_row_to_interpolate:
+                    if len(indices_of_outliers_that_are_one_apart) > preprocessing_config.smoothing_max_n_feature_outliers_to_interpolate:
                         accumulated_indices_to_remove.update(indices_of_outliers_that_are_one_apart)
                     else:
                         # For debugging, keep track of when we skip removing points (ie. keep them for interpolation) because they're below our max threshold of consecutive points
@@ -147,7 +144,7 @@ def _smooth_statistical_outliers_in_predictions(
                         if len(indices_of_outliers_that_are_one_apart) > 0:
                             msg = (
                                 f"Will continue with interpolating consecutive indices {indices_of_outliers_that_are_one_apart}"
-                                f" because the their number is within the allowable range (n_consecutive<={max_points_in_row_to_interpolate})."
+                                f" because the their number is within the allowable range (n_consecutive<={preprocessing_config.smoothing_max_n_feature_outliers_to_interpolate})."
                             )
                             logger.warning(msg)
                     # Reset
@@ -247,13 +244,19 @@ def _smooth_statistical_outliers_in_predictions(
                 mask[points_to_interpolate] = False
                 # NOTE: ROOT::Interpolator uses a Cubic Spline, so this might be a reasonable future approach
                 #       However, I think it's slower, so we'll start with this simple approach.
-                if simple_interpolation:
+                # TODO: We entirely ignore the interpolation error here. Some approaches for trying to account for it:
+                #       - Attempt to combine the interpolation error with the statistical error
+                #       - Randomly remove a few percent of the points which are used for estimating the interpolation,
+                #         and then see if there are significant changes in the interpolated parameters
+                #       - Could vary some parameters (perhaps following the above) and perform the whole
+                #         Bayesian analysis, again looking for how much the determined parameters change.
+                if preprocessing_config.smoothing_interpolation_method == "simple":
                     interpolated_values = np.interp(
                         observable_bin_centers[points_to_interpolate],
                         observable_bin_centers[mask],
                         new_observables[prediction_key][observable_key][key_type][:, design_point][mask],
                     )
-                else:
+                elif interpolated_values == "cubic_spline":
                     import scipy.interpolate
                     cs = scipy.interpolate.CubicSpline(
                         observable_bin_centers[mask],
@@ -280,3 +283,31 @@ def _find_large_statistical_uncertainty_points(
     #       Remember that np.where returns (n_feature_index, n_design_point_index) as separate arrays
     outliers = np.where(relative_error > outliers_config.n_RMS * rms[:, np.newaxis])
     return outliers  # type: ignore[return-value]
+
+
+@attrs.define
+class PreprocessingConfig(common_base.CommonBase):
+    analysis_name: str
+    parameterization: str
+    config_file: Path = attrs.field(converter=Path)
+    analysis_config: dict[str, Any] = attrs.field(factory=dict)
+    config: dict[str, Any] = attrs.field(init=False)
+    output_dir: Path = attrs.field(init=False)
+
+    def __attrs_post_init__(self):
+        with self.config_file.open() as stream:
+            self.config = yaml.safe_load(stream)
+
+        # Retrieve parameters from the config
+        # Smoothing parameters
+        smoothing_parameters = self.analysis_config['parameters']['preprocessing']['smoothing']
+        self.smoothing_outliers_config = OutliersConfig(n_RMS=smoothing_parameters["outlier_n_RMS"])
+        self.smoothing_interpolation_method = smoothing_parameters["interpolation_method"]
+        # Validation
+        if self.smoothing_interpolation_method not in ["simple", "cubic_spline"]:
+            msg = f"Unrecognized interpolation method {self.smoothing_interpolation_method}."
+            raise ValueError(msg)
+        self.smoothing_max_n_feature_outliers_to_interpolate = smoothing_parameters["max_n_feature_outliers_to_interpolate"]
+
+        # I/O
+        self.output_dir = Path(self.config['output_dir']) / f'{self.analysis_name}_{self.parameterization}'
