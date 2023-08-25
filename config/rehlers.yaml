@@ -202,6 +202,8 @@ analyses:
 
   #analysis1:
   #  parameters:
+  #    preprocessing:
+  #      <<: *default_preprocessing_parameters
   #    emulators:
   #      fluctuating:
   #        <<: *default_emulator_parameters
@@ -224,6 +226,8 @@ analyses:
 
   #analysis2:
   #  parameters:
+  #    preprocessing:
+  #      <<: *default_preprocessing_parameters
   #    emulators:
   #      group1:
   #        <<: *default_emulator_parameters
@@ -240,6 +244,8 @@ analyses:
 
   #analysis3:
   #  parameters:
+  #    preprocessing:
+  #      <<: *default_preprocessing_parameters
   #    emulators:
   #      group1:
   #        <<: *default_emulator_parameters
