@@ -42,7 +42,7 @@ def smooth_statistical_outliers_in_predictions(
     preprocessing_config: PreprocessingConfig,
 ) -> dict[str, Any]:
     """ Steer smoothing of statistical outliers in predictions. """
-    # Setup parameters
+    logger.info("Smoothing outliers in predictions...")
 
     # Setup for observables
     all_observables = data_IO.read_dict_from_h5(preprocessing_config.output_dir, 'observables.h5')
@@ -95,132 +95,77 @@ def _smooth_statistical_outliers_in_predictions(
     for observable_key in data_IO.sorted_observable_list_from_dict(
         all_observables[prediction_key],
     ):
+        # First, find the outliers based on large statistical uncertainty points
         outliers = _find_large_statistical_uncertainty_points(
             values=all_observables[prediction_key][observable_key]["y"],
             y_err=all_observables[prediction_key][observable_key]["y_err"],
             outliers_config=preprocessing_config.smoothing_outliers_config,
         )
-        logger.error("=====================================")
-        logger.error(f"{observable_key=}, {outliers=}")
 
-        # Check whether we have any design points where we have two points in a row.
-        # In that case, extrapolation may be more problematic.
+        # Next, we want to do quality checks.
+        # If there are multiple problematic points in a row, we want to skip interpolation since
+        # it's not clear that we can reliably interpolate.
+        # First, we need to put the features into a more useful order:
+        # outliers: zip(feature_index, design_point) -> dict: (design_point, feature_index)
         outlier_features_per_design_point: dict[int, set[int]] = {v: set() for v in outliers[1]}
         for i_feature, design_point in zip(*outliers):
-            if observable_key == "2760__PbPb__hadron__pt_ch_atlas____5-10" and design_point == 119:
-                logger.warning(f"{outlier_features_per_design_point[design_point]=}, adding {i_feature=}")
-
             outlier_features_per_design_point[design_point].update([i_feature])
-        # We expect these to be sorted (for finding distances between them), but sets are unordered, so we need to sort
+        # These features must be sorted to finding distances between them, but sets are unordered,
+        # so we need to explicitly sort them
         for design_point in outlier_features_per_design_point:
             outlier_features_per_design_point[design_point] = sorted(outlier_features_per_design_point[design_point])  # type: ignore[assignment]
 
-        # If there are multiple points in a row, we skip extrapolation since it's not clear that we
-        # can reliably extrapolate.
+        # Since the feature values of one design point shouldn't impact another, we'll want to
+        # check one design point at a time.
         # TODO: If we have to skip, we should probably consider excluding the observable for this design point.
         outlier_features_to_interpolate_per_design_point: dict[int, list[int]] = {}
         for k, v in outlier_features_per_design_point.items():
-            logger.warning("------------------------")
-            logger.warning(f"{k=}, {v=}")
+            #logger.debug("------------------------")
+            #logger.debug(f"{k=}, {v=}")
+            # We' c
+            # Calculate the distance between the outlier indices
             distance_between_outliers = np.diff(list(v))
+            # And we'll keep track of which ones pass our quality requirements (not too many in a row).
             indices_of_outliers_that_are_one_apart = set()
             accumulated_indices_to_remove = set()
 
             for distance, lower_feature_index, upper_feature_index in zip(distance_between_outliers, list(v)[:-1], list(v)[1:]):
-                # We're really only worried about points which are right next to each other
+                # We're only worried about points which are right next to each other
                 if distance == 1:
                     indices_of_outliers_that_are_one_apart.update([lower_feature_index, upper_feature_index])
                 else:
-                    # Only remove if it passes our threshold.
+                    # In this case, we now have points that aren't right next to each other.
+                    # Here, we need to figure out what we're going to do with the points that we've found
+                    # that **are** right next to each other. Namely, we'll want to remove them from the list
+                    # to be interpolated, but if there are more points than our threshold.
                     # NOTE: We want strictly greater than because we add two points per distance being greater than 1.
                     #       eg. one distance(s) of 1 -> two points
                     #           two distance(s) of 1 -> three points (due to set)
                     #           three distance(s) of 1 -> four points (due to set)
                     if len(indices_of_outliers_that_are_one_apart) > preprocessing_config.smoothing_max_n_feature_outliers_to_interpolate:
+                        # Since we are looking at the distances, we want to remove the points that make up that distance.
                         accumulated_indices_to_remove.update(indices_of_outliers_that_are_one_apart)
                     else:
-                        # For debugging, keep track of when we skip removing points (ie. keep them for interpolation) because they're below our max threshold of consecutive points
-                        # NOTE: No point in warning if empty, since that case is trivial
+                        # For debugging, keep track of when we find points that are right next to each other but
+                        # where we skip removing them (ie. keep them for interpolation) because they're below our
+                        # max threshold of consecutive points
+                        # NOTE: There's no point in warning if empty, since that case is trivial
                         if len(indices_of_outliers_that_are_one_apart) > 0:
                             msg = (
                                 f"Will continue with interpolating consecutive indices {indices_of_outliers_that_are_one_apart}"
                                 f" because the their number is within the allowable range (n_consecutive<={preprocessing_config.smoothing_max_n_feature_outliers_to_interpolate})."
                             )
-                            logger.warning(msg)
-                    # Reset
+                            logger.debug(msg)
+                    # Reset for the next point
                     indices_of_outliers_that_are_one_apart = set()
 
-                # Update for next loop
-                #previous_distance = distance
+            # Now that we've determine which points we want to remove from our interpolation (accumulated_indices_to_remove),
+            # let's actually remove them from our list.
+            # NOTE: We sort again because sets are not ordered.
             outlier_features_to_interpolate_per_design_point[k] = sorted(list(set(v) - accumulated_indices_to_remove))
-            logger.info(f"features kept for interpolation: {outlier_features_to_interpolate_per_design_point[k]}")
+            #logger.debug(f"features kept for interpolation: {outlier_features_to_interpolate_per_design_point[k]}")
 
-            # Now we want to look for multiple points in a row.
-            #for group_value, group_members in groupby(np.diff(list(v))):
-            #    if group_value == 1 and len(group_members):
-            #        indices_of_outliers_that_are_one_apart.remove(list(group_members))
-
-            #outlier_features_to_keep_for_interpolation = list(v)
-            #distance_between_outliers = np.diff(list(v))
-            ## Loop over possible outliers, and then if they're too close, remove both edges from the distance
-            #previous_distance = 1e3
-            #same_distance_in_a_row = 0
-            #for distance, lower_feature_index, upper_feature_index in zip(distance_between_outliers, list(v)[:-1], list(v)[1:]):
-            #    # First, derive some quantities
-            #    if distance == previous_distance:
-            #        same_distance_in_a_row += 1
-            #    else:
-            #        same_distance_in_a_row = 0
-            #    # We're really only worried about points which are right next to each other
-            #    if distance == 1:
-            #        if max_points_in_row_to_interpolate > 1 and same_distance_in_a_row >= max_points_in_row_to_interpolate:
-            #            logger.warning(f"Skipping {k} because we have {same_distance_in_a_row} points in a row.")
-            #            outlier_features_to_interpolate[k] = []
-            #            break
-
-            #        outlier_features_to_keep_for_interpolation.remove(lower_feature_index)
-            #        outlier_features_to_keep_for_interpolation.remove(upper_feature_index)
-
-            #    # Update for the next time around
-            #    previous_distance = distance
-
-            #if len(v) > 1:
-            #    outlier_features_to_keep_for_interpolation = []
-            #    distance_between_outliers = np.diff(list(v))
-            #    run_lengths = groupby(distance_between_outliers)
-            #    current_index = 0
-            #    just_skipped = False
-            #    for group_value, group_members in run_lengths:
-            #        logger.info(f"{current_index=}, {group_value=}, {list(group_members)=}")
-            #        # Reset
-            #        just_skipped = False
-            #        if group_value == 1:
-            #            # Skip
-            #            current_index += (len(list(group_members)) + 1)
-            #            just_skipped = True
-            #        else:
-            #            outlier_features_to_keep_for_interpolation.append(list(v)[current_index])
-            #        current_index += 1
-            #    # Get the last point
-            #    if not just_skipped:
-            #        outlier_features_to_keep_for_interpolation.append(list(v)[-1])
-            #    else:
-            #        logger.warning(f"Skipping last point for {k}")
-
-            #    logger.info(f"{v=}, {distance_between_outliers=}, {outlier_features_to_keep_for_interpolation=}")
-            #    outlier_features_to_interpolate[k] = outlier_features_to_keep_for_interpolation
-            #else:
-            #    logger.info("Just keeping")
-            #    outlier_features_to_interpolate[k] = list(v)
-
-            #import IPython; IPython.embed()
-            #if len(v) > 1 and np.any(np.diff(list(v)) == 1):
-            #    logger.warning(f"Observable {observable_key}, Design point {k} has multiple consecutive outliers: {v}")
-            #    # TODO: If they're not sequential, we should still pick them out.
-            #else:
-            #    outlier_features_to_interpolate[k] = list(v)
-
-        # Interpolate to find the value and error at the outlier point(s)
+        # Finally, interpolate at the selected outlier point features to find the value and error
         new_observables[prediction_key][observable_key] = {}
         for key_type in ["y", "y_err"]:
             new_observables[prediction_key][observable_key][key_type] = np.array(
@@ -238,9 +183,9 @@ def _smooth_statistical_outliers_in_predictions(
                 continue
 
             for design_point, points_to_interpolate in outlier_features_to_interpolate_per_design_point.items():
-                mask = np.ones_like(observable_bin_centers, dtype=bool)
-                # We don't want to data points that we points to interpolate to the interpolation function.
+                # We want to train the interpolation only on all good points, so we make them out.
                 # Otherwise, it will negatively impact the interpolation.
+                mask = np.ones_like(observable_bin_centers, dtype=bool)
                 mask[points_to_interpolate] = False
                 # NOTE: ROOT::Interpolator uses a Cubic Spline, so this might be a reasonable future approach
                 #       However, I think it's slower, so we'll start with this simple approach.
@@ -267,6 +212,7 @@ def _smooth_statistical_outliers_in_predictions(
                 new_observables[prediction_key][observable_key][key_type][points_to_interpolate, design_point] = interpolated_values
 
     return new_observables
+
 
 def _find_large_statistical_uncertainty_points(
     values: npt.NDArray[np.float64],
