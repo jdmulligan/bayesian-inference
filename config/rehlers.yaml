@@ -48,6 +48,10 @@ parameters:
 
     force_retrain: False
     n_pc: 10
+    # NOTE: The intent here is save time during development. Probably safer to disable
+    #       (which is done by not specifying) in production.
+    max_n_components_to_calculate: 10
+    #max_n_components_to_calculate: 30
 
     mean_function: 'constant'                      # constant, linear
     constant: 0.

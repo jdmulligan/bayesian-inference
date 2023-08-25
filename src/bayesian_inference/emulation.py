@@ -104,8 +104,9 @@ def fit_emulator_group(config: EmulationGroupConfig) -> dict[str, Any]:
     scaler = sklearn_preprocessing.StandardScaler()
     # This adopts the sklearn convention, but then sets a max cap of 30 PCs (arbitrarily chosen) to
     # reduce computation time.
-    max_n_components = np.min([30, *Y.shape])
-    logger.info(f"Running with max n_pc={max_n_components}")
+    max_n_components = config.max_n_components_to_calculate
+    if max_n_components is not None:
+        logger.info(f"Running with max n_pc={max_n_components}")
     pca = sklearn_decomposition.PCA(n_components=max_n_components, svd_solver='full', whiten=False) # Include all PCs here, so we can access them later
     # Scale data and perform PCA
     Y_pca = pca.fit_transform(scaler.fit_transform(Y))
@@ -462,6 +463,7 @@ class EmulationGroupConfig(common_base.CommonBase):
             emulator_configuration = self.analysis_config["parameters"]["emulators"][emulation_group_name]
         self.force_retrain = emulator_configuration['force_retrain']
         self.n_pc = emulator_configuration['n_pc']
+        self.max_n_components_to_calculate = emulator_configuration.get("max_n_components_to_calculate", None)
         self.mean_function = emulator_configuration['mean_function']
         self.constant = emulator_configuration['constant']
         self.linear_weights = emulator_configuration['linear_weights']
