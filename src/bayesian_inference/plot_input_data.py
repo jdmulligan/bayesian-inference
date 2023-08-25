@@ -273,8 +273,7 @@ def _plot_pairplot_correlations(
                         current_ax = g.axes[i_row, i_col]
 
                         fit_result = regression_results[(i_row, i_col)]
-                        #import IPython; IPython.embed()
-                        logger.info(f"{fit_result=}, {fit_result.params=}")
+                        logger.debug(f"{fit_result=}, {fit_result.params=}")
                         # NOTE: The slope_key is the apparently taken from one of the columns of the df.
                         #       It's easier to just search for the right one here.
                         slope_key = [key for key in fit_result.params.keys() if key != "const"][0]
@@ -285,7 +284,7 @@ def _plot_pairplot_correlations(
                             b=fit_result.params["const"],
                         )
                         rms = np.sqrt(np.mean(distances**2))
-                        logger.info(f"RMS distance: {rms:.2f}")
+                        logger.debug(f"RMS distance: {rms:.2f}")
 
                         # Identify outliers by distance > outliers_n_RMS_away_from_fit * RMS
                         outlier_indices = np.where(distances > outliers_config.n_RMS * rms)[0]
@@ -305,7 +304,7 @@ def _plot_pairplot_correlations(
                             current_df[x_column][outlier_indices],
                             current_df[y_column][outlier_indices],
                         ):
-                            logger.info(f"Outlier at {design_point=}")
+                            logger.debug(f"Outlier at {design_point=}")
                             current_ax.annotate(f"outlier! {design_point}", (x, y), fontsize=8, color=sns.xkcd_rgb['dark sky blue'])
 
         # Annotate data points with labels
