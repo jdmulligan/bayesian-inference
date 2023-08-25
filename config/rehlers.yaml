@@ -12,7 +12,7 @@ run_mcmc: False
 run_closure_tests: False
 
 plot:
-  input_data: False
+  input_data: True
   emulators: False
   mcmc: False
   qhat: False
