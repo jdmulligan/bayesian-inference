@@ -91,10 +91,11 @@ def plot_observable_panels(plot_list, labels, colors, columns, config, plot_dir,
             col = i_subplot // plot_shape[0]
             row = i_subplot % plot_shape[0]
 
-        axs[row,col].set_xlabel(xtitle, fontsize=fontsize)
-        axs[row,col].set_ylabel(ytitle, fontsize=fontsize)
-        axs[row,col].set_ylim([ymin, ymax])
-        axs[row,col].set_xlim(xmin[0], xmax[-1])
+        current_ax = axs[row,col]  # type: ignore[index]
+        current_ax.set_xlabel(xtitle, fontsize=fontsize)
+        current_ax.set_ylabel(ytitle, fontsize=fontsize)
+        current_ax.set_ylim([ymin, ymax])
+        current_ax.set_xlim(xmin[0], xmax[-1])
 
         # Draw predictions
         for i_prediction,_ in enumerate(plot_list):
@@ -104,25 +105,25 @@ def plot_observable_panels(plot_list, labels, colors, columns, config, plot_dir,
                 else:
                     label = None
                 if bar_plot:
-                    axs[row,col].bar(x, plot_list[i_prediction][observable_label][columns[i_col]],
+                    current_ax.bar(x, plot_list[i_prediction][observable_label][columns[i_col]],
                                      label=label, color=colors[i_prediction],
                                      width=2*xerr, alpha=alpha)
                 else:
-                    axs[row,col].plot(x, plot_list[i_prediction][observable_label][columns[i_col]],
+                    current_ax.plot(x, plot_list[i_prediction][observable_label][columns[i_col]],
                                     label=label, color=colors[i_prediction],
                                     linewidth=linewidth, alpha=alpha)
 
         # Draw data
         if plot_exp_data:
-            axs[row,col].errorbar(x, data_y, xerr=xerr, yerr=data_y_err,
+            current_ax.errorbar(x, data_y, xerr=xerr, yerr=data_y_err,
                                 color=color_data, marker='s', markersize=markersize, linestyle='', label='Experimental data')
 
             # Draw dashed line at RAA=1
-            axs[row,col].plot([xmin[0], xmax[-1]], [1, 1],
+            current_ax.plot([xmin[0], xmax[-1]], [1, 1],
                             sns.xkcd_rgb['almost black'], alpha=alpha, linewidth=linewidth, linestyle='dotted')
 
         # Draw legend
-        axs[row,col].legend(loc='upper right', title=observable_label,
+        current_ax.legend(loc='upper right', title=observable_label,
                             title_fontsize=fontsize, fontsize=fontsize, frameon=False, **legend_kwargs)
 
         # Increment subplot, and save if done with plot

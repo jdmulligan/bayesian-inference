@@ -22,11 +22,12 @@ sns.set_context('paper', rc={'font.size':18,'axes.titlesize':18,'axes.labelsize'
 from bayesian_inference import data_IO
 from bayesian_inference import plot_utils
 from bayesian_inference import emulation
+from bayesian_inference import mcmc
 
 logger = logging.getLogger(__name__)
 
 ####################################################################################################################
-def plot(config):
+def plot(config: mcmc.MCMCConfig):
     '''
     Generate plots for MCMC, using data written to mcmc.h5 file in analysis step.
     If no file is found at expected location, no plotting will be done.
@@ -63,7 +64,7 @@ def plot(config):
     _plot_posterior_pairplot(chain, plot_dir, config)
 
     # Posterior vs. Design observables
-    design = data_IO.design_array_from_h5(config.output_dir, filename='observables.h5')
+    design = data_IO.design_array_from_h5(config.output_dir, filename=config.observables_filename)
     _plot_design_pairplot(design, plot_dir, config)
     _plot_design_observables(design, plot_dir, config)
     _plot_posterior_observables(chain, plot_dir, config)
@@ -323,10 +324,10 @@ def _plot_design_observables(design, plot_dir, config):
     '''
 
     # Get observables
-    observables = data_IO.read_dict_from_h5(config.output_dir, 'observables.h5', verbose=False)
+    observables = data_IO.read_dict_from_h5(config.output_dir, config.observables_filename, verbose=False)
 
     # Get JETSCAPE predictions
-    Y = data_IO.predictions_matrix_from_h5(config.output_dir, filename='observables.h5')
+    Y = data_IO.predictions_matrix_from_h5(config.output_dir, filename=config.observables_filename)
     # Translate matrix of stacked observables to a dict of matrices per observable
     Y_dict = data_IO.observable_dict_from_matrix(Y, observables, config=config)
 
@@ -353,7 +354,7 @@ def _plot_posterior_observables(chain, plot_dir, config, n_samples=200):
     posterior_samples = posterior[idx,:]
 
     # Get emulator predictions at these points
-    observables = data_IO.read_dict_from_h5(config.output_dir, 'observables.h5', verbose=False)
+    observables = data_IO.read_dict_from_h5(config.output_dir, config.observables_filename, verbose=False)
     # To get the results, we need to setup the emulation config
     emulation_config = emulation.EmulationConfig.from_config_file(
         analysis_name=config.analysis_name,

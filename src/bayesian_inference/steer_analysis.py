@@ -12,9 +12,7 @@ import shutil
 import yaml
 from pathlib import Path
 
-from bayesian_inference import data_IO
-from bayesian_inference import emulation
-from bayesian_inference import mcmc
+from bayesian_inference import data_IO, preprocess_input_data, emulation, mcmc
 from bayesian_inference import plot_input_data, plot_emulation, plot_mcmc, plot_qhat, plot_closure
 
 from bayesian_inference import common_base, helpers
@@ -55,6 +53,7 @@ class SteerAnalysis(common_base.CommonBase):
 
         # Configure which functions to run
         self.initialize_observables = config['initialize_observables']
+        self.preprocess_input_data = config['preprocess_input_data']
         self.fit_emulators = config['fit_emulators']
         self.run_mcmc = config['run_mcmc']
         self.run_closure_tests = config['run_closure_tests']
@@ -100,6 +99,37 @@ class SteerAnalysis(common_base.CommonBase):
                                                 os.path.join(self.output_dir, f'{analysis_name}_{parameterization}'),
                                                 filename='observables.h5')
                         progress.update(initialization_task, advance=100, visible=False)
+
+                    if self.preprocess_input_data:
+                        # Just indicate that it's working
+                        preprocess_task = progress.add_task("[deep_sky_blue4]Preprocessing...", total=None)
+                        progress.start_task(preprocess_task)
+                        logger.info("")
+                        logger.info('------------------------------------------------------------------------')
+                        logger.info(f'Preprocessing input data: {analysis_name} ({parameterization} parameterization)...')
+
+                        preprocessing_config = preprocess_input_data.PreprocessingConfig(
+                            analysis_name=analysis_name,
+                            parameterization=parameterization,
+                            analysis_config=analysis_config,
+                            config_file=self.config_file,
+                        )
+                        # NOTE: Strictly speaking, we don't want the emulation config here. However,
+                        #       We often need the observable filter, and it doesn't cost anything to
+                        #       construct here, so we just go for it.
+                        #emulation_config = emulation.EmulationConfig.from_config_file(
+                        #    analysis_name=analysis_name,
+                        #    parameterization=parameterization,
+                        #    analysis_config=analysis_config,
+                        #    config_file=self.config_file,
+                        #)
+                        observables_smoothed = preprocess_input_data.preprocess(
+                            preprocessing_config=preprocessing_config,
+                        )
+                        data_IO.write_dict_to_h5(observables_smoothed,
+                                                os.path.join(self.output_dir, f'{analysis_name}_{parameterization}'),
+                                                filename='observables_preprocessed.h5')
+                        progress.update(preprocess_task, advance=100, visible=False)
 
                     # Fit emulators and write them to file
                     if self.fit_emulators:

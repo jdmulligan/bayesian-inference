@@ -71,7 +71,7 @@ def fit_emulator_group(config: EmulationGroupConfig) -> dict[str, Any]:
     # A consistent order of observables is enforced internally in data_IO
     # NOTE: One sample corresponds to one design point, while one feature is one bin of one observable
     logger.info(f'Doing PCA...')
-    Y = data_IO.predictions_matrix_from_h5(config.output_dir, filename='observables.h5', observable_filter=config.observable_filter)
+    Y = data_IO.predictions_matrix_from_h5(config.output_dir, filename=config.observables_filename, observable_filter=config.observable_filter)
 
     # Use sklearn to:
     #  - Center and scale each feature (and later invert)
@@ -113,7 +113,7 @@ def fit_emulator_group(config: EmulationGroupConfig) -> dict[str, Any]:
     logger.info(f'  Variance explained by first {config.n_pc} components: {np.sum(explained_variance_ratio[:config.n_pc])}')
 
     # Get design
-    design = data_IO.design_array_from_h5(config.output_dir, filename='observables.h5')
+    design = data_IO.design_array_from_h5(config.output_dir, filename=config.observables_filename)
 
     # Define GP kernel (covariance function)
     min = np.array(config.analysis_config['parameterization'][config.parameterization]['min'])
@@ -232,6 +232,7 @@ class SortEmulationGroupObservables:
         # Now we need the mapping from emulator groups to observables with the right indices.
         # First, we need to start with all available observables (beyond just what's in any given group)
         # to learn the entire mapping
+        # NOTE: It doesn't matter what observables file we use here since it's just to find all of the observables which are used.
         all_observables = data_IO.read_dict_from_h5(emulation_config.output_dir, 'observables.h5')
         current_position = 0
         observable_slices = {}
@@ -446,6 +447,7 @@ class EmulationGroupConfig(common_base.CommonBase):
         # Observable inputs
         self.observable_table_dir = config['observable_table_dir']
         self.observable_config_dir = config['observable_config_dir']
+        self.observables_filename = config["observables_filename"]
 
         ########################
         # Emulator configuration

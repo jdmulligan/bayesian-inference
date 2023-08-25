@@ -5,11 +5,13 @@
 output_dir: '/home/james/jetscape-docker/bayesian-inference/output/20230726'
 
 initialize_observables: False
+preprocess_input_data: False
 fit_emulators: False
 run_mcmc: False
 run_closure_tests: False
 
 plot:
+  input_data: False
   emulators: False
   mcmc: False
   qhat: False
@@ -24,9 +26,21 @@ observable_table_dir: '/rstorage/jetscape/STAT-Bayesian/Analysis1/20230116/table
 # We make use of some info in the JETSCAPE-analysis config that was used to aggregate/plot observables
 observable_config_dir: '/home/james/jetscape-docker/JETSCAPE-analysis/config'
 
+# Filename of the observables file that we will use. This could be the standard one, or it could
+# have some predictions preprocessing applied to it.
+observables_filename: "observables.h5"
+
 #-------------------------------------------
 # Default parameter settings
 parameters:
+  #-------------------------------------------
+  # Preprocessing parameters
+  preprocessing_parameters: &default_preprocessing_parameters
+    smoothing:
+      outlier_n_RMS: 2.
+      interpolation_method: "simple" # or "cubic_spline"
+      max_n_feature_outliers_to_interpolate: 1
+
   #-------------------------------------------
   # Emulator parameters
   emulator_parameters: &default_emulator_parameters
@@ -115,6 +129,8 @@ analyses:
 
   analysis1:
     parameters:
+      preprocessing:
+        <<: *default_preprocessing_parameters
       emulators:
         default_group:
           <<: *default_emulator_parameters
@@ -129,6 +145,8 @@ analyses:
 
   analysis2:
     parameters:
+      preprocessing:
+        <<: *default_preprocessing_parameters
       emulators:
         default_group:
           <<: *default_emulator_parameters
@@ -145,6 +163,8 @@ analyses:
 
   analysis3:
     parameters:
+      preprocessing:
+        <<: *default_preprocessing_parameters
       emulators:
         default_group:
           <<: *default_emulator_parameters
