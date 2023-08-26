@@ -23,6 +23,26 @@ from bayesian_inference import data_IO, emulation, preprocess_input_data
 
 logger = logging.getLogger(__name__)
 
+
+def chunk_observables_in_dataframe(
+    df: pd.DataFrame,
+    chunk_size: int,
+    base_label: str
+) -> Iterable[tuple[str, pd.DataFrame]]:
+    current_index = 0
+    #for _ in range(observables.shape[1] // chunk_size):
+    for _ in range((len(df.columns) - 1) // chunk_size):
+        # Select multiple slices of columns: the values of interest + design_point column at -1
+        # See: https://stackoverflow.com/a/39393929
+        # Continuous
+        current_df = df.iloc[:, np.r_[current_index:current_index + chunk_size, -1]]
+        # Correlate early and late together
+        #current_df = df.iloc[:, np.r_[current_index:current_index + int(self.fixed_size / 2), -current_index - int(self.fixed_size/2) : -current_index-1, -1]]
+        yield f"{base_label}_{current_index}-{current_index + chunk_size}", current_df
+
+        current_index += chunk_size
+
+
 @attrs.frozen
 class ObservableGrouping:
     observable_by_observable: bool = False
@@ -87,7 +107,17 @@ class ObservableGrouping:
                 )
                 df = pd.DataFrame(observables)
                 df["design_point"] = design_points
-                yield emulation_group_name, df
+
+                # The max chunk size is selected somewhat arbitrarily to keep memory usage within reason
+                max_chunk_size = 30
+                if len(df.columns) > max_chunk_size:
+                    yield from chunk_observables_in_dataframe(
+                        df=df,
+                        chunk_size=max_chunk_size,
+                        base_label=emulation_group_name,
+                    )
+                else:
+                    yield emulation_group_name, df
 
         elif self.fixed_size is not None:
             observables = data_IO.predictions_matrix_from_h5(
@@ -100,19 +130,14 @@ class ObservableGrouping:
             df = pd.DataFrame(observables)
             df["design_point"] = design_points
 
-            current_index = 0
-            for _ in range(observables.shape[1] // self.fixed_size):
-                # Select multiple slices of columns: the values of interest + design_point column at -1
-                # See: https://stackoverflow.com/a/39393929
-                # Continuous
-                current_df = df.iloc[:, np.r_[current_index:current_index + self.fixed_size, -1]]
-                # Correlate early and late together
-                #current_df = df.iloc[:, np.r_[current_index:current_index + int(self.fixed_size / 2), -current_index - int(self.fixed_size/2) : -current_index-1, -1]]
-                yield f"{current_index}-{current_index + self.fixed_size}", current_df
-
-                current_index += self.fixed_size
+            yield from chunk_observables_in_dataframe(
+                df=df,
+                chunk_size=self.fixed_size,
+                base_label="fixed_size",
+            )
         else:
             raise ValueError(f"Invalid ObservableGrouping settings: {self}")
+
 
 ####################################################################################################################
 def plot(config: emulation.EmulationConfig):
@@ -319,11 +344,12 @@ def _plot_pairplot_correlations(
 
     current_index = 0
     n_features_per_group = 5
+    # TODO: Propagate title to figure. May need a separate filename label and title
     for i_group, (title, current_df) in enumerate(df_generator):
         logger.info(f"Pair plotting columns: {current_df.columns=}")
 
-        # TEMP
-        if i_group > 2:
+        # TODO: Remove this limit once done testing.
+        if i_group > 3:
             break
 
         # Plot
