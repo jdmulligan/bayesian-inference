@@ -296,8 +296,18 @@ class SortEmulationGroupObservables:
         output = {}
         # Requires special handling since we're adding matrices
         if "cov" in self._available_value_types:
-            # FIXME: This doesn't reorder the group_matrix outputs as needed...
-            output["cov"] = nd_block_diag([m["cov"] for m in group_matrices.values()])
+            # First, we have to sort them
+            value_type = "cov"
+            inputs_for_block_diag = []
+            for (_, _, slice_in_emulation_group_matrix), emulation_group_matrix in zip(
+                self.emulation_group_to_observable_matrix.values(), group_matrices.values()
+            ):
+                inputs_for_block_diag.append(emulation_group_matrix[value_type][:, slice_in_emulation_group_matrix, slice_in_emulation_group_matrix])
+
+            # And then merge them together
+            output[value_type] = nd_block_diag(
+                [m for m in inputs_for_block_diag]
+            )
         # Handle the rest (as of 14 August 2023, it's just "central_value")
         for value_type in self._available_value_types:
             if value_type == "cov":
