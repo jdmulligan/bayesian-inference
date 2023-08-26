@@ -43,7 +43,9 @@ def fit_emulators(emulation_config: EmulationConfig) -> None:
     emulator_groups_output = {}
     for emulation_group_name, emulation_group_config in emulation_config.emulation_groups_config.items():
         emulator_groups_output[emulation_group_name] = fit_emulator_group(emulation_group_config)
-        write_emulators(config=emulation_group_config, output_dict=emulator_groups_output[emulation_group_name])
+        # NOTE: If it returns early because an emulator already exists, then we don't want to overwrite it!
+        if emulator_groups_output[emulation_group_name]:
+            write_emulators(config=emulation_group_config, output_dict=emulator_groups_output[emulation_group_name])
     # NOTE: We store everything in a dict so we can later return these if we decide it's helpful. However,
     #       it doesn't appear to be at the moment (August 2023), so we leave as is.
 
@@ -216,8 +218,10 @@ class SortEmulationGroupObservables:
 
     emulation_group_to_observable_matrix: Mapping from emulation group matrix to the matrix of observables. Format:
         {observable_name: (emulator_group_name, slice in output_matrix, slice in emulator_group_matrix)}
-    shape: Shape of matrix output.
-    available_value_types:
+    shape: Shape of matrix output. Format: (n_design_points, n_features). Note that we may only be predicting
+        one design point at a time, so we pick out the number of design points for the output based on the provided
+        group outputs (which implicitly contains the required number of design points).
+    available_value_types: Available value types in the group matrices. These will be extracted when the mapping is learned.
     """
     emulation_group_to_observable_matrix: dict[str, tuple[str, slice, slice]]
     shape: tuple[int, int]
@@ -270,9 +274,10 @@ class SortEmulationGroupObservables:
         }
 
         # We want the shape to allow us to preallocate the array:
+        # Default shape: (n_design_points, n_features)
         last_observable = list(observable_slices)[-1]
         shape = (all_observables[prediction_key][observable_key]['y'].shape[1], observable_slices[last_observable].stop)
-        logger.debug(f"{shape=}")
+        logger.debug(f"{shape=} (note: for all design points)")
 
         return cls(
             emulation_group_to_observable_matrix=observable_emulation_group_map,
@@ -294,20 +299,51 @@ class SortEmulationGroupObservables:
             ])
 
         output = {}
-        # Requires special handling since we're adding matrices
+        # Requires special handling since we're adding matrices (ie. 3d rather than 2d)
         if "cov" in self._available_value_types:
-            # FIXME: This doesn't reorder the group_matrix outputs as needed...
-            output["cov"] = nd_block_diag([m["cov"] for m in group_matrices.values()])
-        # Handle the rest (as of 14 August 2023, it's just "central_value")
+            # Setup
+            value_type = "cov"
+
+            # We have to sort them according to the mapping that we've derived.
+            # However, it's not quite as trivial to just insert them (as we do for the central values),
+            # so we'll use the output matrix slice as the key to sort by below.
+            inputs_for_block_diag = {}
+            for observable_name, (emulation_group_name, slice_in_output_matrix, slice_in_emulation_group_matrix) in self.emulation_group_to_observable_matrix.items():
+                emulation_group_matrix = group_matrices[emulation_group_name]
+                # NOTE: The slice_in_output_matrix.start should provide unique integers to sort by
+                #       (basically, we just use the starting position instead of inserting it directly).
+                inputs_for_block_diag[slice_in_output_matrix.start] = emulation_group_matrix[value_type][:, slice_in_emulation_group_matrix, slice_in_emulation_group_matrix]
+
+            # And then merge them together in a block diagonal, sorting to put them in the right order
+            output[value_type] = nd_block_diag(
+                # sort based on the start value of the slice in the output matrix.
+                [
+                    # NOTE: We don't want to pass the key, but we need it for sorting, so we then
+                    #       have to explicitly select the actual matrices (ie. the v of the k, v pair)
+                    #       to pass along.
+                    m[1]
+                    for m in sorted(
+                        inputs_for_block_diag.items(), key=lambda x: x[0]
+                    )
+                ]
+            )
+
+        # Handle the other values (as of 14 August 2023, it's just "central_value")
         for value_type in self._available_value_types:
+            # Skip over "cov" since we handled it explicitly above.
             if value_type == "cov":
                 continue
 
-            output[value_type] = np.zeros(self.shape)
-            for (emulation_group_name, slice_in_output_matrix, slice_in_emulation_group_matrix), emulation_group_matrix in zip(
-                self.emulation_group_to_observable_matrix.values(), group_matrices.values()
-            ):
+            # Since the number of design points that we want to predict varies, we can't define the output
+            # until we can extract it from one group output. So we wait to initialize the output matrix until
+            # we have the first group output.
+            output[value_type] = None
+            for observable_name, (emulation_group_name, slice_in_output_matrix, slice_in_emulation_group_matrix) in self.emulation_group_to_observable_matrix.items():
+                emulation_group_matrix = group_matrices[emulation_group_name]
+                if output[value_type] is None:
+                    output[value_type] = np.zeros((emulation_group_matrix[value_type].shape[0], *self.shape[1:]))
                 output[value_type][:, slice_in_output_matrix] = emulation_group_matrix[value_type][:, slice_in_emulation_group_matrix]
+
         return output
 
 
