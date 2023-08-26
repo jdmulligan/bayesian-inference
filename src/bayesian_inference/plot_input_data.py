@@ -62,7 +62,7 @@ class ObservableGrouping:
             raise ValueError(f"Invalid ObservableGrouping settings: {self}")
         return label
 
-    def gen(self, config: emulation.EmulationConfig) -> Iterable[tuple[str, pd.DataFrame]]:
+    def gen(self, config: emulation.EmulationConfig, observables_filename: str, validation_set: bool) -> Iterable[tuple[str, pd.DataFrame]]:
         """ Generate a sequence of DataFrames, each of which contains a subset of the observables.
 
         :param np.ndarray observables: Predictions to be grouped.
@@ -70,11 +70,8 @@ class ObservableGrouping:
         :returns: A sequence of (str, DataFrames), each of which contains a title and a subset of the observables.
         """
         # Setup
-        # Parameters
-        validation_set = False
-        observables_filename = "observables.h5"
         # Data
-        all_observables_dict = data_IO.read_dict_from_h5(config.output_dir, 'observables.h5')
+        all_observables_dict = data_IO.read_dict_from_h5(config.output_dir, observables_filename)
         #df = pd.DataFrame(observables[:, :3])
         #df = pd.DataFrame(observables)
         # Add design point as a column so we can use it (eg. with hue)
@@ -302,6 +299,7 @@ def _plot_pairplot_correlations(
     outliers_config: preprocess_input_data.OutliersConfig | None = None,
     annotate_design_points: bool = False,
     use_experimental_data: bool = False,
+    observables_filename: str = "observables.h5",
 ) -> None:
     """ Plot pair correlations.
 
@@ -323,12 +321,12 @@ def _plot_pairplot_correlations(
 
     # Setup
     if use_experimental_data:
-        observables = data_IO.data_array_from_h5(config.output_dir, filename='observables.h5', observable_filter=config.observable_filter)
+        observables = data_IO.data_array_from_h5(config.output_dir, filename=observables_filename, observable_filter=config.observable_filter)
         # Focus on central values
         observables = observables["y"]
         # In the case of data, this is trivially one "design point"
     else:
-        observables = data_IO.predictions_matrix_from_h5(config.output_dir, filename='observables.h5', validation_set=False, observable_filter=config.observable_filter)
+        observables = data_IO.predictions_matrix_from_h5(config.output_dir, filename=observables_filename, validation_set=False, observable_filter=config.observable_filter)
 
     # Determine output name
     filename = "pairplot_correlations"
@@ -340,7 +338,7 @@ def _plot_pairplot_correlations(
         filename += "__outliers"
 
     # We want a shape of (n_design_points, n_features)
-    df_generator = observable_grouping.gen(config=config)
+    df_generator = observable_grouping.gen(config=config, observables_filename=observables_filename, validation_set=False)
 
     current_index = 0
     n_features_per_group = 5
