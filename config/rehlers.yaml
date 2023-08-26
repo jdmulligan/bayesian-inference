@@ -3,7 +3,7 @@
 # General parameters
 
 #output_dir: 'output/20230816_no_exclude'
-output_dir: 'output/20230824'
+output_dir: 'output/20230826'
 
 initialize_observables: False
 preprocess_input_data: False
