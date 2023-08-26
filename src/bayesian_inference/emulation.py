@@ -298,15 +298,16 @@ class SortEmulationGroupObservables:
         if "cov" in self._available_value_types:
             # First, we have to sort them
             value_type = "cov"
-            inputs_for_block_diag = []
-            for (_, _, slice_in_emulation_group_matrix), emulation_group_matrix in zip(
+            inputs_for_block_diag = {}
+            for (_, slice_in_output_matrix, slice_in_emulation_group_matrix), emulation_group_matrix in zip(
                 self.emulation_group_to_observable_matrix.values(), group_matrices.values()
             ):
-                inputs_for_block_diag.append(emulation_group_matrix[value_type][:, slice_in_emulation_group_matrix, slice_in_emulation_group_matrix])
+                # NOTE: The slice_in_output_matrix should strictly increase, so it will be a proxy for the ordering
+                inputs_for_block_diag[slice_in_output_matrix] = emulation_group_matrix[value_type][:, slice_in_emulation_group_matrix, slice_in_emulation_group_matrix]
 
-            # And then merge them together
+            # And then merge them together, sorting by the key
             output[value_type] = nd_block_diag(
-                [m for m in inputs_for_block_diag]
+                [m for m in sorted(inputs_for_block_diag.items(), key=lambda x: x[0].start)]
             )
         # Handle the rest (as of 14 August 2023, it's just "central_value")
         for value_type in self._available_value_types:
