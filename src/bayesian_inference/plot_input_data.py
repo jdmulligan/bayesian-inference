@@ -8,7 +8,7 @@ from __future__ import annotations
 import inspect
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 import attrs
 import numpy as np
@@ -23,10 +23,127 @@ from bayesian_inference import data_IO, emulation, preprocess_input_data
 
 logger = logging.getLogger(__name__)
 
+
+def chunk_observables_in_dataframe(
+    df: pd.DataFrame,
+    chunk_size: int,
+    base_label: str,
+    base_title: str,
+) -> Iterable[tuple[str, str, pd.DataFrame]]:
+    current_index = 0
+    #for _ in range(observables.shape[1] // chunk_size):
+    for _ in range((len(df.columns) - 1) // chunk_size):
+        # Select multiple slices of columns: the values of interest + design_point column at -1
+        # See: https://stackoverflow.com/a/39393929
+        # Continuous
+        current_df = df.iloc[:, np.r_[current_index:current_index + chunk_size, -1]]
+        # Correlate early and late together
+        #current_df = df.iloc[:, np.r_[current_index:current_index + int(self.fixed_size / 2), -current_index - int(self.fixed_size/2) : -current_index-1, -1]]
+        label = f"{current_index}_{current_index + chunk_size}"
+        if base_label:
+            label = f"{base_label}_{label}"
+        title = f"{current_index} - {current_index + chunk_size}"
+        if base_title:
+            title = f"{base_title} {title}"
+        yield label, title, current_df
+
+        current_index += chunk_size
+
+
 @attrs.frozen
 class ObservableGrouping:
     observable_by_observable: bool = False
+    emulator_groups: bool = False
     fixed_size: int | None = None
+
+    @property
+    def label(self) -> str:
+        label = ""
+        if self.observable_by_observable:
+            label += "observable_by_observable"
+        elif self.emulator_groups:
+            label += "emulator_groups"
+        elif self.fixed_size is not None:
+            label += f"observable_group_by_{self.fixed_size}"
+        else:
+            raise ValueError(f"Invalid ObservableGrouping settings: {self}")
+        return label
+
+    def gen(self, config: emulation.EmulationConfig, observables_filename: str, validation_set: bool) -> Iterable[tuple[str, str, pd.DataFrame]]:
+        """ Generate a sequence of DataFrames, each of which contains a subset of the observables.
+
+        :param np.ndarray observables: Predictions to be grouped.
+        :param EmulationConfig config: The emulation config.
+        :returns: A sequence of (str, str, DataFrames), each of which contains a label (for filenames), a title (for the figure), and a subset of the observables.
+        """
+        # Setup
+        # Data
+        all_observables_dict = data_IO.read_dict_from_h5(config.output_dir, observables_filename)
+        #df = pd.DataFrame(observables[:, :3])
+        #df = pd.DataFrame(observables)
+        # Add design point as a column so we can use it (eg. with hue)
+        design_points = np.array(all_observables_dict["Design_indices"])
+
+        if self.observable_by_observable:
+            observables = data_IO.predictions_matrix_from_h5(
+                config.output_dir,
+                filename=observables_filename,
+                validation_set=validation_set,
+                observable_filter=config.observable_filter
+            )
+            observables_dict = data_IO.observable_dict_from_matrix(
+                observables,
+                all_observables_dict,
+                observable_filter=config.observable_filter
+            )
+
+            for observable_key, observable in observables_dict["central_value"].items():
+                df = pd.DataFrame(observable)
+                df["design_point"] = design_points
+                yield f"observable_{observable_key}", observable_key, df
+        elif self.emulator_groups:
+            for emulation_group_name, emulation_group_config in config.emulation_groups_config.items():
+                observables = data_IO.predictions_matrix_from_h5(
+                    config.output_dir,
+                    filename=observables_filename,
+                    validation_set=validation_set,
+                    observable_filter=emulation_group_config.observable_filter,
+                )
+                df = pd.DataFrame(observables)
+                df["design_point"] = design_points
+
+                # The max chunk size is selected somewhat arbitrarily to keep memory usage within reason
+                max_chunk_size = 30
+                if len(df.columns) > max_chunk_size:
+                    yield from chunk_observables_in_dataframe(
+                        df=df,
+                        chunk_size=max_chunk_size,
+                        base_label=f"{emulation_group_name}",
+                        base_title=f"Group {emulation_group_name}",
+                    )
+                else:
+                    yield f"{emulation_group_name}", f"Group {emulation_group_name}", df
+
+        elif self.fixed_size is not None:
+            observables = data_IO.predictions_matrix_from_h5(
+                config.output_dir,
+                filename=observables_filename,
+                validation_set=validation_set,
+                observable_filter=config.observable_filter
+            )
+
+            df = pd.DataFrame(observables)
+            df["design_point"] = design_points
+
+            yield from chunk_observables_in_dataframe(
+                df=df,
+                chunk_size=self.fixed_size,
+                base_label=f"",
+                base_title=f"Fixed size: {self.fixed_size}",
+            )
+        else:
+            raise ValueError(f"Invalid ObservableGrouping settings: {self}")
+
 
 ####################################################################################################################
 def plot(config: emulation.EmulationConfig):
@@ -41,51 +158,60 @@ def plot(config: emulation.EmulationConfig):
     plot_dir = Path(config.output_dir) / 'plot_input_data'
     plot_dir.mkdir(parents=True, exist_ok=True)
 
-    # Compare smoothed predictions for all design points
-    # Start with individual so we can look in detail
-    _plot_predictions_for_all_design_points(
-        config=config,
-        plot_dir=plot_dir,
-        select_which_to_plot=["standard"],
-        grid_size=(3, 3),
-        validation_set=False,
-    )
-    _plot_predictions_for_all_design_points(
-        config=config,
-        plot_dir=plot_dir,
-        select_which_to_plot=["preprocessed"],
-        grid_size=(3, 3),
-        validation_set=False,
-    )
-    # And then combined for convenient comparison
-    _plot_predictions_for_all_design_points(
-        config=config,
-        plot_dir=plot_dir,
-        select_which_to_plot=["standard", "preprocessed"],
-        grid_size=(3, 3),
-        validation_set=False,
-    )
+    ## Compare smoothed predictions for all design points
+    ## Start with individual so we can look in detail
+    #_plot_predictions_for_all_design_points(
+    #    config=config,
+    #    plot_dir=plot_dir,
+    #    select_which_to_plot=["standard"],
+    #    grid_size=(3, 3),
+    #    validation_set=False,
+    #)
+    #_plot_predictions_for_all_design_points(
+    #    config=config,
+    #    plot_dir=plot_dir,
+    #    select_which_to_plot=["preprocessed"],
+    #    grid_size=(3, 3),
+    #    validation_set=False,
+    #)
+    ## And then combined for convenient comparison
+    #_plot_predictions_for_all_design_points(
+    #    config=config,
+    #    plot_dir=plot_dir,
+    #    select_which_to_plot=["standard", "preprocessed"],
+    #    grid_size=(3, 3),
+    #    validation_set=False,
+    #)
 
-    # First, plot the pair correlations for each observables
-    _plot_pairplot_correlations(
-        config=config,
-        plot_dir=plot_dir,
-        observable_grouping=ObservableGrouping(observable_by_observable=True),
-        annotate_design_points=False,
-    )
-    # And an annotated version
-    _plot_pairplot_correlations(
-        config=config,
-        plot_dir=plot_dir,
-        observable_grouping=ObservableGrouping(observable_by_observable=True),
-        annotate_design_points=True,
-    )
+    ## First, plot the pair correlations for each observables
+    #_plot_pairplot_correlations(
+    #    config=config,
+    #    plot_dir=plot_dir,
+    #    observable_grouping=ObservableGrouping(observable_by_observable=True),
+    #    annotate_design_points=False,
+    #)
+    ## And an annotated version
+    #_plot_pairplot_correlations(
+    #    config=config,
+    #    plot_dir=plot_dir,
+    #    observable_grouping=ObservableGrouping(observable_by_observable=True),
+    #    annotate_design_points=True,
+    #)
+    ##
+    #_plot_pairplot_correlations(
+    #    config=config,
+    #    plot_dir=plot_dir,
+    #    outliers_config=preprocess_input_data.OutliersConfig(),
+    #)
     #
     _plot_pairplot_correlations(
         config=config,
         plot_dir=plot_dir,
-        outliers_config=preprocess_input_data.OutliersConfig(),
+        observable_grouping=ObservableGrouping(emulator_groups=True),
     )
+    # TODO: Finish
+    for observables_filename in ["observables.h5", "observables_preprocessed.h5"]:
+        ...
 
 
 ####################################################################################################################
@@ -165,8 +291,12 @@ def _plot_predictions_for_all_design_points(
             )
 
         # Write figure to file and move to next one
+        name = "compare_predictions_all_design_points"
+        if validation_set:
+            name += "__validation"
         select_which_to_plot_str = "_".join(select_which_to_plot)
-        _path = plot_dir / f"compare_predictions_all_design_points__{select_which_to_plot_str}__{counter}.pdf"
+        name += f"__{select_which_to_plot_str}__{counter}.pdf"
+        _path = plot_dir / name
         fig.savefig(_path)
         plt.close(fig)
 
@@ -181,6 +311,7 @@ def _plot_pairplot_correlations(
     outliers_config: preprocess_input_data.OutliersConfig | None = None,
     annotate_design_points: bool = False,
     use_experimental_data: bool = False,
+    observables_filename: str = "observables.h5",
 ) -> None:
     """ Plot pair correlations.
 
@@ -202,68 +333,46 @@ def _plot_pairplot_correlations(
 
     # Setup
     if use_experimental_data:
-        observables = data_IO.data_array_from_h5(config.output_dir, filename='observables.h5', observable_filter=config.observable_filter)
+        observables = data_IO.data_array_from_h5(config.output_dir, filename=observables_filename, observable_filter=config.observable_filter)
         # Focus on central values
         observables = observables["y"]
         # In the case of data, this is trivially one "design point"
     else:
-        observables = data_IO.predictions_matrix_from_h5(config.output_dir, filename='observables.h5', validation_set=False, observable_filter=config.observable_filter)
+        observables = data_IO.predictions_matrix_from_h5(config.output_dir, filename=observables_filename, validation_set=False, observable_filter=config.observable_filter)
 
     # Determine output name
     filename = "pairplot_correlations"
     if observable_grouping is not None:
-        if observable_grouping.observable_by_observable:
-            filename += "__observable_by_observable"
-        elif observable_grouping.fixed_size is not None:
-            filename += f"__observable_group_by_{observable_grouping.fixed_size}"
+        filename += f"__{observable_grouping.label}"
     if annotate_design_points:
         filename += "__annotated"
     if outliers_config is not None:
         filename += "__outliers"
 
     # We want a shape of (n_design_points, n_features)
-    #df = pd.DataFrame(observables[:, :3])
-    df = pd.DataFrame(observables)
-    # Add design point as a column so we can use it (eg. with hue)
-    all_observables_dict = data_IO.read_dict_from_h5(config.output_dir, 'observables.h5')
-    design_points = np.array(all_observables_dict["Design_indices"])
-    df["design_point"] = design_points
+    df_generator = observable_grouping.gen(config=config, observables_filename=observables_filename, validation_set=False)
 
-    current_index = 0
-    n_features_per_group = 5
-    for i_group in range(observables.shape[1] // n_features_per_group):
-        # Select multiple slices of columns: the values of interest + design_point column at -1
-        # See: https://stackoverflow.com/a/39393929
-        #current_df = df.iloc[:, np.r_[current_index:current_index + n_features_per_group, -1]]
-        current_df = df.iloc[:, np.r_[current_index:current_index + int(n_features_per_group / 2), -current_index - int(n_features_per_group/2) : -current_index-1, -1]]
+    for i_group, (label, title, current_df) in enumerate(df_generator):
         logger.info(f"Pair plotting columns: {current_df.columns=}")
 
-        # TEMP
-        if i_group > 2:
-            break
+        # Useful early stopping for debugging...
+        #if i_group > 3:
+        #    break
 
-        # Plot
-        #g = sns.pairplot(
-        #    df,
-        #    #hue="design_point",
-        #    #diag_kind='hist',
-        #    #plot_kws={'alpha':0.7, 's':3, 'color':'blue'},
-        #    #diag_kws={'color':'blue', 'fill':True, 'bins':20}
-        #)
-        # Manually creating the same type of pair plot, but with more control
+        # Here, we'll practically want to create an sns.pairplot, but we can't configure it directly
+        # for what we need, so we'll have to do it by hand.
+        # Setup
         variables = list(current_df.columns)
-        # Need to drop the design_point column, as we just want it for labeling
+        # Need to drop the design_point column from the variables list, as we just want it for labeling
         variables.remove("design_point")
         # And finally plot
+        # With the standard sns call, we can't access the regression
         #g = sns.PairGrid(current_df, vars=variables)
+        # This new class allows us to access the regression results
         g = PairGridWithRegression(current_df, vars=variables)
-        #g.map_lower(sns.scatterplot)
         # NOTE: Can ignore outliers via `robust=True`, although need to install statsmodel
         regression_results = g.map_lower(simple_regplot)
-        #g.map_lower(sns.regplot)
         g.map_diag(sns.histplot)
-
-        #import IPython; IPython.embed()
 
         # Determine outliers by calculating the RMS distance from a linear fit
         if outliers_config:
@@ -305,26 +414,30 @@ def _plot_pairplot_correlations(
                             current_df[y_column][outlier_indices],
                         ):
                             logger.debug(f"Outlier at {design_point=}")
-                            current_ax.annotate(f"outlier! {design_point}", (x, y), fontsize=8, color=sns.xkcd_rgb['dark sky blue'])
+                            current_ax.annotate(f"!{design_point}", (x, y), fontsize=8, color=sns.xkcd_rgb['dark sky blue'])
 
-        # Annotate data points with labels
+        # Annotate data points with design point labels to identify them
         if annotate_design_points:
-            count = 0
+            #count = 0
             for i_col, x_column in enumerate(variables):
                 for i_row, y_column in enumerate(variables):
                     if i_col < i_row:  # Skip the upper triangle + diagonal
                         current_ax = g.axes[i_row, i_col]
-                        current_ax.text(0.1, 0.9, s=f"count={count}", fontsize=8, color='blue', transform=current_ax.transAxes)
-                        count += 1
+                        #current_ax.text(0.1, 0.9, s=f"count={count}", fontsize=8, color='blue', transform=current_ax.transAxes)
+                        #count += 1
                         for (design_point, x, y) in zip(current_df["design_point"], current_df[x_column], current_df[y_column]):
                             current_ax.annotate(design_point, (x, y), fontsize=8, color='red')
 
+        # Add title
+        g.fig.suptitle(title, fontsize=26)
+
         #plt.tight_layout()
-        plt.savefig(plot_dir / f"{filename}__group_{i_group}.pdf")
+        name = f"{filename}__{label}"
+        logger.info(f"Plotting {name=}")
+        plt.savefig(plot_dir / f"{name}.pdf")
         # Cleanup
         plt.close('all')
 
-        current_index += n_features_per_group
 
 def _distance_from_line(x: npt.NDArray[np.number], y: npt.NDArray[np.number], m: float, b: float) -> np.ndarray:
     """ Calculate the distance of each point from a line.
