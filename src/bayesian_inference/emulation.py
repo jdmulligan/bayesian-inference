@@ -200,7 +200,6 @@ def nd_block_diag(arrays):
     :param arrays list[np.array]: List of arrays to block diagonalize.
     """
     shapes = np.array([i.shape for i in arrays])
-    logger.warning(f"{shapes=}")
 
     out = np.zeros(np.append(np.amax(shapes[:,:-2],axis=0), [shapes[:,-2].sum(), shapes[:,-1].sum()]))
     r, c = 0, 0
@@ -278,7 +277,7 @@ class SortEmulationGroupObservables:
         # Default shape: (n_design_points, n_features)
         last_observable = list(observable_slices)[-1]
         shape = (all_observables[prediction_key][observable_key]['y'].shape[1], observable_slices[last_observable].stop)
-        logger.debug(f"{shape=}")
+        logger.debug(f"{shape=} (note: for all design points)")
 
         return cls(
             emulation_group_to_observable_matrix=observable_emulation_group_map,
@@ -304,55 +303,47 @@ class SortEmulationGroupObservables:
         if "cov" in self._available_value_types:
             # Setup
             value_type = "cov"
-            logger.info(f"{group_matrices=}")
 
             # We have to sort them according to the mapping that we've derived.
             # However, it's not quite as trivial to just insert them (as we do for the central values),
             # so we'll use the output matrix slice as the key to sort by below.
             inputs_for_block_diag = {}
-            logger.warning(f"{self.emulation_group_to_observable_matrix=}, {group_matrices=}")
             for observable_name, (emulation_group_name, slice_in_output_matrix, slice_in_emulation_group_matrix) in self.emulation_group_to_observable_matrix.items():
-                logger.info(f"{observable_name=}, {emulation_group_name=}")
                 emulation_group_matrix = group_matrices[emulation_group_name]
-                logger.warning(f"{emulation_group_matrix[value_type].shape=}")
                 # NOTE: The slice_in_output_matrix.start should provide unique integers to sort by
                 #       (basically, we just use the starting position instead of inserting it directly).
                 inputs_for_block_diag[slice_in_output_matrix.start] = emulation_group_matrix[value_type][:, slice_in_emulation_group_matrix, slice_in_emulation_group_matrix]
-                logger.info(f"inputs_for_block_diag[{slice_in_output_matrix.start}] = {inputs_for_block_diag[slice_in_output_matrix.start].shape=}, {inputs_for_block_diag[slice_in_output_matrix.start]=}")
-            # And then merge them together, sorting to put them in the right order
-            _temp_inputs = [
-                m[1]
-                for m in sorted(
-                    inputs_for_block_diag.items(), key=lambda x: x[0]
-                )
-            ]
-            logger.info(f"{_temp_inputs=}")
+
+            # And then merge them together in a block diagonal, sorting to put them in the right order
             output[value_type] = nd_block_diag(
                 # sort based on the start value of the slice in the output matrix.
-                _temp_inputs
+                [
+                    # NOTE: We don't want to pass the key, but we need it for sorting, so we then
+                    #       have to explicitly select the actual matrices (ie. the v of the k, v pair)
+                    #       to pass along.
+                    m[1]
+                    for m in sorted(
+                        inputs_for_block_diag.items(), key=lambda x: x[0]
+                    )
+                ]
             )
-            logger.info(f"{output[value_type]=}")
+
         # Handle the other values (as of 14 August 2023, it's just "central_value")
         for value_type in self._available_value_types:
             # Skip over "cov" since we handled it explicitly above.
             if value_type == "cov":
                 continue
 
-            # TODO: The values appear to be identical for all design points, which doesn't seem right...
-            output[value_type] = None #np.zeros(self.shape)
-            logger.info(f"{self.shape=}")
-            logger.warning(f"{self.emulation_group_to_observable_matrix=}, {group_matrices=}")
+            # Since the number of design points that we want to predict varies, we can't define the output
+            # until we can extract it from one group output. So we wait to initialize the output matrix until
+            # we have the first group output.
+            output[value_type] = None
             for observable_name, (emulation_group_name, slice_in_output_matrix, slice_in_emulation_group_matrix) in self.emulation_group_to_observable_matrix.items():
-                logger.info(f"{observable_name=}, {emulation_group_name=}")
                 emulation_group_matrix = group_matrices[emulation_group_name]
                 if output[value_type] is None:
                     output[value_type] = np.zeros((emulation_group_matrix[value_type].shape[0], *self.shape[1:]))
-                    logger.error(f"Creating output with shape {output[value_type].shape=}")
-                logger.warning(f"{emulation_group_matrix[value_type].shape=}")
                 output[value_type][:, slice_in_output_matrix] = emulation_group_matrix[value_type][:, slice_in_emulation_group_matrix]
-                logger.info(f"output['{value_type}'][:, {slice_in_output_matrix}] = {output[value_type][:, slice_in_output_matrix].shape=}, {output[value_type][:, slice_in_output_matrix]=}")
-                logger.info(f"{observable_name=}, {output[value_type]=}")
-            raise RuntimeError("stahp")
+
         return output
 
 
@@ -393,8 +384,6 @@ def predict(parameters: npt.NDArray[np.float64],
     # Allow the option to return immediately to allow the study of performance per emulation group
     if not merge_predictions_over_groups:
         return predict_output
-    logger.info(f"{predict_output=}")
-    logger.info(f"{parameters=}")
 
     # Now, we want to merge predictions over groups
     return emulation_config.sort_observables_in_matrix.convert(group_matrices=predict_output)
