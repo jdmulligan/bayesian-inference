@@ -27,8 +27,9 @@ logger = logging.getLogger(__name__)
 def chunk_observables_in_dataframe(
     df: pd.DataFrame,
     chunk_size: int,
-    base_label: str
-) -> Iterable[tuple[str, pd.DataFrame]]:
+    base_label: str,
+    base_title: str,
+) -> Iterable[tuple[str, str, pd.DataFrame]]:
     current_index = 0
     #for _ in range(observables.shape[1] // chunk_size):
     for _ in range((len(df.columns) - 1) // chunk_size):
@@ -38,7 +39,13 @@ def chunk_observables_in_dataframe(
         current_df = df.iloc[:, np.r_[current_index:current_index + chunk_size, -1]]
         # Correlate early and late together
         #current_df = df.iloc[:, np.r_[current_index:current_index + int(self.fixed_size / 2), -current_index - int(self.fixed_size/2) : -current_index-1, -1]]
-        yield f"{base_label}_{current_index}-{current_index + chunk_size}", current_df
+        label = f"{current_index}_{current_index + chunk_size}"
+        if base_label:
+            label = f"{base_label}_{label}"
+        title = f"{current_index} - {current_index + chunk_size}"
+        if base_title:
+            title = f"{base_title} {title}"
+        yield label, title, current_df
 
         current_index += chunk_size
 
@@ -62,12 +69,12 @@ class ObservableGrouping:
             raise ValueError(f"Invalid ObservableGrouping settings: {self}")
         return label
 
-    def gen(self, config: emulation.EmulationConfig, observables_filename: str, validation_set: bool) -> Iterable[tuple[str, pd.DataFrame]]:
+    def gen(self, config: emulation.EmulationConfig, observables_filename: str, validation_set: bool) -> Iterable[tuple[str, str, pd.DataFrame]]:
         """ Generate a sequence of DataFrames, each of which contains a subset of the observables.
 
         :param np.ndarray observables: Predictions to be grouped.
         :param EmulationConfig config: The emulation config.
-        :returns: A sequence of (str, DataFrames), each of which contains a title and a subset of the observables.
+        :returns: A sequence of (str, str, DataFrames), each of which contains a label (for filenames), a title (for the figure), and a subset of the observables.
         """
         # Setup
         # Data
@@ -93,7 +100,7 @@ class ObservableGrouping:
             for observable_key, observable in observables_dict["central_value"].items():
                 df = pd.DataFrame(observable)
                 df["design_point"] = design_points
-                yield observable_key, df
+                yield f"observable_{observable_key}", observable_key, df
         elif self.emulator_groups:
             for emulation_group_name, emulation_group_config in config.emulation_groups_config.items():
                 observables = data_IO.predictions_matrix_from_h5(
@@ -111,10 +118,11 @@ class ObservableGrouping:
                     yield from chunk_observables_in_dataframe(
                         df=df,
                         chunk_size=max_chunk_size,
-                        base_label=emulation_group_name,
+                        base_label=f"{emulation_group_name}",
+                        base_title=f"Group {emulation_group_name}",
                     )
                 else:
-                    yield emulation_group_name, df
+                    yield f"{emulation_group_name}", f"Group {emulation_group_name}", df
 
         elif self.fixed_size is not None:
             observables = data_IO.predictions_matrix_from_h5(
@@ -130,7 +138,8 @@ class ObservableGrouping:
             yield from chunk_observables_in_dataframe(
                 df=df,
                 chunk_size=self.fixed_size,
-                base_label="fixed_size",
+                base_label=f"",
+                base_title=f"Fixed size: {self.fixed_size}",
             )
         else:
             raise ValueError(f"Invalid ObservableGrouping settings: {self}")
@@ -200,6 +209,9 @@ def plot(config: emulation.EmulationConfig):
         plot_dir=plot_dir,
         observable_grouping=ObservableGrouping(emulator_groups=True),
     )
+    # TODO: Finish
+    for observables_filename in ["observables.h5", "observables_preprocessed.h5"]:
+        ...
 
 
 ####################################################################################################################
@@ -340,38 +352,27 @@ def _plot_pairplot_correlations(
     # We want a shape of (n_design_points, n_features)
     df_generator = observable_grouping.gen(config=config, observables_filename=observables_filename, validation_set=False)
 
-    current_index = 0
-    n_features_per_group = 5
-    # TODO: Propagate title to figure. May need a separate filename label and title
-    for i_group, (title, current_df) in enumerate(df_generator):
+    for i_group, (label, title, current_df) in enumerate(df_generator):
         logger.info(f"Pair plotting columns: {current_df.columns=}")
 
-        # TODO: Remove this limit once done testing.
-        if i_group > 3:
-            break
+        # Useful early stopping for debugging...
+        #if i_group > 3:
+        #    break
 
-        # Plot
-        #g = sns.pairplot(
-        #    df,
-        #    #hue="design_point",
-        #    #diag_kind='hist',
-        #    #plot_kws={'alpha':0.7, 's':3, 'color':'blue'},
-        #    #diag_kws={'color':'blue', 'fill':True, 'bins':20}
-        #)
-        # Manually creating the same type of pair plot, but with more control
+        # Here, we'll practically want to create an sns.pairplot, but we can't configure it directly
+        # for what we need, so we'll have to do it by hand.
+        # Setup
         variables = list(current_df.columns)
-        # Need to drop the design_point column, as we just want it for labeling
+        # Need to drop the design_point column from the variables list, as we just want it for labeling
         variables.remove("design_point")
         # And finally plot
+        # With the standard sns call, we can't access the regression
         #g = sns.PairGrid(current_df, vars=variables)
+        # This new class allows us to access the regression results
         g = PairGridWithRegression(current_df, vars=variables)
-        #g.map_lower(sns.scatterplot)
         # NOTE: Can ignore outliers via `robust=True`, although need to install statsmodel
         regression_results = g.map_lower(simple_regplot)
-        #g.map_lower(sns.regplot)
         g.map_diag(sns.histplot)
-
-        #import IPython; IPython.embed()
 
         # Determine outliers by calculating the RMS distance from a linear fit
         if outliers_config:
@@ -413,26 +414,30 @@ def _plot_pairplot_correlations(
                             current_df[y_column][outlier_indices],
                         ):
                             logger.debug(f"Outlier at {design_point=}")
-                            current_ax.annotate(f"outlier! {design_point}", (x, y), fontsize=8, color=sns.xkcd_rgb['dark sky blue'])
+                            current_ax.annotate(f"!{design_point}", (x, y), fontsize=8, color=sns.xkcd_rgb['dark sky blue'])
 
-        # Annotate data points with labels
+        # Annotate data points with design point labels to identify them
         if annotate_design_points:
-            count = 0
+            #count = 0
             for i_col, x_column in enumerate(variables):
                 for i_row, y_column in enumerate(variables):
                     if i_col < i_row:  # Skip the upper triangle + diagonal
                         current_ax = g.axes[i_row, i_col]
-                        current_ax.text(0.1, 0.9, s=f"count={count}", fontsize=8, color='blue', transform=current_ax.transAxes)
-                        count += 1
+                        #current_ax.text(0.1, 0.9, s=f"count={count}", fontsize=8, color='blue', transform=current_ax.transAxes)
+                        #count += 1
                         for (design_point, x, y) in zip(current_df["design_point"], current_df[x_column], current_df[y_column]):
                             current_ax.annotate(design_point, (x, y), fontsize=8, color='red')
 
+        # Add title
+        g.fig.suptitle(title, fontsize=26)
+
         #plt.tight_layout()
-        plt.savefig(plot_dir / f"{filename}__group_{i_group}.pdf")
+        name = f"{filename}__{label}"
+        logger.info(f"Plotting {name=}")
+        plt.savefig(plot_dir / f"{name}.pdf")
         # Cleanup
         plt.close('all')
 
-        current_index += n_features_per_group
 
 def _distance_from_line(x: npt.NDArray[np.number], y: npt.NDArray[np.number], m: float, b: float) -> np.ndarray:
     """ Calculate the distance of each point from a line.
