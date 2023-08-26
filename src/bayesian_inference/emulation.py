@@ -294,23 +294,32 @@ class SortEmulationGroupObservables:
             ])
 
         output = {}
-        # Requires special handling since we're adding matrices
+        # Requires special handling since we're adding matrices (ie. 3d rather than 2d)
         if "cov" in self._available_value_types:
-            # First, we have to sort them
+            # Setup
             value_type = "cov"
+
+            # We have to sort them according to the mapping that we've derived.
+            # However, it's not quite as trivial to just insert them (as we do for the central values),
+            # so we'll use the output matrix slice as the key to sort by below.
             inputs_for_block_diag = {}
             for (_, slice_in_output_matrix, slice_in_emulation_group_matrix), emulation_group_matrix in zip(
                 self.emulation_group_to_observable_matrix.values(), group_matrices.values()
             ):
-                # NOTE: The slice_in_output_matrix should strictly increase, so it will be a proxy for the ordering
-                inputs_for_block_diag[slice_in_output_matrix] = emulation_group_matrix[value_type][:, slice_in_emulation_group_matrix, slice_in_emulation_group_matrix]
+                # NOTE: The slice_in_output_matrix.start should provide unique integers to sort by
+                #       (basically, we just use the starting position instead of inserting it directly).
+                inputs_for_block_diag[slice_in_output_matrix.start] = emulation_group_matrix[value_type][:, slice_in_emulation_group_matrix, slice_in_emulation_group_matrix]
 
-            # And then merge them together, sorting by the key
+            # And then merge them together, sorting to put them in the right order
             output[value_type] = nd_block_diag(
-                [m for m in sorted(inputs_for_block_diag.items(), key=lambda x: x[0].start)]
+                # sort based on the start value of the slice in the output matrix.
+                [m for m in sorted(
+                    inputs_for_block_diag.items(), key=lambda x: x[0]
+                )]
             )
-        # Handle the rest (as of 14 August 2023, it's just "central_value")
+        # Handle the other values (as of 14 August 2023, it's just "central_value")
         for value_type in self._available_value_types:
+            # Skip over "cov" since we handled it explicitly above.
             if value_type == "cov":
                 continue
 
