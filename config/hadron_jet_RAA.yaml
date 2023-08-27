@@ -2,7 +2,7 @@
 #-------------------------------------------
 # General parameters
 
-output_dir: '/home/james/jetscape-docker/bayesian-inference/output/20230826'
+output_dir: '/home/james/jetscape-docker/bayesian-inference/output/20230827'
 
 initialize_observables: False
 preprocess_input_data: False
@@ -47,7 +47,7 @@ parameters:
   # Emulator parameters
   emulator_parameters: &default_emulator_parameters
     force_retrain: True
-    n_pc: 10
+    n_pc: 4
 
     # Specify which kernels to include in the 'active' list -- can include multiple
     # Must have exactly one of: matern, rbf
@@ -147,6 +147,10 @@ analysis_base: &model_base
     # Round 5 (none from validation)
     59,
   ]
+  # Optionally: apply cuts to x-variable ranges (e.g. hadron pt > 10 GeV)
+  # This will remove any bins outside of the cut range for observable names containing the listed key
+  cuts:
+    'hadron__pt_': [10, 1000]
 
 analyses:
 

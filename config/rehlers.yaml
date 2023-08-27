@@ -150,6 +150,10 @@ analysis_base: &model_base
     # Round 5 (none from validation)
     59,
   ]
+  # Optionally: apply cuts to x-variable ranges (e.g. hadron pt > 10 GeV)
+  # This will remove any bins outside of the cut range for observable names containing the listed key
+  cuts:
+    'hadron__pt_': [10, 1000]
 
 analyses:
 
