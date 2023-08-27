@@ -35,8 +35,69 @@ def preprocess(
     observables = smooth_statistical_outliers_in_predictions(
         preprocessing_config=preprocessing_config,
     )
+    # Find outliers via ad-hoc measures based on physics expectations
+    steer_find_physics_motivated_outliers(
+        observables=observables,
+        preprocessing_config=preprocessing_config,
+    )
 
     return observables
+
+def steer_find_physics_motivated_outliers(
+    observables: dict[str, dict[str, dict[str, Any]]],
+    preprocessing_config: PreprocessingConfig,
+) -> None:
+    for validation_set in [False, True]:
+        _find_physics_motivated_outliers(
+            observables=observables,
+            preprocessing_config=preprocessing_config,
+            validation_set=validation_set,
+        )
+
+def _find_physics_motivated_outliers(
+    observables: dict[str, dict[str, dict[str, Any]]],
+    preprocessing_config: PreprocessingConfig,
+    validation_set: bool,
+) -> None:
+    # Setup
+    prediction_key = "Prediction"
+    if validation_set:
+        prediction_key += "_validation"
+
+    i_design_point_to_exclude: set[int] = set()
+    for observable_key in data_IO.sorted_observable_list_from_dict(
+        observables[prediction_key],
+    ):
+        # Get the individual keys from the observable_label
+        x = data_IO.observable_label_to_keys(observable_key)
+
+        # Find all RAAs, and require no points less than 0, and points above 1.3
+        if x[2] in ["hadron", "inclusive_chjet", "inclusive_jet"] and (
+            not any([subtype in x[3] for subtype in ["Dz", "tg", "zg"]])
+        ):
+            logger.info(f"{observable_key=}")
+            i_design_point = np.where(observables[prediction_key][observable_key]["y"] < -0.2)[1]
+            logger.info(f"first: {i_design_point=}")
+            i_design_point = np.concatenate(
+                [
+                    i_design_point,
+                    np.where(
+                        observables[prediction_key][observable_key]["y"] > 1.3
+                    )[1]
+                ]
+            )
+            i_design_point_to_exclude.update(i_design_point)
+
+        # What's going on with the theta_g?
+        if "tg" in x[3]:
+            logger.info(f"{observable_key=}")
+            res = np.where(observables[prediction_key][observable_key]["y"] < 0.0)
+            logger.info(f"{res=}")
+            logger.info(observables[prediction_key][observable_key]["y"][:, res[1]])
+
+
+    # TODO: Probably should return the values rather than just print them...
+    logger.warning(f"ad-hoc points to exclude: {sorted(i_design_point_to_exclude)}")
 
 
 def smooth_statistical_outliers_in_predictions(
