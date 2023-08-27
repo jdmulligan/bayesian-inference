@@ -53,34 +53,40 @@ parameters:
     max_n_components_to_calculate: 10
     #max_n_components_to_calculate: 30
 
-    mean_function: 'constant'                      # constant, linear
-    constant: 0.
-    linear_weights: []
+    # Specify which kernels to include in the 'active' list -- can include multiple
+    # Must have exactly one of: matern, rbf
+    kernels:
+      active: ['matern', 'noise']
 
-    covariance_function: 'matern'                  # squared_exponential, power_exponential, matern
-    matern_nu: 1.5
-    variance: 1                                    # overall variance
-    length_scale_bounds: [0.1, 10]
+      matern:
+        nu: 1.5
+        length_scale_bounds_factor: [0.1, 10]
+      
+      rbf:
+        length_scale_bounds_factor: [0.1, 10]
 
-    # Disable noise with `null` (ie. `noise: null`)
-    noise:
-      type: "white"
-      args:
-        # NOTE: Can't raise to power in yaml, so you have to evaluate them by hand
-        noise_level: 0.25  # 0.5**2
-        noise_level_bounds: [0.0001, 1]  # [0.01**2, 1**2]
+      constant:
+        constant_value: 1.
+        constant_value_bounds: [0.001, 10]
+
+      noise:
+        type: "white"
+        args:
+          # NOTE: Can't raise to power in yaml, so you have to evaluate them by hand
+          noise_level: 0.25  # 0.5**2
+          noise_level_bounds: [0.0001, 1]  # [0.01**2, 1**2]
 
     # Gaussian Process Regressor
     GPR:
       n_restarts: 50
       alpha: 1.e-10
 
-    # Cross-validation
-    cross_validation: True
+    # TODO: Cross-validation
+    cross_validation: False
     cross_validation_k: 5
 
-    # TODO: Independent validation dataset
-    independent_validation: False
+    # Independent validation dataset
+    independent_validation: True
 
   #-------------------------------------------
   # MCMC parameters
