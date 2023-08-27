@@ -381,12 +381,19 @@ def _plot_pairplot_correlations(
         #g = sns.PairGrid(current_df, vars=variables)
         # This new class allows us to access the regression results
         g = PairGridWithRegression(current_df, vars=variables)
-        # NOTE: Can ignore outliers via `robust=True`, although need to install statsmodel
-        regression_results = g.map_lower(simple_regplot)
+        regression_results = None
+        if outliers_config:
+            # NOTE: Can ignore outliers via `robust=True`, although need to install statsmodel
+            regression_results = g.map_lower(simple_regplot)
+        else:
+            g.map_lower(sns.scatterplot)
+
         g.map_diag(sns.histplot)
 
         # Determine outliers by calculating the RMS distance from a linear fit
         if outliers_config:
+            assert regression_results is not None
+            identified_outliers[label] = set()
             for i_col, x_column in enumerate(variables):
                 for i_row, y_column in enumerate(variables):
                     if i_col < i_row:  # Skip the upper triangle + diagonal
