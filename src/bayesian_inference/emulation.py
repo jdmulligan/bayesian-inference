@@ -102,7 +102,10 @@ def fit_emulator_group(config: EmulationGroupConfig) -> dict[str, Any]:
     # See docs for StandardScaler and PCA for further details.
     # This post explains exactly what fit_transform,inverse_transform do: https://stackoverflow.com/a/36567821
     #
-    # TODO: do we want whiten=True? (NOTE: beware that inverse_transform also undoes whitening)
+    # TODO: Do we want whiten the PCs, i.e. to scale the variances of each PC to 1?
+    #       I don't see a compelling reason to do this...We are fitting separate GPs to each PC, 
+    #       so standardizing the variance of each PC is not important.
+    #       (NOTE: whitening can be done with whiten=True -- beware that inverse_transform also undoes whitening)
     scaler = sklearn_preprocessing.StandardScaler()
     # This adopts the sklearn convention, but then sets a max cap of 30 PCs (arbitrarily chosen) to
     # reduce computation time.
@@ -142,7 +145,7 @@ def fit_emulator_group(config: EmulationGroupConfig) -> dict[str, Any]:
         kernel = (kernel_matern + kernel_noise)
 
     # Fit a GP (optimize the kernel hyperparameters) to map each design point to each of its PCs
-    # Note that Z=(n_samples, n_components), so each PC corresponds to a row (i.e. a column of Z.T)
+    # Note that Y_PCA=(n_samples, n_components), so each PC corresponds to a row (i.e. a column of Y_PCA.T)
     logger.info("")
     logger.info(f'Fitting GPs...')
     logger.info(f'  The design has {design.shape[1]} parameters')
@@ -214,7 +217,7 @@ def nd_block_diag(arrays):
 ####################################################################################################################
 @attrs.define
 class SortEmulationGroupObservables:
-    """ Class to track and covert between emulation group matrices to match sorted observables.
+    """ Class to track and convert between emulation group matrices to match sorted observables.
 
     emulation_group_to_observable_matrix: Mapping from emulation group matrix to the matrix of observables. Format:
         {observable_name: (emulator_group_name, slice in output_matrix, slice in emulator_group_matrix)}
@@ -371,7 +374,7 @@ def predict(parameters: npt.NDArray[np.float64],
         # (eg. in the MCMC), it's probably better to load it once and pass it in.
         # NOTE: I know that get() can provide a second argument as the default, but a quick check showed that
         #       `read_emulators` was executing far more than expected (maybe trying to determine some default value?).
-        #       However, separately it out like this seems to avoid the issue, but better to just avoid the issue.
+        #       However, separating it out like this seems to avoid the issue, but better to just avoid the issue.
         if emulation_group_result is None:
             emulation_group_result = read_emulators(emulation_group_config)
 
@@ -450,15 +453,33 @@ def predict_emulation_group(parameters, results, config):
         emulator_cov_reconstructed_scaled[i_sample] = S.dot(emulator_cov[i_sample].dot(S.T))
     assert emulator_cov_reconstructed_scaled.shape == (n_samples, n_features, n_features)
 
+    # Include predictive variance due to truncated PCs.
+    # We can do this by decomposing the original covariance in feature space:
+    #   C_Y = S D^2 S^T 
+    #       = S_{<=n_pc} D^2_{<=n_pc} S_{<=n_pc}^T + S_{>n_pc} D^2_{>n_pc} S_{>n_pc}^T
+    # In general, we want to estimate the covariance as a function of theta.
+    # We can do this for the first term by estimating it with the emulator covariance constructed above,
+    #   as a function of theta.
+    # We can't do this with the second term, since we didn't emulate it -- so we estimate it,
+    #   treating it as independent of theta, and add it to the emulator covariance:
+    #     Sigma_unexplained = 1/n_samples * S_{>n_pc} D^2_{>n_pc} S_{>n_pc}^T,
+    #   where we include the 1/n_samples factor to account for the fact that we are estimating the covariance from a set of samples.
+    # See eqs 21-22 of https://arxiv.org/pdf/2102.11337.pdf
+    # TODO: double check this (and compare to https://github.com/jdmulligan/STAT/blob/master/src/emulator.py#L145)
+    S_unexplained = pca.components_.T[:,config.n_pc:]
+    D_unexplained = np.diag(pca.explained_variance_[config.n_pc:])
+    emulator_cov_unexplained = S_unexplained.dot(D_unexplained.dot(S_unexplained.T)) / n_samples
+    print(f'  emulator_cov_reconstructed_scaled before: {emulator_cov_reconstructed_scaled[0]}')
+    for i_sample in range(n_samples):
+        emulator_cov_reconstructed_scaled[i_sample] += emulator_cov_unexplained
+    print(f'  emulator_cov_reconstructed_scaled after: {emulator_cov_reconstructed_scaled[0]}')
+
     # Propagate uncertainty: inverse preprocessing
     # We only need to undo the unit variance scaling, since the shift does not affect the covariance matrix.
-    # We can do this by computing a outer product (i.e. product of each pairwise scaling),
-    #   and multiple each element of the covariance matrix by this.
+    # We can do this by computing an outer product (i.e. product of each pairwise scaling),
+    #   and multiplying each element of the covariance matrix by this.
     scale_factors = scaler.scale_
     emulator_cov_reconstructed = emulator_cov_reconstructed_scaled*np.outer(scale_factors, scale_factors)
-
-    # TODO: include predictive variance due to truncated PCs (also propagated as above)
-    #np.sum(pca.explained_variance_[config.n_pc:])
 
     # Return the stacked matrices:
     #   Central values: (n_samples, n_features)
