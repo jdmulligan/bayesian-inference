@@ -423,8 +423,8 @@ def _plot_pairplot_correlations(
                         # I'm sure that there's a way to do this directly from statsmodels, but I find their docs to be difficult to read.
                         # Since this is a simple case, we'll just do it by hand
                         linear_fit = fit_result.params[slope_key] * _x + fit_result.params["const"]
-                        current_ax.plot(_x, linear_fit + 2 * rms, color='red', linestyle="dashed", linewidth=1.5)
-                        current_ax.plot(_x, linear_fit - 2 * rms, color='red', linestyle="dashed", linewidth=1.5)
+                        current_ax.plot(_x, linear_fit + outliers_config.n_RMS * rms, color='red', linestyle="dashed", linewidth=1.5)
+                        current_ax.plot(_x, linear_fit - outliers_config.n_RMS * rms, color='red', linestyle="dashed", linewidth=1.5)
 
                         for (design_point, x, y) in zip(
                             current_df["design_point"][outlier_indices],
