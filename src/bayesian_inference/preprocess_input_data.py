@@ -12,6 +12,7 @@ from typing import Any
 import attrs
 import numpy as np
 import numpy.typing as npt
+import scipy.interpolate
 import yaml
 
 from bayesian_inference import common_base, data_IO
@@ -90,8 +91,11 @@ def _smooth_statistical_outliers_in_predictions(
     if validation_set:
         prediction_key += "_validation"
 
-    # Retrieve all observables, and check each for large statistical uncertainty points
+    # These will contain our interpolated predictions
     new_observables: dict[str, dict[str, dict[str, Any]]] = {prediction_key: {}}
+    # Outliers which we are unable to remove. We keep track of this to help guide if we need to exclude a design point
+    # Format: {observable_key: {design_point: set[feature_index]}
+    outliers_we_are_unable_to_remove: dict[str, dict[int, set[int]]] = {}
     for observable_key in data_IO.sorted_observable_list_from_dict(
         all_observables[prediction_key],
     ):
@@ -107,6 +111,9 @@ def _smooth_statistical_outliers_in_predictions(
         # it's not clear that we can reliably interpolate.
         # First, we need to put the features into a more useful order:
         # outliers: zip(feature_index, design_point) -> dict: (design_point, feature_index)
+        # NOTE: The `design_point` here is the index in the design point array of the design points
+        #       that we've using for this analysis. To actually use them (ie. in print outs), we'll
+        #       need to apply them to the actual design point array.
         outlier_features_per_design_point: dict[int, set[int]] = {v: set() for v in outliers[1]}
         for i_feature, design_point in zip(*outliers):
             outlier_features_per_design_point[design_point].update([i_feature])
@@ -117,12 +124,12 @@ def _smooth_statistical_outliers_in_predictions(
 
         # Since the feature values of one design point shouldn't impact another, we'll want to
         # check one design point at a time.
-        # TODO: If we have to skip, we should probably consider excluding the observable for this design point.
+        # NOTE: If we have to skip, we record the design point so we can consider excluding it due
+        #       to that observable.
         outlier_features_to_interpolate_per_design_point: dict[int, list[int]] = {}
         for k, v in outlier_features_per_design_point.items():
             #logger.debug("------------------------")
             #logger.debug(f"{k=}, {v=}")
-            # We' c
             # Calculate the distance between the outlier indices
             distance_between_outliers = np.diff(list(v))
             # And we'll keep track of which ones pass our quality requirements (not too many in a row).
@@ -155,7 +162,7 @@ def _smooth_statistical_outliers_in_predictions(
                                 f"Will continue with interpolating consecutive indices {indices_of_outliers_that_are_one_apart}"
                                 f" because the their number is within the allowable range (n_consecutive<={preprocessing_config.smoothing_max_n_feature_outliers_to_interpolate})."
                             )
-                            logger.debug(msg)
+                            logger.info(msg)
                     # Reset for the next point
                     indices_of_outliers_that_are_one_apart = set()
 
@@ -164,6 +171,12 @@ def _smooth_statistical_outliers_in_predictions(
             # NOTE: We sort again because sets are not ordered.
             outlier_features_to_interpolate_per_design_point[k] = sorted(list(set(v) - accumulated_indices_to_remove))
             #logger.debug(f"features kept for interpolation: {outlier_features_to_interpolate_per_design_point[k]}")
+
+            # And we'll keep track of what we can't interpolate
+            if accumulated_indices_to_remove:
+                if observable_key not in outliers_we_are_unable_to_remove:
+                    outliers_we_are_unable_to_remove[observable_key] = {}
+                outliers_we_are_unable_to_remove[observable_key][k] = accumulated_indices_to_remove
 
         # Finally, interpolate at the selected outlier point features to find the value and error
         new_observables[prediction_key][observable_key] = {}
@@ -179,7 +192,7 @@ def _smooth_statistical_outliers_in_predictions(
             )
             if len(observable_bin_centers) == 1:
                 # Skip - we can't interpolate one point.
-                logger.debug(f"Skipping observable {observable_key} because it has only one point.")
+                logger.debug(f"Skipping observable \"{observable_key}\" because it has only one point.")
                 continue
 
             for design_point, points_to_interpolate in outlier_features_to_interpolate_per_design_point.items():
@@ -187,6 +200,20 @@ def _smooth_statistical_outliers_in_predictions(
                 # Otherwise, it will negatively impact the interpolation.
                 mask = np.ones_like(observable_bin_centers, dtype=bool)
                 mask[points_to_interpolate] = False
+
+                # Validation
+                if len(observable_bin_centers[mask]) == 1:
+                    # Skip - we can't interpolate one point.
+                    msg = f"Skipping observable \"{observable_key}\", {design_point=} because it has only one point to anchor the interpolation."
+                    logger.info(msg)
+                    # And add to the list since we can't make it work.
+                    if observable_key not in outliers_we_are_unable_to_remove:
+                        outliers_we_are_unable_to_remove[observable_key] = {}
+                    if k not in outliers_we_are_unable_to_remove[observable_key]:
+                        outliers_we_are_unable_to_remove[observable_key][k] = set()
+                    outliers_we_are_unable_to_remove[observable_key][k].update(points_to_interpolate)
+                    continue
+
                 # NOTE: ROOT::Interpolator uses a Cubic Spline, so this might be a reasonable future approach
                 #       However, I think it's slower, so we'll start with this simple approach.
                 # TODO: We entirely ignore the interpolation error here. Some approaches for trying to account for it:
@@ -201,8 +228,7 @@ def _smooth_statistical_outliers_in_predictions(
                         observable_bin_centers[mask],
                         new_observables[prediction_key][observable_key][key_type][:, design_point][mask],
                     )
-                elif interpolated_values == "cubic_spline":
-                    import scipy.interpolate
+                elif preprocessing_config.smoothing_interpolation_method == "cubic_spline":
                     cs = scipy.interpolate.CubicSpline(
                         observable_bin_centers[mask],
                         new_observables[prediction_key][observable_key][key_type][:, design_point][mask],
@@ -210,6 +236,30 @@ def _smooth_statistical_outliers_in_predictions(
                     interpolated_values = cs(observable_bin_centers[points_to_interpolate])
 
                 new_observables[prediction_key][observable_key][key_type][points_to_interpolate, design_point] = interpolated_values
+
+    # Reformat the outliers_we_are_unable_to_remove to be more useful and readable
+    #logger.info(
+    #    f"Observables which we are unable to remove outliers from: {outliers_we_are_unable_to_remove}"
+    #)
+    # NOTE: The typing is wrong because I based the type annotations on the "Predictions" key only,
+    #       since it's more useful here.
+    # NOTE: We need to map the i_design_point to the actual design point indices for them to be useful!
+    design_point_array: npt.NDArray[np.intp] = all_observables["Design_indices" + ("_validation" if validation_set else "")]  # type: ignore[assignment]
+    design_points_we_may_want_to_remove: dict[int, dict[str, set[int]]] = {}
+    for observable_key, _v in outliers_we_are_unable_to_remove.items():
+        for i_design_point, i_feature in _v.items():
+            actual_design_point = design_point_array[i_design_point]
+            if actual_design_point not in design_points_we_may_want_to_remove:
+                design_points_we_may_want_to_remove[actual_design_point] = {}
+            if observable_key not in design_points_we_may_want_to_remove[actual_design_point]:
+                design_points_we_may_want_to_remove[actual_design_point][observable_key] = set()
+            design_points_we_may_want_to_remove[actual_design_point][observable_key].update(i_feature)
+    logger.warning(
+        f"Design points which we may want to remove: {sorted(list(design_points_we_may_want_to_remove.keys()))}, length: {len(design_points_we_may_want_to_remove)}"
+    )
+    logger.info(
+        f"In further detail: {design_points_we_may_want_to_remove}"
+    )
 
     return new_observables
 

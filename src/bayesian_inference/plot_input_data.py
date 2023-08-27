@@ -158,8 +158,8 @@ def plot(config: emulation.EmulationConfig):
     plot_dir = Path(config.output_dir) / 'plot_input_data'
     plot_dir.mkdir(parents=True, exist_ok=True)
 
-    ## Compare smoothed predictions for all design points
-    ## Start with individual so we can look in detail
+    # Compare smoothed predictions for all design points
+    # Start with individual so we can look in detail
     #_plot_predictions_for_all_design_points(
     #    config=config,
     #    plot_dir=plot_dir,
@@ -183,35 +183,44 @@ def plot(config: emulation.EmulationConfig):
     #    validation_set=False,
     #)
 
-    ## First, plot the pair correlations for each observables
-    #_plot_pairplot_correlations(
-    #    config=config,
-    #    plot_dir=plot_dir,
-    #    observable_grouping=ObservableGrouping(observable_by_observable=True),
-    #    annotate_design_points=False,
-    #)
-    ## And an annotated version
-    #_plot_pairplot_correlations(
-    #    config=config,
-    #    plot_dir=plot_dir,
-    #    observable_grouping=ObservableGrouping(observable_by_observable=True),
-    #    annotate_design_points=True,
-    #)
-    ##
-    #_plot_pairplot_correlations(
-    #    config=config,
-    #    plot_dir=plot_dir,
-    #    outliers_config=preprocess_input_data.OutliersConfig(),
-    #)
-    #
-    _plot_pairplot_correlations(
-        config=config,
-        plot_dir=plot_dir,
-        observable_grouping=ObservableGrouping(emulator_groups=True),
-    )
-    # TODO: Finish
-    for observables_filename in ["observables.h5", "observables_preprocessed.h5"]:
-        ...
+    #for observables_filename in ["observables.h5", "observables_preprocessed.h5"]:
+    for observables_filename in ["observables_preprocessed.h5"]:
+        ## First, plot the pair correlations for each observables
+        #_plot_pairplot_correlations(
+        #    config=config,
+        #    plot_dir=plot_dir,
+        #    observable_grouping=ObservableGrouping(observable_by_observable=True),
+        #    annotate_design_points=False,
+        #    observables_filename=observables_filename,
+        #)
+        # Observable-by-observable, labeling and printing problematic design points
+        identified_outliers = _plot_pairplot_correlations(
+            config=config,
+            plot_dir=plot_dir,
+            observable_grouping=ObservableGrouping(observable_by_observable=True),
+            outliers_config=preprocess_input_data.OutliersConfig(n_RMS=4.),
+            observables_filename=observables_filename,
+        )
+        logger.info(f"{identified_outliers=}")
+        summarized_design_points = set()
+        for outlier_design_points in identified_outliers.values():
+            summarized_design_points.update(outlier_design_points)
+        logger.info(f"Summary of outlier design points ({len(summarized_design_points)=}): {summarized_design_points}")
+        # Annotate all design points observable-by-observable
+        _plot_pairplot_correlations(
+            config=config,
+            plot_dir=plot_dir,
+            observable_grouping=ObservableGrouping(observable_by_observable=True),
+            annotate_design_points=True,
+            observables_filename=observables_filename,
+        )
+        # Group by emulator groups
+        #_plot_pairplot_correlations(
+        #    config=config,
+        #    plot_dir=plot_dir,
+        #    observable_grouping=ObservableGrouping(emulator_groups=True),
+        #    observables_filename=observables_filename,
+        #)
 
 
 ####################################################################################################################
@@ -312,7 +321,7 @@ def _plot_pairplot_correlations(
     annotate_design_points: bool = False,
     use_experimental_data: bool = False,
     observables_filename: str = "observables.h5",
-) -> None:
+) -> dict[str, set]:
     """ Plot pair correlations.
 
     Note that there are many configuration options, and they may not all be compatible with each other.
@@ -341,7 +350,8 @@ def _plot_pairplot_correlations(
         observables = data_IO.predictions_matrix_from_h5(config.output_dir, filename=observables_filename, validation_set=False, observable_filter=config.observable_filter)
 
     # Determine output name
-    filename = "pairplot_correlations"
+    observables_filename_label = observables_filename.split(".")[0]
+    filename = f"{observables_filename_label}_pairplot_correlations"
     if observable_grouping is not None:
         filename += f"__{observable_grouping.label}"
     if annotate_design_points:
@@ -352,8 +362,10 @@ def _plot_pairplot_correlations(
     # We want a shape of (n_design_points, n_features)
     df_generator = observable_grouping.gen(config=config, observables_filename=observables_filename, validation_set=False)
 
+    # k -> v is label -> design_points
+    identified_outliers: dict[str, set[int]] = {}
     for i_group, (label, title, current_df) in enumerate(df_generator):
-        logger.info(f"Pair plotting columns: {current_df.columns=}")
+        logger.debug(f"Pair plotting columns: {current_df.columns=}")
 
         # Useful early stopping for debugging...
         #if i_group > 3:
@@ -370,12 +382,19 @@ def _plot_pairplot_correlations(
         #g = sns.PairGrid(current_df, vars=variables)
         # This new class allows us to access the regression results
         g = PairGridWithRegression(current_df, vars=variables)
-        # NOTE: Can ignore outliers via `robust=True`, although need to install statsmodel
-        regression_results = g.map_lower(simple_regplot)
+        regression_results = None
+        if outliers_config:
+            # NOTE: Can ignore outliers via `robust=True`, although need to install statsmodel
+            regression_results = g.map_lower(simple_regplot)
+        else:
+            g.map_lower(sns.scatterplot)
+
         g.map_diag(sns.histplot)
 
         # Determine outliers by calculating the RMS distance from a linear fit
         if outliers_config:
+            assert regression_results is not None
+            identified_outliers[label] = set()
             for i_col, x_column in enumerate(variables):
                 for i_row, y_column in enumerate(variables):
                     if i_col < i_row:  # Skip the upper triangle + diagonal
@@ -405,8 +424,8 @@ def _plot_pairplot_correlations(
                         # I'm sure that there's a way to do this directly from statsmodels, but I find their docs to be difficult to read.
                         # Since this is a simple case, we'll just do it by hand
                         linear_fit = fit_result.params[slope_key] * _x + fit_result.params["const"]
-                        current_ax.plot(_x, linear_fit + 2 * rms, color='red', linestyle="dashed", linewidth=1.5)
-                        current_ax.plot(_x, linear_fit - 2 * rms, color='red', linestyle="dashed", linewidth=1.5)
+                        current_ax.plot(_x, linear_fit + outliers_config.n_RMS * rms, color='red', linestyle="dashed", linewidth=1.5)
+                        current_ax.plot(_x, linear_fit - outliers_config.n_RMS * rms, color='red', linestyle="dashed", linewidth=1.5)
 
                         for (design_point, x, y) in zip(
                             current_df["design_point"][outlier_indices],
@@ -414,7 +433,11 @@ def _plot_pairplot_correlations(
                             current_df[y_column][outlier_indices],
                         ):
                             logger.debug(f"Outlier at {design_point=}")
-                            current_ax.annotate(f"!{design_point}", (x, y), fontsize=8, color=sns.xkcd_rgb['dark sky blue'])
+                            current_ax.annotate(f"_{design_point}", (x, y), fontsize=8, color=sns.xkcd_rgb['dark sky blue'])
+                            identified_outliers[label].add(design_point)
+            # Don't bother keeping if it's fully empty (just simplifies the output)
+            if not identified_outliers[label]:
+                del identified_outliers[label]
 
         # Annotate data points with design point labels to identify them
         if annotate_design_points:
@@ -425,7 +448,11 @@ def _plot_pairplot_correlations(
                         current_ax = g.axes[i_row, i_col]
                         #current_ax.text(0.1, 0.9, s=f"count={count}", fontsize=8, color='blue', transform=current_ax.transAxes)
                         #count += 1
-                        for (design_point, x, y) in zip(current_df["design_point"], current_df[x_column], current_df[y_column]):
+                        for (design_point, x, y) in zip(
+                            current_df["design_point"],
+                            current_df[x_column],
+                            current_df[y_column]
+                        ):
                             current_ax.annotate(design_point, (x, y), fontsize=8, color='red')
 
         # Add title
@@ -437,6 +464,8 @@ def _plot_pairplot_correlations(
         plt.savefig(plot_dir / f"{name}.pdf")
         # Cleanup
         plt.close('all')
+
+    return identified_outliers
 
 
 def _distance_from_line(x: npt.NDArray[np.number], y: npt.NDArray[np.number], m: float, b: float) -> np.ndarray:

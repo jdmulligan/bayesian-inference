@@ -3,16 +3,16 @@
 # General parameters
 
 #output_dir: 'output/20230816_no_exclude'
-output_dir: 'output/20230824'
+output_dir: 'output/20230826'
 
-initialize_observables: False
-preprocess_input_data: False
+initialize_observables: True
+preprocess_input_data: True
 fit_emulators: False
 run_mcmc: False
 run_closure_tests: False
 
 plot:
-  input_data: True
+  input_data: False
   emulators: False
   mcmc: False
   qhat: False
@@ -39,7 +39,7 @@ parameters:
   preprocessing_parameters: &default_preprocessing_parameters
     smoothing:
       outlier_n_RMS: 2.
-      interpolation_method: "simple" # or "cubic_spline"
+      interpolation_method: "cubic_spline" # or "simple" for a faster method
       max_n_feature_outliers_to_interpolate: 1
 
   #-------------------------------------------
@@ -128,7 +128,22 @@ analysis_base: &model_base
       max: [0.5, 10, 10, 10, 100, 100, 1.5]
   alpha: 0.2
   validation_indices: [200, 230] # For exp parameterization, these are the same for all sqrts (i.e. all points 200-229 inclusive)
-  design_points_to_exclude: [51, 126]
+  #design_points_to_exclude: [51, 126]
+  design_points_to_exclude: [
+    # Found using n_RMS = 2.
+    # Round 1
+    18, 36, 37, 44, 48, 51, 69, 73, 77, 89, 100, 104, 111, 147, 165, 173, 188, 189,
+    # Validation from round 1
+    214, 224, 229,
+    # Round 2 (none from validation)
+    22, 43, 45, 97, 117, 126, 176,
+    # Round 3 (none from validation)
+    9, 13, 25, 134,
+    # Round 4 (none from validation)
+    8, 60, 108,
+    # Round 5 (none from validation)
+    59,
+  ]
 
 analyses:
 
