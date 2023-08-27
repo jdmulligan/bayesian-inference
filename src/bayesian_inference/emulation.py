@@ -469,10 +469,8 @@ def predict_emulation_group(parameters, results, config):
     S_unexplained = pca.components_.T[:,config.n_pc:]
     D_unexplained = np.diag(pca.explained_variance_[config.n_pc:])
     emulator_cov_unexplained = S_unexplained.dot(D_unexplained.dot(S_unexplained.T)) / n_samples
-    print(f'  emulator_cov_reconstructed_scaled before: {emulator_cov_reconstructed_scaled[0]}')
     for i_sample in range(n_samples):
         emulator_cov_reconstructed_scaled[i_sample] += emulator_cov_unexplained
-    print(f'  emulator_cov_reconstructed_scaled after: {emulator_cov_reconstructed_scaled[0]}')
 
     # Propagate uncertainty: inverse preprocessing
     # We only need to undo the unit variance scaling, since the shift does not affect the covariance matrix.
