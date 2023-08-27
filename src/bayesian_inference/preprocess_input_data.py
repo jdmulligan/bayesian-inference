@@ -115,6 +115,7 @@ def smooth_statistical_outliers_in_predictions(
             all_observables=all_observables,
             validation_set=False,
             preprocessing_config=preprocessing_config,
+            outlier_identification_method="large_statistical_errors",
         )
     )
     # Adds the outputs under the "Prediction_validation" key
@@ -123,14 +124,35 @@ def smooth_statistical_outliers_in_predictions(
             all_observables=all_observables,
             validation_set=True,
             preprocessing_config=preprocessing_config,
+            outlier_identification_method="large_statistical_errors",
         )
     )
-
-    # And then fill in the rest of the observable quantities.
-    # This way, we can use it as a drop-in replacement.
+    # Next, perform outlier removal based on large central value differences
+    # NOTE: Here, we **want** to use the new observables, such that we only find new problematic values.
+    #       There's no point in confusing the algorithm more than it needs to be.
+    # To be able use it as a drop-in replacement, we'll need to fill in the rest
+    # of the observable quantities.
     for k in all_observables:
         if k not in new_observables:
             new_observables[k] = all_observables[k]
+    # Adds the outputs under the "Prediction" key
+    new_observables.update(
+        _smooth_statistical_outliers_in_predictions(
+            all_observables=new_observables,
+            validation_set=False,
+            preprocessing_config=preprocessing_config,
+            outlier_identification_method="large_central_value_difference",
+        )
+    )
+    # Adds the outputs under the "Prediction_validation" key
+    new_observables.update(
+        _smooth_statistical_outliers_in_predictions(
+            all_observables=new_observables,
+            validation_set=True,
+            preprocessing_config=preprocessing_config,
+            outlier_identification_method="large_central_value_difference",
+        )
+    )
 
     return new_observables
 
@@ -139,6 +161,7 @@ def _smooth_statistical_outliers_in_predictions(
     all_observables: dict[str, dict[str, dict[str, Any]]],
     validation_set: bool,
     preprocessing_config: PreprocessingConfig,
+    outlier_identification_method: str,
 ) -> dict[str, Any]:
     """Smooth out statistical outliers in predictions.
 
@@ -146,6 +169,8 @@ def _smooth_statistical_outliers_in_predictions(
         all_observables: Dictionary of observables from read_dict_from_h5.
         validation_set: Whether to use the validation set or not.
         preprocessing_config: Configuration for preprocessing.
+        outlier_identification_mode: How to identify outliers. Options:
+            ["large_statistical_error", "large_central_value_difference"]
     """
     # Setup
     prediction_key = "Prediction"
@@ -160,17 +185,24 @@ def _smooth_statistical_outliers_in_predictions(
     for observable_key in data_IO.sorted_observable_list_from_dict(
         all_observables[prediction_key],
     ):
-        # First, find the outliers based on large statistical uncertainty points
-        outliers = _find_large_statistical_uncertainty_points(
-            values=all_observables[prediction_key][observable_key]["y"],
-            y_err=all_observables[prediction_key][observable_key]["y_err"],
-            outliers_config=preprocessing_config.smoothing_outliers_config,
-        )
-        # Find additional outliers based on central values which are dramatically different than the others
-        #additional_outliers = _find_outliers_based_on_central_values(
-        #    values=all_observables[prediction_key][observable_key]["y"],
-        #    outliers_config=preprocessing_config.smoothing_outliers_config,
-        #)
+        # First, find the outliers based on the selected method
+        if outlier_identification_method == "large_statistical_errors":
+            # large statistical uncertainty points
+            outliers = _find_large_statistical_uncertainty_points(
+                values=all_observables[prediction_key][observable_key]["y"],
+                y_err=all_observables[prediction_key][observable_key]["y_err"],
+                outliers_config=preprocessing_config.smoothing_outliers_config,
+            )
+        elif outlier_identification_method == "large_central_value_difference":
+            # Find additional outliers based on central values which are dramatically different than the others
+            outliers = _find_outliers_based_on_central_values(
+                values=all_observables[prediction_key][observable_key]["y"],
+                outliers_config=preprocessing_config.smoothing_outliers_config,
+            )
+        else:
+            msg = f"Unrecognized outlier identification mode {outlier_identification_method}."
+            raise ValueError(msg)
+
         # And merge the two together
         #outliers = [  # type: ignore[assignment]
         #    np.concatenate([first, second])
@@ -178,7 +210,7 @@ def _smooth_statistical_outliers_in_predictions(
         #]
 
         # Perform quality assurance and reformat outliers
-        outlier_features_to_interpolate_per_design_point, _intermediate_outliers_we_are_unable_to_remove = _perform_QA_on_outliers(
+        outlier_features_to_interpolate_per_design_point, _intermediate_outliers_we_are_unable_to_remove = _perform_QA_and_reformat_outliers(
             observable_key=observable_key,
             outliers=outliers,
             preprocessing_config=preprocessing_config,
@@ -206,6 +238,7 @@ def _smooth_statistical_outliers_in_predictions(
                 logger.debug(f"Skipping observable \"{observable_key}\" because it has only one point.")
                 continue
 
+            #logger.info(f"Method: {outlier_identification_method}, Interpolating outliers with {outlier_features_to_interpolate_per_design_point=}, {key_type=}, {observable_key=}, {prediction_key=}")
             for design_point, points_to_interpolate in outlier_features_to_interpolate_per_design_point.items():
                 # We want to train the interpolation only on all good points, so we make them out.
                 # Otherwise, it will negatively impact the interpolation.
@@ -266,7 +299,7 @@ def _smooth_statistical_outliers_in_predictions(
                 design_points_we_may_want_to_remove[actual_design_point][observable_key] = set()
             design_points_we_may_want_to_remove[actual_design_point][observable_key].update(i_feature)
     logger.warning(
-        f"Design points which we may want to remove: {sorted(list(design_points_we_may_want_to_remove.keys()))}, length: {len(design_points_we_may_want_to_remove)}"
+        f"Method: {outlier_identification_method}, Design points which we may want to remove: {sorted(list(design_points_we_may_want_to_remove.keys()))}, length: {len(design_points_we_may_want_to_remove)}"
     )
     logger.info(
         f"In further detail: {design_points_we_may_want_to_remove}"
@@ -274,7 +307,7 @@ def _smooth_statistical_outliers_in_predictions(
 
     return new_observables
 
-def _perform_QA_on_outliers(
+def _perform_QA_and_reformat_outliers(
     observable_key: str,
     outliers: tuple[npt.NDArray[np.intp], npt.NDArray[np.intp]],
     preprocessing_config: PreprocessingConfig,
@@ -379,16 +412,39 @@ def _find_large_statistical_uncertainty_points(
     outliers = np.where(relative_error > outliers_config.n_RMS * rms[:, np.newaxis])
     return outliers  # type: ignore[return-value]
 
+
 def _find_outliers_based_on_central_values(
     values: npt.NDArray[np.float64],
     outliers_config: OutliersConfig,
 ) -> tuple[npt.NDArray[np.intp], npt.NDArray[np.intp]]:
     """Find outlier points based on large deviations from close central values."""
-    diff_between_features = np.diff(values, axis=-1)
+    diff_between_features = np.diff(values, axis=0)
     rms = np.sqrt(np.mean(diff_between_features**2, axis=-1))
+    outliers_in_diff_index = (
+        diff_between_features > (outliers_config.n_RMS * rms[:, np.newaxis])
+    )
+    """
+    Now, we need to associate the outliers with the original feature index (ie. taking the diff reduces by one)
+
+    The scheme we'll use to identify problematic points is to take an AND of the left and right of the point.
+    For the first and last index, we cannot take an and since they're one sided. To address this point, we'll
+    redo the exercise, but with the 1th and -2th removed, and take an AND of those and the original. It's ad-hoc,
+    but it gives a second level of cross check for those points.
+    """
+    # First, we'll handle the inner points
+    output = np.zeros_like(values, dtype=np.bool_)
+    output[1:-1, :] = outliers_in_diff_index[:-1, :] & outliers_in_diff_index[1:, :]
+
+    # Now, handle the edges
+    s = np.r_[0, 2:-3, -1]
+    outliers_in_diff_index_edges = (
+        diff_between_features[s, :] > (outliers_config.n_RMS * rms[:, np.newaxis])[s, :]
+    )
+    output[0, :] = outliers_in_diff_index_edges[0, :] & outliers_in_diff_index[0, :]
+    output[-1, :] = outliers_in_diff_index_edges[-1, :] & outliers_in_diff_index[-1, :]
     # NOTE: Recall that np.where returns (n_feature_index, n_design_point_index) as separate arrays
-    outliers_in_diff_index = np.where(diff_between_features > outliers_config.n_RMS * rms[:, np.newaxis])
-    #return outliers  # type: ignore[return-value]
+    outliers = np.where(output)
+    return outliers  # type: ignore[return-value]
 
 
 @attrs.define
