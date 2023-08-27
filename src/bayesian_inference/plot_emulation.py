@@ -397,11 +397,15 @@ def _plot_emulator_residuals(results, config, plot_dir, validation_set=False):
     normalized_residual = np.divide(residual, std_emulator)
 
     # Draw scatter plot
+    x_min = np.min(RAA_true)-0.1
+    x_max = np.max(RAA_true)+0.1
+    y_min = np.min(RAA_emulator)-0.1
+    y_max = np.max(RAA_emulator)+0.1
     ax_scatter.scatter(RAA_true, RAA_emulator, s=5, marker=markers[0],
                         color=colors[0], alpha=0.7, label=r'$\rm{{{}}}$'.format(''), linewidth=0,
                         rasterized=True)
-    ax_scatter.set_ylim([0, 1.19])
-    ax_scatter.set_xlim([0, 1.19])
+    ax_scatter.set_ylim([y_min, y_max])
+    ax_scatter.set_xlim([x_min, x_max])
     ax_scatter.set_xlabel(r'$R_{\rm{AA}}^{\rm{true}}$', fontsize=20)
     ax_scatter.set_ylabel(r'$R_{\rm{AA}}^{\rm{emulator}}$', fontsize=20)
     ax_scatter.legend(title='', title_fontsize=16,
@@ -416,7 +420,9 @@ def _plot_emulator_residuals(results, config, plot_dir, validation_set=False):
     #ax_scatter.set_ylabel(r'$\sigma_{\rm{emulator}}$', fontsize=18)
 
     # Draw line with slope 1
-    ax_scatter.plot([0,1], [0,1], sns.xkcd_rgb['almost black'], alpha=0.3,
+    min_val = max(x_min, y_min)
+    max_val = min(x_max, y_max)
+    ax_scatter.plot([min_val,max_val], [min_val,max_val], sns.xkcd_rgb['almost black'], alpha=0.3,
                     linewidth=3, linestyle='--')
 
     # Print mean value of emulator uncertainty
@@ -426,8 +432,9 @@ def _plot_emulator_residuals(results, config, plot_dir, validation_set=False):
     ax_scatter.text(0.6, 0.15, text, fontsize=16)
 
     # Draw residuals
-    max = 3
-    bins = np.linspace(-max, max, 30)
+    mean_val = np.mean(normalized_residual)
+    std_val = np.std(normalized_residual)
+    bins = np.linspace(mean_val - 3*std_val, mean_val + 3*std_val, 30)
     x = (bins[1:] + bins[:-1])/2
     h = ax_residual.hist(normalized_residual, color=colors[0], histtype='step',
                         orientation='horizontal', linewidth=3, alpha=0.8, density=True, bins=bins)
@@ -436,6 +443,17 @@ def _plot_emulator_residuals(results, config, plot_dir, validation_set=False):
     #ax_residual.set_ylabel(r'$\left(R_{\rm{AA}}^{\rm{true}} - R_{\rm{AA}}^{\rm{emulator}}\right)$', fontsize=20)
     plt.setp(ax_residual.get_xticklabels(), fontsize=14)
     plt.setp(ax_residual.get_yticklabels(), fontsize=14)
+
+    # Plot the actual 1-sigma, 2-sigma lines
+    lower_1sigma = np.percentile(normalized_residual, (100-68.27)/2)
+    upper_1sigma = np.percentile(normalized_residual, 100 - (100-68.27)/2)
+    lower_2sigma = np.percentile(normalized_residual, (100-95.45)/2)
+    upper_2sigma = np.percentile(normalized_residual, 100 - (100-95.45)/2)
+    ax_residual.axhline(lower_1sigma, color='green', linestyle='--', label='1-sigma')
+    ax_residual.axhline(upper_1sigma, color='green', linestyle='--')
+    ax_residual.axhline(lower_2sigma, color='blue', linestyle='--', label='2-sigma')
+    ax_residual.axhline(upper_2sigma, color='blue', linestyle='--')
+    ax_residual.legend()
 
     # Print out indices of points that deviate significantly
     # if np.abs(normalized_residual) > 3*stdev:
