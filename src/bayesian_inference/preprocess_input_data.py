@@ -12,6 +12,7 @@ from typing import Any
 import attrs
 import numpy as np
 import numpy.typing as npt
+import scipy.interpolate
 import yaml
 
 from bayesian_inference import common_base, data_IO
@@ -196,6 +197,14 @@ def _smooth_statistical_outliers_in_predictions(
                 # Otherwise, it will negatively impact the interpolation.
                 mask = np.ones_like(observable_bin_centers, dtype=bool)
                 mask[points_to_interpolate] = False
+
+                # Validation
+                if len(observable_bin_centers[mask]) == 1:
+                    # Skip - we can't interpolate one point.
+                    msg = f"Skipping observable {observable_key}, {design_point=} because it has only one point to anchor the interpolation."
+                    logger.info(msg)
+                    continue
+
                 # NOTE: ROOT::Interpolator uses a Cubic Spline, so this might be a reasonable future approach
                 #       However, I think it's slower, so we'll start with this simple approach.
                 # TODO: We entirely ignore the interpolation error here. Some approaches for trying to account for it:
@@ -210,8 +219,7 @@ def _smooth_statistical_outliers_in_predictions(
                         observable_bin_centers[mask],
                         new_observables[prediction_key][observable_key][key_type][:, design_point][mask],
                     )
-                elif interpolated_values == "cubic_spline":
-                    import scipy.interpolate
+                elif preprocessing_config.smoothing_interpolation_method == "cubic_spline":
                     cs = scipy.interpolate.CubicSpline(
                         observable_bin_centers[mask],
                         new_observables[prediction_key][observable_key][key_type][:, design_point][mask],
