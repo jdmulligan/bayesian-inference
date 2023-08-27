@@ -55,6 +55,8 @@ def initialize_observables_dict_from_tables(table_dir, analysis_config, paramete
                                             ['y_err'] -- total uncertainty (TODO: include uncertainty breakdowns)
                                             ['xmin'] -- bin lower edge (used only for plotting)
                                             ['xmax'] -- bin upper edge (used only for plotting)
+       # NOTE: The "Design" key is the actual parameters, while the indices is the index of the design point (ie. assigned in the .dat file)
+       # NOTE: As of August 2023, the "Design" key doesn't pass around the parameterization!
        observables['Design'][parameterization] -- design points for a given parameterization
        observables['Design_indices'][parameterization] -- indices of design points included for a given parameterization
        observables['Prediction'][observable_label]['y'] -- value
