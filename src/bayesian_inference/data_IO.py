@@ -42,7 +42,8 @@ def initialize_observables_dict_from_tables(table_dir, analysis_config, paramete
       - We loop through all observables in the table directory for the given model and parameterization
       - We include only those observables:
          - That have sqrts, centrality specified in the analysis_config
-         - Whose filename contains a string from analysis_config observable_list
+        - Whose filename contains a string from analysis_config observable_list
+      - We apply optional cuts to the x-range of the predictions and data (e.g. pt_hadron>10 GeV)
       - We also separate out the design/predictions with indices in the validation set
 
     Note that all of the data points are the ratio of AA/pp
@@ -142,6 +143,38 @@ def initialize_observables_dict_from_tables(table_dir, analysis_config, paramete
                 prediction_values = np.loadtxt(os.path.join(prediction_dir, filename_prediction_values), ndmin=2)
                 prediction_errors = np.loadtxt(os.path.join(prediction_dir, filename_prediction_errors), ndmin=2)
 
+                # Check that the observable is in the data dict
+                if observable_label not in observables['Data']:
+                    data_keys = observables['Data'].keys()
+                    msg = f'{observable_label} not found in observables[Data]: {data_keys}'
+                    raise ValueError(msg)
+                
+                # Check that data and prediction have the same size
+                data_size = observables['Data'][observable_label]['y'].shape[0]
+                prediction_size = prediction_values.shape[0]
+                if data_size != prediction_size:
+                    msg = f'({filename_prediction_values}) has different shape ({prediction_size}) than Data ({data_size}) -- before cuts.'
+                    raise ValueError(msg)
+                
+                # Apply cuts to the prediction values and errors (as well as data dict)
+                # We do this by construct a mask of bins (rows) to keep
+                cuts = analysis_config['cuts']
+                for obs_key, cut_range in cuts.items():
+                    if obs_key in observable_label:
+                        x_min, x_max = cut_range
+                        mask = (x_min <= observables['Data'][observable_label]['xmin']) & (observables['Data'][observable_label]['xmax'] <= x_max)
+                        prediction_values = prediction_values[mask,:]
+                        prediction_errors = prediction_errors[mask,:]
+                        for key in observables['Data'][observable_label].keys():
+                            observables['Data'][observable_label][key] = observables['Data'][observable_label][key][mask]
+                
+                # Check that data and prediction have the same size
+                data_size = observables['Data'][observable_label]['y'].shape[0]
+                prediction_size = prediction_values.shape[0]
+                if data_size != prediction_size:
+                    msg = f'({filename_prediction_values}) has different shape ({prediction_size}) than Data ({data_size}) -- after cuts.'
+                    raise ValueError(msg)
+
                 # Separate training and validation sets into separate dicts
                 design_points = _read_design_points_from_predictions_dat(
                     prediction_dir=prediction_dir,
@@ -163,20 +196,15 @@ def initialize_observables_dict_from_tables(table_dir, analysis_config, paramete
                 if 0 in prediction_values:
                     logger.warning(f'{filename_prediction_values} has value=0 at design points {np.where(prediction_values == 0)[1]}')
 
-                # Check that data and prediction have same observables with the same size
-                if observable_label not in observables['Data']:
-                    data_keys = observables['Data'].keys()
-                    msg = f'{observable_label} not found in observables[Data]: {data_keys}'
-                    raise ValueError(msg)
-
-                data_size = observables['Data'][observable_label]['y'].shape[0]
-                prediction_size = observables['Prediction'][observable_label]['y'].shape[0]
-                if data_size != prediction_size:
-                    msg = f'({filename_prediction_values}) has different shape ({prediction_size}) than Data ({data_size}).'
-                    raise ValueError(msg)
+                # If no bins left, remove the observable
+                if not np.any(observables['Prediction'][observable_label]['y']):
+                    del observables['Prediction'][observable_label]
+                    del observables['Prediction_validation'][observable_label]
+                    del observables['Data'][observable_label]
+                    logging.info(f'  Note: Removing {observable_label} from observables dict because no bins left after cuts')
 
     #----------------------
-    # Construct covariance matrices
+    # TODO: Construct covariance matrices
 
     #----------------------
     # Print observables that we will use
@@ -405,7 +433,8 @@ def observable_dict_from_matrix(Y, observables, cov=np.array([]), config=None, v
     # If validation_set, select the validation indices; otherwise, select the training indices
     # NOTE: We cannot do this crosscheck if we've applied preprocessing because the prediction
     #       values may vary from the tables themselves (eg. due to smoothing).
-    if config and "preprocessed" not in config.observables_filename:
+    #       Similarly, if we have applied cuts to the x-range we cannot do the check.
+    if config and "preprocessed" not in config.observables_filename and 'cuts' not in config.analysis_config:
 
         validation_range = config.analysis_config['validation_indices']
         validation_indices = list(range(validation_range[0], validation_range[1]))
