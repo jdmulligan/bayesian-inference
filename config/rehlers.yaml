@@ -39,7 +39,7 @@ parameters:
   preprocessing_parameters: &default_preprocessing_parameters
     smoothing:
       outlier_n_RMS: 2.
-      interpolation_method: "simple" # or "cubic_spline"
+      interpolation_method: "cubic_spline" # or "simple" for a faster method
       max_n_feature_outliers_to_interpolate: 1
 
   #-------------------------------------------
