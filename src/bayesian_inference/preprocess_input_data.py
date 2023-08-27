@@ -111,6 +111,9 @@ def _smooth_statistical_outliers_in_predictions(
         # it's not clear that we can reliably interpolate.
         # First, we need to put the features into a more useful order:
         # outliers: zip(feature_index, design_point) -> dict: (design_point, feature_index)
+        # NOTE: The `design_point` here is the index in the design point array of the design points
+        #       that we've using for this analysis. To actually use them (ie. in print outs), we'll
+        #       need to apply them to the actual design point array.
         outlier_features_per_design_point: dict[int, set[int]] = {v: set() for v in outliers[1]}
         for i_feature, design_point in zip(*outliers):
             outlier_features_per_design_point[design_point].update([i_feature])
@@ -189,7 +192,7 @@ def _smooth_statistical_outliers_in_predictions(
             )
             if len(observable_bin_centers) == 1:
                 # Skip - we can't interpolate one point.
-                logger.debug(f"Skipping observable {observable_key} because it has only one point.")
+                logger.debug(f"Skipping observable \"{observable_key}\" because it has only one point.")
                 continue
 
             for design_point, points_to_interpolate in outlier_features_to_interpolate_per_design_point.items():
@@ -201,8 +204,14 @@ def _smooth_statistical_outliers_in_predictions(
                 # Validation
                 if len(observable_bin_centers[mask]) == 1:
                     # Skip - we can't interpolate one point.
-                    msg = f"Skipping observable {observable_key}, {design_point=} because it has only one point to anchor the interpolation."
+                    msg = f"Skipping observable \"{observable_key}\", {design_point=} because it has only one point to anchor the interpolation."
                     logger.info(msg)
+                    # And add to the list since we can't make it work.
+                    if observable_key not in outliers_we_are_unable_to_remove:
+                        outliers_we_are_unable_to_remove[observable_key] = {}
+                    if k not in outliers_we_are_unable_to_remove[observable_key]:
+                        outliers_we_are_unable_to_remove[observable_key][k] = set()
+                    outliers_we_are_unable_to_remove[observable_key][k].update(points_to_interpolate)
                     continue
 
                 # NOTE: ROOT::Interpolator uses a Cubic Spline, so this might be a reasonable future approach
@@ -229,22 +238,27 @@ def _smooth_statistical_outliers_in_predictions(
                 new_observables[prediction_key][observable_key][key_type][points_to_interpolate, design_point] = interpolated_values
 
     # Reformat the outliers_we_are_unable_to_remove to be more useful and readable
-    logger.warning(
-        f"Observables which we are unable to remove outliers from: {outliers_we_are_unable_to_remove}"
-    )
+    #logger.info(
+    #    f"Observables which we are unable to remove outliers from: {outliers_we_are_unable_to_remove}"
+    #)
+    # NOTE: The typing is wrong because I based the type annotations on the "Predictions" key only,
+    #       since it's more useful here.
+    # NOTE: We need to map the i_design_point to the actual design point indices for them to be useful!
+    design_point_array: npt.NDArray[np.intp] = all_observables["Design_indices" + ("_validation" if validation_set else "")]  # type: ignore[assignment]
     design_points_we_may_want_to_remove: dict[int, dict[str, set[int]]] = {}
     for observable_key, _v in outliers_we_are_unable_to_remove.items():
-        for _design_point, i_feature in _v.items():
-            if _design_point not in design_points_we_may_want_to_remove:
-                design_points_we_may_want_to_remove[_design_point] = {}
-            if observable_key not in design_points_we_may_want_to_remove[_design_point]:
-                design_points_we_may_want_to_remove[_design_point][observable_key] = set()
-            design_points_we_may_want_to_remove[_design_point][observable_key].update(i_feature)
+        for i_design_point, i_feature in _v.items():
+            actual_design_point = design_point_array[i_design_point]
+            if actual_design_point not in design_points_we_may_want_to_remove:
+                design_points_we_may_want_to_remove[actual_design_point] = {}
+            if observable_key not in design_points_we_may_want_to_remove[actual_design_point]:
+                design_points_we_may_want_to_remove[actual_design_point][observable_key] = set()
+            design_points_we_may_want_to_remove[actual_design_point][observable_key].update(i_feature)
     logger.warning(
-        f"Design points which we may want to remove: {design_points_we_may_want_to_remove}"
+        f"Design points which we may want to remove: {sorted(list(design_points_we_may_want_to_remove.keys()))}, length: {len(design_points_we_may_want_to_remove)}"
     )
-    logger.warning(
-        f"Listed: {sorted(list(design_points_we_may_want_to_remove.keys()))}"
+    logger.info(
+        f"In further detail: {design_points_we_may_want_to_remove}"
     )
 
     return new_observables
