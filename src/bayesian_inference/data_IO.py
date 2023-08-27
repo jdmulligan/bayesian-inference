@@ -403,7 +403,9 @@ def observable_dict_from_matrix(Y, observables, cov=np.array([]), config=None, v
 
     # Check that prediction matches original table (if observable_table_dir, parameterization, validation_indices are specified)
     # If validation_set, select the validation indices; otherwise, select the training indices
-    if config:
+    # NOTE: We cannot do this crosscheck if we've applied preprocessing because the prediction
+    #       values may vary from the tables themselves (eg. due to smoothing).
+    if config and "preprocessed" not in config.observables_filename:
 
         validation_range = config.analysis_config['validation_indices']
         validation_indices = list(range(validation_range[0], validation_range[1]))

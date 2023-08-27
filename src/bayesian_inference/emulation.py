@@ -103,7 +103,7 @@ def fit_emulator_group(config: EmulationGroupConfig) -> dict[str, Any]:
     # This post explains exactly what fit_transform,inverse_transform do: https://stackoverflow.com/a/36567821
     #
     # TODO: Do we want whiten the PCs, i.e. to scale the variances of each PC to 1?
-    #       I don't see a compelling reason to do this...We are fitting separate GPs to each PC, 
+    #       I don't see a compelling reason to do this...We are fitting separate GPs to each PC,
     #       so standardizing the variance of each PC is not important.
     #       (NOTE: whitening can be done with whiten=True -- beware that inverse_transform also undoes whitening)
     scaler = sklearn_preprocessing.StandardScaler()
@@ -455,7 +455,7 @@ def predict_emulation_group(parameters, results, config):
 
     # Include predictive variance due to truncated PCs.
     # We can do this by decomposing the original covariance in feature space:
-    #   C_Y = S D^2 S^T 
+    #   C_Y = S D^2 S^T
     #       = S_{<=n_pc} D^2_{<=n_pc} S_{<=n_pc}^T + S_{>n_pc} D^2_{>n_pc} S_{>n_pc}^T
     # In general, we want to estimate the covariance as a function of theta.
     # We can do this for the first term by estimating it with the emulator covariance constructed above,
@@ -570,6 +570,9 @@ class EmulationConfig(common_base.CommonBase):
     analysis_config: dict[str, Any] = attrs.field(factory=dict)
     emulation_groups_config: dict[str, EmulationGroupConfig] = attrs.field(factory=dict)
     config: dict[str, Any] = attrs.field(init=False)
+    observable_table_dir: Path | str = attrs.field(init=False)
+    observable_config_dir: Path | str = attrs.field(init=False)
+    observables_filename: str = attrs.field(init=False)
     output_dir: Path = attrs.field(init=False)
     # Optional objects that may provide useful additional functionality
     _observable_filter: data_IO.ObservableFilter | None = attrs.field(init=False, default=None)
@@ -578,7 +581,15 @@ class EmulationConfig(common_base.CommonBase):
     def __attrs_post_init__(self):
         with self.config_file.open() as stream:
             self.config = yaml.safe_load(stream)
+
+        # Retrieve parameters from the config
+        # Observables
+        self.observable_table_dir = self.config['observable_table_dir']
+        self.observable_config_dir = self.config['observable_config_dir']
+        self.observables_filename = self.config["observables_filename"]
+        # I/O
         self.output_dir = os.path.join(self.config['output_dir'], f'{self.analysis_name}_{self.parameterization}')
+
 
     @classmethod
     def from_config_file(cls, analysis_name: str, parameterization: str, config_file: Path, analysis_config: dict[str, Any]):
