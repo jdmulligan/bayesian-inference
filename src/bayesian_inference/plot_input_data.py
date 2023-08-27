@@ -160,44 +160,37 @@ def plot(config: emulation.EmulationConfig):
 
     # Compare smoothed predictions for all design points
     # Start with individual so we can look in detail
-    _plot_predictions_for_all_design_points(
-        config=config,
-        plot_dir=plot_dir,
-        select_which_to_plot=["standard"],
-        grid_size=(3, 3),
-        validation_set=False,
-    )
-    _plot_predictions_for_all_design_points(
-        config=config,
-        plot_dir=plot_dir,
-        select_which_to_plot=["preprocessed"],
-        grid_size=(3, 3),
-        validation_set=False,
-    )
-    # And then combined for convenient comparison
-    _plot_predictions_for_all_design_points(
-        config=config,
-        plot_dir=plot_dir,
-        select_which_to_plot=["standard", "preprocessed"],
-        grid_size=(3, 3),
-        validation_set=False,
-    )
+    #_plot_predictions_for_all_design_points(
+    #    config=config,
+    #    plot_dir=plot_dir,
+    #    select_which_to_plot=["standard"],
+    #    grid_size=(3, 3),
+    #    validation_set=False,
+    #)
+    #_plot_predictions_for_all_design_points(
+    #    config=config,
+    #    plot_dir=plot_dir,
+    #    select_which_to_plot=["preprocessed"],
+    #    grid_size=(3, 3),
+    #    validation_set=False,
+    #)
+    ## And then combined for convenient comparison
+    #_plot_predictions_for_all_design_points(
+    #    config=config,
+    #    plot_dir=plot_dir,
+    #    select_which_to_plot=["standard", "preprocessed"],
+    #    grid_size=(3, 3),
+    #    validation_set=False,
+    #)
 
-    for observables_filename in ["observables.h5", "observables_preprocessed.h5"]:
-        # First, plot the pair correlations for each observables
-        _plot_pairplot_correlations(
-            config=config,
-            plot_dir=plot_dir,
-            observable_grouping=ObservableGrouping(observable_by_observable=True),
-            annotate_design_points=False,
-            observables_filename=observables_filename,
-        )
-        ## Annotate all design points observable-by-observable
+    #for observables_filename in ["observables.h5", "observables_preprocessed.h5"]:
+    for observables_filename in ["observables_preprocessed.h5"]:
+        ## First, plot the pair correlations for each observables
         #_plot_pairplot_correlations(
         #    config=config,
         #    plot_dir=plot_dir,
         #    observable_grouping=ObservableGrouping(observable_by_observable=True),
-        #    annotate_design_points=True,
+        #    annotate_design_points=False,
         #    observables_filename=observables_filename,
         #)
         # Observable-by-observable, labeling and printing problematic design points
@@ -213,13 +206,21 @@ def plot(config: emulation.EmulationConfig):
         for outlier_design_points in identified_outliers.values():
             summarized_design_points.update(outlier_design_points)
         logger.info(f"Summary of outlier design points ({len(summarized_design_points)=}): {summarized_design_points}")
-        # Group by emulator groups
+        # Annotate all design points observable-by-observable
         _plot_pairplot_correlations(
             config=config,
             plot_dir=plot_dir,
-            observable_grouping=ObservableGrouping(emulator_groups=True),
+            observable_grouping=ObservableGrouping(observable_by_observable=True),
+            annotate_design_points=True,
             observables_filename=observables_filename,
         )
+        # Group by emulator groups
+        #_plot_pairplot_correlations(
+        #    config=config,
+        #    plot_dir=plot_dir,
+        #    observable_grouping=ObservableGrouping(emulator_groups=True),
+        #    observables_filename=observables_filename,
+        #)
 
 
 ####################################################################################################################
@@ -362,7 +363,7 @@ def _plot_pairplot_correlations(
     df_generator = observable_grouping.gen(config=config, observables_filename=observables_filename, validation_set=False)
 
     # k -> v is label -> design_points
-    identified_outliers: dict[str, set] = {}
+    identified_outliers: dict[str, set[int]] = {}
     for i_group, (label, title, current_df) in enumerate(df_generator):
         logger.debug(f"Pair plotting columns: {current_df.columns=}")
 
@@ -434,6 +435,9 @@ def _plot_pairplot_correlations(
                             logger.debug(f"Outlier at {design_point=}")
                             current_ax.annotate(f"_{design_point}", (x, y), fontsize=8, color=sns.xkcd_rgb['dark sky blue'])
                             identified_outliers[label].add(design_point)
+            # Don't bother keeping if it's fully empty (just simplifies the output)
+            if not identified_outliers[label]:
+                del identified_outliers[label]
 
         # Annotate data points with design point labels to identify them
         if annotate_design_points:
