@@ -128,21 +128,38 @@ def fit_emulator_group(config: EmulationGroupConfig) -> dict[str, Any]:
     # Define GP kernel (covariance function)
     min = np.array(config.analysis_config['parameterization'][config.parameterization]['min'])
     max = np.array(config.analysis_config['parameterization'][config.parameterization]['max'])
-    length_scale = max - min
-    length_scale_bounds = (np.outer(length_scale, tuple(config.length_scale_bounds)))
-    kernel_matern = sklearn_gaussian_process.kernels.Matern(length_scale=length_scale,
-                                                            length_scale_bounds=length_scale_bounds,
-                                                            nu=config.matern_nu,
-                                                            )
 
-    # Potential addition of noise kernel
-    kernel = kernel_matern
-    if config.noise is not None:
-        kernel_noise = sklearn_gaussian_process.kernels.WhiteKernel(
-            noise_level=config.noise["args"]["noise_level"],
-            noise_level_bounds=config.noise["args"]["noise_level_bounds"],
-        )
-        kernel = (kernel_matern + kernel_noise)
+    kernel = None
+    for kernel_type, kernel_args in config.active_kernels.items():
+        if kernel_type == "matern":
+            length_scale = max - min
+            length_scale_bounds_factor = kernel_args['length_scale_bounds_factor']
+            length_scale_bounds = (np.outer(length_scale, tuple(length_scale_bounds_factor)))
+            nu = kernel_args['nu']
+            kernel = sklearn_gaussian_process.kernels.Matern(length_scale=length_scale,
+                                                             length_scale_bounds=length_scale_bounds,
+                                                             nu=nu,
+                                                            )
+        if kernel_type == 'rbf':
+            length_scale = max - min
+            length_scale_bounds_factor = kernel_args['length_scale_bounds_factor']
+            length_scale_bounds = (np.outer(length_scale, tuple(length_scale_bounds_factor)))
+            kernel = sklearn_gaussian_process.kernels.RBF(length_scale=length_scale,
+                                                          length_scale_bounds=length_scale_bounds
+                                                         )
+        if kernel_type == 'constant':
+            constant_value = kernel_args["constant_value"]
+            constant_value_bounds = kernel_args["constant_value_bounds"]
+            kernel_constant = sklearn_gaussian_process.kernels.ConstantKernel(constant_value=constant_value,
+                                                                              constant_value_bounds=constant_value_bounds
+                                                                             )
+            kernel = (kernel + kernel_constant)
+        if kernel_type == 'noise':
+            kernel_noise = sklearn_gaussian_process.kernels.WhiteKernel(
+                noise_level=kernel_args["args"]["noise_level"],
+                noise_level_bounds=kernel_args["args"]["noise_level_bounds"],
+            )
+            kernel = (kernel + kernel_noise)
 
     # Fit a GP (optimize the kernel hyperparameters) to map each design point to each of its PCs
     # Note that Y_PCA=(n_samples, n_components), so each PC corresponds to a row (i.e. a column of Y_PCA.T)
@@ -519,24 +536,24 @@ class EmulationGroupConfig(common_base.CommonBase):
         self.force_retrain = emulator_configuration['force_retrain']
         self.n_pc = emulator_configuration['n_pc']
         self.max_n_components_to_calculate = emulator_configuration.get("max_n_components_to_calculate", None)
-        self.mean_function = emulator_configuration['mean_function']
-        self.constant = emulator_configuration['constant']
-        self.linear_weights = emulator_configuration['linear_weights']
-        self.covariance_function = emulator_configuration['covariance_function']
-        self.matern_nu = emulator_configuration['matern_nu']
-        self.variance = emulator_configuration['variance']
-        self.length_scale_bounds = emulator_configuration["length_scale_bounds"]
 
-        # Noise
-        self.noise = emulator_configuration['noise']
-        # Validation for noise configuration: Either None (null in yaml) or the noise configuration
-        if self.noise is not None:
+        # Kernels
+        self.active_kernels = {}
+        for kernel_type in emulator_configuration['kernels']['active']:
+            self.active_kernels[kernel_type] = emulator_configuration['kernels'][kernel_type]
+
+        # Validate that we have exactly one of matern, rbf
+        reference_strings = ["matern", "rbf"]
+        assert sum([s in self.active_kernels for s in reference_strings]) == 1, "Must provide exactly one of 'matern', 'rbf' kernel"
+
+        # Validation for noise configuration
+        if 'noise' in self.active_kernels:
             # Check we have the appropriate keys
-            assert [k in self.noise.keys() for k in ["type", "args"]], "Noise configuration must have keys 'type' and 'args'"
-            if self.noise["type"] == "white":
+            assert [k in self.active_kernels['noise'].keys() for k in ["type", "args"]], "Noise configuration must have keys 'type' and 'args'"
+            if self.active_kernels['noise']["type"] == "white":
                 # Validate arguments
                 # We don't want to do too much since we'll just be reinventing the wheel, but a bit can be helpful.
-                assert set(self.noise["args"]) == set(["noise_level", "noise_level_bounds"]), "Must provide arguments 'noise_level' and 'noise_level_bounds' for white noise kernel"
+                assert set(self.active_kernels['noise']["args"]) == set(["noise_level", "noise_level_bounds"]), "Must provide arguments 'noise_level' and 'noise_level_bounds' for white noise kernel"
             else:
                 raise ValueError("Unsupported noise kernel")
 

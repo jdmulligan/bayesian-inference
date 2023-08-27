@@ -2,17 +2,17 @@
 #-------------------------------------------
 # General parameters
 
-output_dir: '/home/james/jetscape-docker/bayesian-inference/output/20230726'
+output_dir: '/home/james/jetscape-docker/bayesian-inference/output/20230826'
 
 initialize_observables: False
 preprocess_input_data: False
-fit_emulators: False
+fit_emulators: True
 run_mcmc: False
 run_closure_tests: False
 
 plot:
   input_data: False
-  emulators: False
+  emulators: True
   mcmc: False
   qhat: False
   closure_tests: False
@@ -28,7 +28,9 @@ observable_config_dir: '/home/james/jetscape-docker/JETSCAPE-analysis/config'
 
 # Filename of the observables file that we will use. This could be the standard one, or it could
 # have some predictions preprocessing applied to it.
-observables_filename: "observables.h5"
+# Change to 'observables_preprocessed.h5' to use preprocessed data
+#observables_filename: "observables.h5" 
+observables_filename: "observables_preprocessed.h5"
 
 #-------------------------------------------
 # Default parameter settings
@@ -38,31 +40,37 @@ parameters:
   preprocessing_parameters: &default_preprocessing_parameters
     smoothing:
       outlier_n_RMS: 2.
-      interpolation_method: "simple" # or "cubic_spline"
+      interpolation_method: "cubic_spline" # or "simple" for a faster method
       max_n_feature_outliers_to_interpolate: 1
 
   #-------------------------------------------
   # Emulator parameters
   emulator_parameters: &default_emulator_parameters
     force_retrain: True
-    n_pc: 20
+    n_pc: 10
 
-    mean_function: 'constant'                      # constant, linear
-    constant: 0.
-    linear_weights: []
+    # Specify which kernels to include in the 'active' list -- can include multiple
+    # Must have exactly one of: matern, rbf
+    kernels:
+      active: ['matern', 'noise']
 
-    covariance_function: 'matern'                  # squared_exponential, power_exponential, matern
-    matern_nu: 1.5
-    variance: 1                                    # overall variance
-    length_scale_bounds: [0.1, 10]
+      matern:
+        nu: 1.5
+        length_scale_bounds_factor: [0.1, 10]
+      
+      rbf:
+        length_scale_bounds_factor: [0.1, 10]
 
-    # Disable noise with `null` (ie. `noise: null`)
-    noise:
-      type: "white"
-      args:
-        # NOTE: Can't raise to power in yaml, so you have to evaluate them by hand
-        noise_level: 0.25  # 0.5**2
-        noise_level_bounds: [0.0001, 1]  # [0.01**2, 1**2]
+      constant:
+        constant_value: 1.
+        constant_value_bounds: [0.001, 10]
+
+      noise:
+        type: "white"
+        args:
+          # NOTE: Can't raise to power in yaml, so you have to evaluate them by hand
+          noise_level: 0.25  # 0.5**2
+          noise_level_bounds: [0.0001, 1]  # [0.01**2, 1**2]
 
     # Gaussian Process Regressor
     GPR:
@@ -74,12 +82,12 @@ parameters:
     #  - k-fold cross-validation
     #  - validation dataset
 
-    # Cross-validation
-    cross_validation: True
+    # TODO: Cross-validation
+    cross_validation: False
     cross_validation_k: 5
 
-    # TODO: Independent validation dataset
-    independent_validation: False
+    # Independent validation dataset
+    independent_validation: True
 
   #-------------------------------------------
   # MCMC parameters
@@ -124,6 +132,21 @@ analysis_base: &model_base
       max: [0.5, 10, 10, 10, 100, 100, 1.5]
   alpha: 0.2
   validation_indices: [200, 230] # For exp parameterization, these are the same for all sqrts (i.e. all points 200-229 inclusive)
+  design_points_to_exclude: [
+    # Found using n_RMS = 2.
+    # Round 1
+    18, 36, 37, 44, 48, 51, 69, 73, 77, 89, 100, 104, 111, 147, 165, 173, 188, 189,
+    # Validation from round 1
+    214, 224, 229,
+    # Round 2 (none from validation)
+    22, 43, 45, 97, 117, 126, 176,
+    # Round 3 (none from validation)
+    9, 13, 25, 134,
+    # Round 4 (none from validation)
+    8, 60, 108,
+    # Round 5 (none from validation)
+    59,
+  ]
 
 analyses:
 
@@ -166,16 +189,48 @@ analyses:
       preprocessing:
         <<: *default_preprocessing_parameters
       emulators:
-        default_group:
+        hadron_group:
           <<: *default_emulator_parameters
           observable_list:
             - 'hadron__pt_'
+        jet_group:
+          <<: *default_emulator_parameters
+          observable_list:
             - 'jet__pt_'
-            - 'jet__Dz_'
-            - 'chjet__zg_'
-            - 'chjet__tg_'
           observable_exclude_list:
             - "pt_y_atlas"
+      mcmc:
+        <<: *default_mcmc_parameters
+      closure:
+        <<: *default_closure_parameters
+    <<: *model_base
+    plot_panel_shapes: [[3,3], [3,3], [3,3], [3,3], [3,3]]
+
+
+  analysis4:
+    parameters:
+      preprocessing:
+        <<: *default_preprocessing_parameters
+      emulators:
+        hadron_group:
+          <<: *default_emulator_parameters
+          observable_list:
+            - 'hadron__pt_'
+        jet_group:
+          <<: *default_emulator_parameters
+          observable_list:
+            - 'jet__pt_'
+          observable_exclude_list:
+            - "pt_y_atlas"
+        substructure_groomed_group:
+          <<: *default_emulator_parameters
+          observable_list:
+            - 'chjet__zg_'
+            - 'chjet__tg_'
+        substructure_Dz_group:
+          <<: *default_emulator_parameters
+          observable_list:
+            - 'jet__Dz_'
       mcmc:
         <<: *default_mcmc_parameters
       closure:
