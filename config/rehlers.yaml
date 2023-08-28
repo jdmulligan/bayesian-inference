@@ -3,7 +3,8 @@
 # General parameters
 
 #output_dir: 'output/20230816_no_exclude'
-output_dir: 'output/20230826'
+#output_dir: 'output/20230827'
+output_dir: 'output/20230828'
 
 initialize_observables: True
 preprocess_input_data: True
@@ -12,7 +13,7 @@ run_mcmc: False
 run_closure_tests: False
 
 plot:
-  input_data: False
+  input_data: True
   emulators: False
   mcmc: False
   qhat: False
@@ -29,7 +30,7 @@ observable_config_dir: '../JETSCAPE-analysis/config'
 
 # Filename of the observables file that we will use. This could be the standard one, or it could
 # have some predictions preprocessing applied to it.
-observables_filename: "observables.h5"
+observables_filename: "observables_preprocessed.h5"
 
 #-------------------------------------------
 # Default parameter settings
@@ -39,8 +40,11 @@ parameters:
   preprocessing_parameters: &default_preprocessing_parameters
     smoothing:
       outlier_n_RMS: 2.
-      interpolation_method: "cubic_spline" # or "simple" for a faster method
+      # NOTE: As of 28 August 2023, there seems to be something wrong with the cubic spline, such that it will
+      #       interpolate down to negative values. For now, better to just use the simple approach.
+      interpolation_method: "simple" # "simple" or "cubic_spline
       max_n_feature_outliers_to_interpolate: 1
+      #max_n_feature_outliers_to_interpolate: 2
 
   #-------------------------------------------
   # Emulator parameters
@@ -137,18 +141,18 @@ analysis_base: &model_base
   #design_points_to_exclude: [51, 126]
   design_points_to_exclude: [
     # Found using n_RMS = 2.
-    # Round 1
-    18, 36, 37, 44, 48, 51, 69, 73, 77, 89, 100, 104, 111, 147, 165, 173, 188, 189,
-    # Validation from round 1
-    214, 224, 229,
-    # Round 2 (none from validation)
-    22, 43, 45, 97, 117, 126, 176,
-    # Round 3 (none from validation)
-    9, 13, 25, 134,
-    # Round 4 (none from validation)
-    8, 60, 108,
-    # Round 5 (none from validation)
-    59,
+    ## Round 1
+    #18, 36, 37, 44, 48, 51, 69, 73, 77, 89, 100, 104, 111, 147, 165, 173, 188, 189,
+    ## Validation from round 1
+    #214, 224, 229,
+    ## Round 2 (none from validation)
+    #22, 43, 45, 97, 117, 126, 176,
+    ## Round 3 (none from validation)
+    #9, 13, 25, 134,
+    ## Round 4 (none from validation)
+    #8, 60, 108,
+    ## Round 5 (none from validation)
+    #59,
   ]
   # Optionally: apply cuts to x-variable ranges (e.g. hadron pt > 10 GeV)
   # This will remove any bins outside of the cut range for observable names containing the listed key
@@ -174,41 +178,41 @@ analyses:
           <<: *default_emulator_parameters
           observable_list:
             - '200_*_hadron__pt_'
-        jet_200:
-          <<: *default_emulator_parameters
-          observable_list:
-            # NOTE: No underscore between * and jet will include charged jets
-            - '200_*jet__pt_'
-        hadron_2760:
-          <<: *default_emulator_parameters
-          observable_list:
-            - '2760_*_hadron__pt_'
-        jet_2760:
-          <<: *default_emulator_parameters
-          observable_list:
-            # NOTE: No underscore between * and jet will include charged jets
-            - '2760_*jet__pt_'
-        hadron_5020:
-          <<: *default_emulator_parameters
-          observable_list:
-            - '5020_*_hadron__pt_'
-        jet_5020:
-          <<: *default_emulator_parameters
-          observable_list:
-            # NOTE: No underscore between * and jet will include charged jets
-            - '5020_*jet__pt_'
-        jet_2760_substructure:
-          <<: *default_emulator_parameters
-          observable_list:
-            - '2760_*_jet__Dz_'
-            - '2760_*_chjet__zg_'
-            - '2760_*_chjet__tg_'
-        jet_5020_substructure:
-          <<: *default_emulator_parameters
-          observable_list:
-            - '5020_*_jet__Dz_'
-            - '5020_*_chjet__zg_'
-            - '5020_*_chjet__tg_'
+        ####jet_200:
+        ####  <<: *default_emulator_parameters
+        ####  observable_list:
+        ####    # NOTE: No underscore between * and jet will include charged jets
+        ####    - '200_*jet__pt_'
+        ####hadron_2760:
+        ####  <<: *default_emulator_parameters
+        ####  observable_list:
+        ####    - '2760_*_hadron__pt_'
+        ####jet_2760:
+        ####  <<: *default_emulator_parameters
+        ####  observable_list:
+        ####    # NOTE: No underscore between * and jet will include charged jets
+        ####    - '2760_*jet__pt_'
+        ####hadron_5020:
+        ####  <<: *default_emulator_parameters
+        ####  observable_list:
+        ####    - '5020_*_hadron__pt_'
+        ####jet_5020:
+        ####  <<: *default_emulator_parameters
+        ####  observable_list:
+        ####    # NOTE: No underscore between * and jet will include charged jets
+        ####    - '5020_*jet__pt_'
+        ####jet_2760_substructure:
+        ####  <<: *default_emulator_parameters
+        ####  observable_list:
+        ####    - '2760_*_jet__Dz_'
+        ####    - '2760_*_chjet__zg_'
+        ####    - '2760_*_chjet__tg_'
+        ####jet_5020_substructure:
+        ####  <<: *default_emulator_parameters
+        ####  observable_list:
+        ####    - '5020_*_jet__Dz_'
+        ####    - '5020_*_chjet__zg_'
+        ####    - '5020_*_chjet__tg_'
         #fluctuating:
         #  <<: *default_emulator_parameters
         #  observable_list:

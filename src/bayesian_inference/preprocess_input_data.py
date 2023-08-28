@@ -36,10 +36,10 @@ def preprocess(
         preprocessing_config=preprocessing_config,
     )
     # Find outliers via ad-hoc measures based on physics expectations
-    steer_find_physics_motivated_outliers(
-        observables=observables,
-        preprocessing_config=preprocessing_config,
-    )
+    #steer_find_physics_motivated_outliers(
+    #    observables=observables,
+    #    preprocessing_config=preprocessing_config,
+    #)
 
     return observables
 
@@ -421,7 +421,7 @@ def _find_outliers_based_on_central_values(
     # NOTE: We need abs because we don't care about the sign - we just want a measure.
     diff_between_features = np.abs(np.diff(values, axis=0))
     rms = np.sqrt(np.mean(diff_between_features**2, axis=-1))
-    outliers_in_diff_index = (
+    outliers_in_diff_mask = (
         diff_between_features > (outliers_config.n_RMS * rms[:, np.newaxis])
     )
     """
@@ -434,19 +434,24 @@ def _find_outliers_based_on_central_values(
     """
     # First, we'll handle the inner points
     output = np.zeros_like(values, dtype=np.bool_)
-    output[1:-1, :] = outliers_in_diff_index[:-1, :] & outliers_in_diff_index[1:, :]
+    output[1:-1, :] = outliers_in_diff_mask[:-1, :] & outliers_in_diff_mask[1:, :]
 
-    if np.any(values > 1.5):
-        logger.info(f"{values=}")
+    # Convenient breakpoint for debugging of high values
+    #if np.any(values > 1.05):
+    #    logger.info(f"{values=}")
 
-    # Now, handle the edges
-    s = np.r_[0, 2:-3, -1]
+    # Now, handle the edges. Here, we need to select the 1th and -2th points
+    s = np.ones(values.shape[0], dtype=np.bool_)
+    s[1] = False
+    s[-2] = False
+    # Now, we'll repeat the calculation with the diff and rMS
     diff_between_features_for_edges = np.abs(np.diff(values[s, :], axis=0))
-    outliers_in_diff_index_edges = (
+    rms = np.sqrt(np.mean(diff_between_features_for_edges**2, axis=-1))
+    outliers_in_diff_mask_edges = (
         diff_between_features_for_edges > (outliers_config.n_RMS * rms[:, np.newaxis])
     )
-    output[0, :] = outliers_in_diff_index_edges[0, :] & outliers_in_diff_index[0, :]
-    output[-1, :] = outliers_in_diff_index_edges[-1, :] & outliers_in_diff_index[-1, :]
+    output[0, :] = outliers_in_diff_mask_edges[0, :] & outliers_in_diff_mask[0, :]
+    output[-1, :] = outliers_in_diff_mask_edges[-1, :] & outliers_in_diff_mask[-1, :]
     # NOTE: Recall that np.where returns (n_feature_index, n_design_point_index) as separate arrays
     outliers = np.where(output)
     return outliers  # type: ignore[return-value]
