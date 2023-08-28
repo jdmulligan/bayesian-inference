@@ -418,7 +418,8 @@ def _find_outliers_based_on_central_values(
     outliers_config: OutliersConfig,
 ) -> tuple[npt.NDArray[np.intp], npt.NDArray[np.intp]]:
     """Find outlier points based on large deviations from close central values."""
-    diff_between_features = np.diff(values, axis=0)
+    # NOTE: We need abs because we don't care about the sign - we just want a measure.
+    diff_between_features = np.abs(np.diff(values, axis=0))
     rms = np.sqrt(np.mean(diff_between_features**2, axis=-1))
     outliers_in_diff_index = (
         diff_between_features > (outliers_config.n_RMS * rms[:, np.newaxis])
@@ -435,10 +436,14 @@ def _find_outliers_based_on_central_values(
     output = np.zeros_like(values, dtype=np.bool_)
     output[1:-1, :] = outliers_in_diff_index[:-1, :] & outliers_in_diff_index[1:, :]
 
+    if np.any(values > 1.5):
+        logger.info(f"{values=}")
+
     # Now, handle the edges
     s = np.r_[0, 2:-3, -1]
+    diff_between_features_for_edges = np.abs(np.diff(values[s, :], axis=0))
     outliers_in_diff_index_edges = (
-        diff_between_features[s, :] > (outliers_config.n_RMS * rms[:, np.newaxis])[s, :]
+        diff_between_features_for_edges > (outliers_config.n_RMS * rms[:, np.newaxis])
     )
     output[0, :] = outliers_in_diff_index_edges[0, :] & outliers_in_diff_index[0, :]
     output[-1, :] = outliers_in_diff_index_edges[-1, :] & outliers_in_diff_index[-1, :]
