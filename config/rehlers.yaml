@@ -41,8 +41,8 @@ parameters:
     smoothing:
       outlier_n_RMS: 2.
       # NOTE: As of 28 August 2023, there seems to be something wrong with the cubic spline, such that it will
-      #       interpolate down to negative values. For now, better to just use the simple approach.
-      interpolation_method: "simple" # "simple" or "cubic_spline
+      #       interpolate down to negative values. For now, better to just use the linear approach.
+      interpolation_method: "linear" # "linear" or "cubic_spline
       #max_n_feature_outliers_to_interpolate: 1
       max_n_feature_outliers_to_interpolate: 2
 

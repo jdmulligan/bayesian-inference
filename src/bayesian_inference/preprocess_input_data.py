@@ -269,7 +269,7 @@ def _smooth_statistical_outliers_in_predictions(
                 #         and then see if there are significant changes in the interpolated parameters
                 #       - Could vary some parameters (perhaps following the above) and perform the whole
                 #         Bayesian analysis, again looking for how much the determined parameters change.
-                if preprocessing_config.smoothing_interpolation_method == "simple":
+                if preprocessing_config.smoothing_interpolation_method == "linear":
                     interpolated_values = np.interp(
                         observable_bin_centers[points_to_interpolate],
                         observable_bin_centers[mask],
@@ -493,7 +493,7 @@ class PreprocessingConfig(common_base.CommonBase):
         self.smoothing_outliers_config = OutliersConfig(n_RMS=smoothing_parameters["outlier_n_RMS"])
         self.smoothing_interpolation_method = smoothing_parameters["interpolation_method"]
         # Validation
-        if self.smoothing_interpolation_method not in ["simple", "cubic_spline"]:
+        if self.smoothing_interpolation_method not in ["linear", "cubic_spline"]:
             msg = f"Unrecognized interpolation method {self.smoothing_interpolation_method}."
             raise ValueError(msg)
         self.smoothing_max_n_feature_outliers_to_interpolate = smoothing_parameters["max_n_feature_outliers_to_interpolate"]

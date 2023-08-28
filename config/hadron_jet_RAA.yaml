@@ -29,7 +29,7 @@ observable_config_dir: '/home/james/jetscape-docker/JETSCAPE-analysis/config'
 # Filename of the observables file that we will use. This could be the standard one, or it could
 # have some predictions preprocessing applied to it.
 # Change to 'observables_preprocessed.h5' to use preprocessed data
-#observables_filename: "observables.h5" 
+#observables_filename: "observables.h5"
 observables_filename: "observables_preprocessed.h5"
 
 #-------------------------------------------
@@ -40,7 +40,7 @@ parameters:
   preprocessing_parameters: &default_preprocessing_parameters
     smoothing:
       outlier_n_RMS: 2.
-      interpolation_method: "cubic_spline" # or "simple" for a faster method
+      interpolation_method: "cubic_spline" # or "linear" for a faster method
       max_n_feature_outliers_to_interpolate: 1
 
   #-------------------------------------------
@@ -57,7 +57,7 @@ parameters:
       matern:
         nu: 1.5
         length_scale_bounds_factor: [0.1, 10]
-      
+
       rbf:
         length_scale_bounds_factor: [0.1, 10]
 
