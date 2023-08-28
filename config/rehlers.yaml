@@ -3,7 +3,8 @@
 # General parameters
 
 #output_dir: 'output/20230816_no_exclude'
-output_dir: 'output/20230826'
+#output_dir: 'output/20230827'
+output_dir: 'output/20230828'
 
 initialize_observables: True
 preprocess_input_data: True
@@ -12,7 +13,7 @@ run_mcmc: False
 run_closure_tests: False
 
 plot:
-  input_data: False
+  input_data: True
   emulators: False
   mcmc: False
   qhat: False
@@ -29,7 +30,7 @@ observable_config_dir: '../JETSCAPE-analysis/config'
 
 # Filename of the observables file that we will use. This could be the standard one, or it could
 # have some predictions preprocessing applied to it.
-observables_filename: "observables.h5"
+observables_filename: "observables_preprocessed.h5"
 
 #-------------------------------------------
 # Default parameter settings
@@ -39,8 +40,11 @@ parameters:
   preprocessing_parameters: &default_preprocessing_parameters
     smoothing:
       outlier_n_RMS: 2.
-      interpolation_method: "cubic_spline" # or "simple" for a faster method
-      max_n_feature_outliers_to_interpolate: 1
+      # NOTE: As of 28 August 2023, there seems to be something wrong with the cubic spline, such that it will
+      #       interpolate down to negative values. For now, better to just use the linear approach.
+      interpolation_method: "linear" # "linear" or "cubic_spline
+      #max_n_feature_outliers_to_interpolate: 1
+      max_n_feature_outliers_to_interpolate: 2
 
   #-------------------------------------------
   # Emulator parameters
@@ -61,7 +65,7 @@ parameters:
       matern:
         nu: 1.5
         length_scale_bounds_factor: [0.1, 10]
-      
+
       rbf:
         length_scale_bounds_factor: [0.1, 10]
 
@@ -136,19 +140,51 @@ analysis_base: &model_base
   validation_indices: [200, 230] # For exp parameterization, these are the same for all sqrts (i.e. all points 200-229 inclusive)
   #design_points_to_exclude: [51, 126]
   design_points_to_exclude: [
+    ###########
+    # 1st draft
+    ###########
     # Found using n_RMS = 2.
+    ## Round 1
+    #18, 36, 37, 44, 48, 51, 69, 73, 77, 89, 100, 104, 111, 147, 165, 173, 188, 189,
+    ## Validation from round 1
+    #214, 224, 229,
+    ## Round 2 (none from validation)
+    #22, 43, 45, 97, 117, 126, 176,
+    ## Round 3 (none from validation)
+    #9, 13, 25, 134,
+    ## Round 4 (none from validation)
+    #8, 60, 108,
+    ## Round 5 (none from validation)
+    #59,
+    ###########
+    # 2nd draft
+    ###########
+    # Found using n_RMS = 2, n_max = 2 (with bug fixes compared to the first time)
     # Round 1
-    18, 36, 37, 44, 48, 51, 69, 73, 77, 89, 100, 104, 111, 147, 165, 173, 188, 189,
-    # Validation from round 1
-    214, 224, 229,
-    # Round 2 (none from validation)
-    22, 43, 45, 97, 117, 126, 176,
-    # Round 3 (none from validation)
-    9, 13, 25, 134,
-    # Round 4 (none from validation)
-    8, 60, 108,
-    # Round 5 (none from validation)
-    59,
+    ## Large statistical errors
+    ## Std
+    #18, 36, 37, 43, 44, 48, 51, 69, 73, 89, 97, 104, 111, 147, 168,
+    ## Validation
+    #214, 217, 224,
+    ## Large central value differences
+    #18, 21, 22, 28, 36, 48, 51, 59, 73, 74, 79, 89, 118, 121, 140, 142, 143, 147, 151, 168, 180, 187,
+    ## Validation
+    #200, 214,
+    # Combined:
+    18, 21, 22, 28, 36, 37, 43, 44, 48, 51, 59, 69, 73, 74, 79, 89, 97, 104, 111, 118, 121, 140, 142, 143, 147, 151, 168, 180, 187, 200, 214, 217, 224,
+    # Round 2
+    ## Large statistical errors
+    ## Std
+    #8, 9, 13, 45, 173,
+    ## Validation
+    #229,
+    ## Large central value differences
+    #8, 30, 98, 188,
+    # Combined:
+    8, 9, 13, 30, 45, 98, 173, 188, 229,
+    # Spot points based on observable correlations
+    # 125: theta_g and z_g have one very low point, that's far away from everything else
+    125
   ]
   # Optionally: apply cuts to x-variable ranges (e.g. hadron pt > 10 GeV)
   # This will remove any bins outside of the cut range for observable names containing the listed key
@@ -156,78 +192,77 @@ analysis_base: &model_base
     'hadron__pt_': [10, 1000]
 
 analyses:
-
-  analysis_determine_fluctuating:
-    parameters:
-      preprocessing:
-        <<: *default_preprocessing_parameters
-      emulators:
-        #all:
-        #  <<: *default_emulator_parameters
-        #  observable_list:
-        #    - 'hadron__pt_'
-        #    - 'jet__pt_'
-        #    - 'jet__Dz_'
-        #    - 'chjet__zg_'
-        #    - 'chjet__tg_'
-        hadron_200:
-          <<: *default_emulator_parameters
-          observable_list:
-            - '200_*_hadron__pt_'
-        jet_200:
-          <<: *default_emulator_parameters
-          observable_list:
-            # NOTE: No underscore between * and jet will include charged jets
-            - '200_*jet__pt_'
-        hadron_2760:
-          <<: *default_emulator_parameters
-          observable_list:
-            - '2760_*_hadron__pt_'
-        jet_2760:
-          <<: *default_emulator_parameters
-          observable_list:
-            # NOTE: No underscore between * and jet will include charged jets
-            - '2760_*jet__pt_'
-        hadron_5020:
-          <<: *default_emulator_parameters
-          observable_list:
-            - '5020_*_hadron__pt_'
-        jet_5020:
-          <<: *default_emulator_parameters
-          observable_list:
-            # NOTE: No underscore between * and jet will include charged jets
-            - '5020_*jet__pt_'
-        jet_2760_substructure:
-          <<: *default_emulator_parameters
-          observable_list:
-            - '2760_*_jet__Dz_'
-            - '2760_*_chjet__zg_'
-            - '2760_*_chjet__tg_'
-        jet_5020_substructure:
-          <<: *default_emulator_parameters
-          observable_list:
-            - '5020_*_jet__Dz_'
-            - '5020_*_chjet__zg_'
-            - '5020_*_chjet__tg_'
-        #fluctuating:
-        #  <<: *default_emulator_parameters
-        #  observable_list:
-        #  - "2760_*_hadron__pt_"
-        #stable:
-        #  <<: *default_emulator_parameters
-        #  observable_list:
-        #  - "200_*_hadron__pt_"
-        #  - "5020_*_hadron__pt_"
-      mcmc:
-        <<: *default_mcmc_parameters
-      closure:
-        <<: *default_closure_parameters
-    <<: *model_base
-    # If we want to exclude from everything, regardless of selection.
-    # If we only want to exclude from a particular emulation group, we can do so above.
-    global_observable_exclude_list:
-      - "pt_y_atlas"
-    plot_panel_shapes: [[3,3], [3,3], [3, 3], [3, 3], [3, 3], [3, 3]]
+  #analysis_determine_fluctuating:
+  #  parameters:
+  #    preprocessing:
+  #      <<: *default_preprocessing_parameters
+  #    emulators:
+  #      #all:
+  #      #  <<: *default_emulator_parameters
+  #      #  observable_list:
+  #      #    - 'hadron__pt_'
+  #      #    - 'jet__pt_'
+  #      #    - 'jet__Dz_'
+  #      #    - 'chjet__zg_'
+  #      #    - 'chjet__tg_'
+  #      hadron_200:
+  #        <<: *default_emulator_parameters
+  #        observable_list:
+  #          - '200_*_hadron__pt_'
+  #      ####jet_200:
+  #      ####  <<: *default_emulator_parameters
+  #      ####  observable_list:
+  #      ####    # NOTE: No underscore between * and jet will include charged jets
+  #      ####    - '200_*jet__pt_'
+  #      ####hadron_2760:
+  #      ####  <<: *default_emulator_parameters
+  #      ####  observable_list:
+  #      ####    - '2760_*_hadron__pt_'
+  #      ####jet_2760:
+  #      ####  <<: *default_emulator_parameters
+  #      ####  observable_list:
+  #      ####    # NOTE: No underscore between * and jet will include charged jets
+  #      ####    - '2760_*jet__pt_'
+  #      ####hadron_5020:
+  #      ####  <<: *default_emulator_parameters
+  #      ####  observable_list:
+  #      ####    - '5020_*_hadron__pt_'
+  #      ####jet_5020:
+  #      ####  <<: *default_emulator_parameters
+  #      ####  observable_list:
+  #      ####    # NOTE: No underscore between * and jet will include charged jets
+  #      ####    - '5020_*jet__pt_'
+  #      ####jet_2760_substructure:
+  #      ####  <<: *default_emulator_parameters
+  #      ####  observable_list:
+  #      ####    - '2760_*_jet__Dz_'
+  #      ####    - '2760_*_chjet__zg_'
+  #      ####    - '2760_*_chjet__tg_'
+  #      ####jet_5020_substructure:
+  #      ####  <<: *default_emulator_parameters
+  #      ####  observable_list:
+  #      ####    - '5020_*_jet__Dz_'
+  #      ####    - '5020_*_chjet__zg_'
+  #      ####    - '5020_*_chjet__tg_'
+  #      #fluctuating:
+  #      #  <<: *default_emulator_parameters
+  #      #  observable_list:
+  #      #  - "2760_*_hadron__pt_"
+  #      #stable:
+  #      #  <<: *default_emulator_parameters
+  #      #  observable_list:
+  #      #  - "200_*_hadron__pt_"
+  #      #  - "5020_*_hadron__pt_"
+  #    mcmc:
+  #      <<: *default_mcmc_parameters
+  #    closure:
+  #      <<: *default_closure_parameters
+  #  <<: *model_base
+  #  # If we want to exclude from everything, regardless of selection.
+  #  # If we only want to exclude from a particular emulation group, we can do so above.
+  #  global_observable_exclude_list:
+  #    - "pt_y_atlas"
+  #  plot_panel_shapes: [[3,3], [3,3], [3, 3], [3, 3], [3, 3], [3, 3]]
 
   #analysis1:
   #  parameters:
@@ -292,3 +327,34 @@ analyses:
   #  global_observable_exclude_list:
   #    - "pt_y_atlas"
   #  plot_panel_shapes: [[3,3], [3,3], [3,3], [3,3], [3,3], [3,3]]
+
+  analysis4:
+    parameters:
+      preprocessing:
+        <<: *default_preprocessing_parameters
+      emulators:
+        hadron_group:
+          <<: *default_emulator_parameters
+          observable_list:
+            - 'hadron__pt_'
+        jet_group:
+          <<: *default_emulator_parameters
+          observable_list:
+            - 'jet__pt_'
+          observable_exclude_list:
+            - "pt_y_atlas"
+        substructure_groomed_group:
+          <<: *default_emulator_parameters
+          observable_list:
+            - 'chjet__zg_'
+            - 'chjet__tg_'
+        substructure_Dz_group:
+          <<: *default_emulator_parameters
+          observable_list:
+            - 'jet__Dz_'
+      mcmc:
+        <<: *default_mcmc_parameters
+      closure:
+        <<: *default_closure_parameters
+    <<: *model_base
+    plot_panel_shapes: [[3,3], [3,3], [3,3], [3,3], [3,3], [3,3]]
