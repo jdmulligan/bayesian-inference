@@ -6,15 +6,15 @@
 #output_dir: 'output/20230827'
 output_dir: 'output/20230828'
 
-initialize_observables: True
-preprocess_input_data: True
+initialize_observables: False
+preprocess_input_data: False
 fit_emulators: False
 run_mcmc: False
 run_closure_tests: False
 
 plot:
-  input_data: True
-  emulators: False
+  input_data: False
+  emulators: True
   mcmc: False
   qhat: False
   closure_tests: False
@@ -54,7 +54,7 @@ parameters:
     n_pc: 10
     # NOTE: The intent here is save time during development. Probably safer to disable
     #       (which is done by not specifying) in production.
-    max_n_components_to_calculate: 10
+    #max_n_components_to_calculate: 10
     #max_n_components_to_calculate: 30
 
     # Specify which kernels to include in the 'active' list -- can include multiple
@@ -95,14 +95,10 @@ parameters:
   #-------------------------------------------
   # MCMC parameters
   mcmc_parameters: &default_mcmc_parameters
-    n_walkers: 20
-    n_burn_steps: 20
-    n_sampling_steps: 50
-    n_logging_steps: 10
-    #n_walkers: 500
-    #n_burn_steps: 1000
-    #n_sampling_steps: 500
-    #n_logging_steps: 100
+    n_walkers: 100
+    n_burn_steps: 1000
+    n_sampling_steps: 5000
+    n_logging_steps: 100
 
   #-------------------------------------------
   # Closure test parameters

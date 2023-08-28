@@ -429,7 +429,7 @@ def _plot_emulator_residuals(results, config, plot_dir, validation_set=False):
     stdev_mean_relative = np.divide(std_emulator, RAA_emulator)
     stdev_mean = np.mean(stdev_mean_relative)
     text = rf'$\left< \sigma_{{\rm{{emulator}}}} \right> = {100*stdev_mean:.1f}\%$'
-    ax_scatter.text(0.6, 0.15, text, fontsize=16)
+    ax_scatter.text(0.6, 0.15, text, fontsize=16, transform=ax_scatter.transAxes)
 
     # Draw residuals
     mean_val = np.mean(normalized_residual)
