@@ -182,6 +182,9 @@ analysis_base: &model_base
     #8, 30, 98, 188,
     # Combined:
     8, 9, 13, 30, 45, 98, 173, 188, 229,
+    # Spot points based on observable correlations
+    # 125: theta_g and z_g have one very low point, that's far away from everything else
+    125
   ]
   # Optionally: apply cuts to x-variable ranges (e.g. hadron pt > 10 GeV)
   # This will remove any bins outside of the cut range for observable names containing the listed key
