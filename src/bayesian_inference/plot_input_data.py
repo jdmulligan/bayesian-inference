@@ -248,8 +248,7 @@ def _plot_predictions_for_all_design_points(
 
     # Get data (Note: this is where the bin values are stored)
     # NOTE: It doesn't matter which filename we use here - it's the same for both
-    data = data_IO.data_dict_from_h5(config.output_dir, filename='observables.h5',
-                                      observable_table_dir=config.config["observable_table_dir"])
+    data = data_IO.data_dict_from_h5(config.output_dir, filename='observables.h5')
 
     # Grab the observables to compare
     all_observables = data_IO.read_dict_from_h5(config.output_dir, 'observables.h5')
@@ -289,7 +288,7 @@ def _plot_predictions_for_all_design_points(
 
             # This should practically cover reasonable observable ranges, but prevent giant outliers
             # from obscuring the details that we're interested in
-            ax.set_ylim([0, 2])
+            ax.set_ylim([-0.5, 2])
             ax.legend(
                 loc='upper right',
                 title=observable_key,
