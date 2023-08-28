@@ -50,7 +50,7 @@ parameters:
   # Emulator parameters
   emulator_parameters: &default_emulator_parameters
     force_retrain: True
-    n_pc: 4
+    n_pc: 10
 
     # Specify which kernels to include in the 'active' list -- can include multiple
     # Must have exactly one of: matern, rbf
@@ -59,10 +59,10 @@ parameters:
 
       matern:
         nu: 1.5
-        length_scale_bounds_factor: [0.1, 10]
+        length_scale_bounds_factor: [0.01, 100]
 
       rbf:
-        length_scale_bounds_factor: [0.1, 10]
+        length_scale_bounds_factor: [0.01, 100]
 
       constant:
         constant_value: 1.
@@ -96,8 +96,8 @@ parameters:
   # MCMC parameters
   mcmc_parameters: &default_mcmc_parameters
     n_walkers: 100
-    n_burn_steps: 200
-    n_sampling_steps: 1000
+    n_burn_steps: 500
+    n_sampling_steps: 2000
     n_logging_steps: 100
 
   #-------------------------------------------
@@ -206,15 +206,15 @@ analysis_hadron_base: &analysis_hadron
 
 analyses:
 
-  analysis_hadron10_1000:
-    <<: *analysis_hadron
-    cuts:
-      'hadron__pt_': [10, 1000]
+  #analysis_hadron10_1000:
+  #  <<: *analysis_hadron
+  #  cuts:
+  #    'hadron__pt_': [10, 1000]
 
-  analysis_hadron30-1000:
-    <<: *analysis_hadron
-    cuts:
-      'hadron__pt_': [30, 1000]
+  #analysis_hadron30-1000:
+  #  <<: *analysis_hadron
+  #  cuts:
+  #    'hadron__pt_': [30, 1000]
 
   #analysis_hadron10-30:
   #  <<: *analysis_hadron
@@ -232,6 +232,7 @@ analyses:
             - 'jet__pt_'
           observable_exclude_list:
             - "pt_y_atlas"
+            - "2760__PbPb__inclusive_chjet__pt_alice"
       mcmc:
         <<: *default_mcmc_parameters
       closure:
@@ -241,30 +242,31 @@ analyses:
       'chjet__pt_star__': [16, 100]
     plot_panel_shapes: [[3,3], [3,3], [3,3]]
 
-  analysis_hadron10-1000_jet:
-    parameters:
-      preprocessing:
-        <<: *default_preprocessing_parameters
-      emulators:
-        hadron_group:
-          <<: *default_emulator_parameters
-          observable_list:
-            - 'hadron__pt_'
-        jet_group:
-          <<: *default_emulator_parameters
-          observable_list:
-            - 'jet__pt_'
-          observable_exclude_list:
-            - "pt_y_atlas"
-      mcmc:
-        <<: *default_mcmc_parameters
-      closure:
-        <<: *default_closure_parameters
-    <<: *model_base
-    cuts:
-      'hadron__pt_': [10, 1000]
-      'chjet__pt_star__': [16, 100]
-    plot_panel_shapes: [[3,3], [3,3], [3,3], [3,3], [3,3]]
+  #analysis_hadron10-1000_jet:
+  #  parameters:
+  #    preprocessing:
+  #      <<: *default_preprocessing_parameters
+  #    emulators:
+  #      hadron_group:
+  #        <<: *default_emulator_parameters
+  #        observable_list:
+  #          - 'hadron__pt_'
+  #      jet_group:
+  #        <<: *default_emulator_parameters
+  #        observable_list:
+  #          - 'jet__pt_'
+  #        observable_exclude_list:
+  #          - "pt_y_atlas"
+  #          - "2760__PbPb__inclusive_chjet__pt_alice"
+  #    mcmc:
+  #      <<: *default_mcmc_parameters
+  #    closure:
+  #      <<: *default_closure_parameters
+  #  <<: *model_base
+  #  cuts:
+  #    'hadron__pt_': [10, 1000]
+  #    'chjet__pt_star__': [16, 100]
+  #  plot_panel_shapes: [[3,3], [3,3], [3,3], [3,3], [3,3]]
 
   analysis_jet_substructure:
     parameters:
@@ -277,6 +279,7 @@ analyses:
             - 'jet__pt_'
           observable_exclude_list:
             - "pt_y_atlas"
+            - "2760__PbPb__inclusive_chjet__pt_alice"
         substructure_groomed_group:
           <<: *default_emulator_parameters
           observable_list:
@@ -310,6 +313,7 @@ analyses:
   #          - 'jet__pt_'
   #        observable_exclude_list:
   #          - "pt_y_atlas"
+  #          - "2760__PbPb__inclusive_chjet__pt_alice"
   #      substructure_groomed_group:
   #        <<: *default_emulator_parameters
   #        observable_list:
