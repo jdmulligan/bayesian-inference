@@ -59,6 +59,9 @@ def run_mcmc(config, closure_index=-1):
     )
     emulation_results = emulation_config.read_all_emulator_groups()
 
+    # Pre-compute the predictive variance due to PC truncation, since it is independent of theta.
+    emulator_cov_unexplained = emulation.compute_emulator_cov_unexplained(emulation_config, emulation_results)
+
     # Load experimental data into arrays: experimental_results['y'/'y_err'] (n_features,)
     # In the case of a closure test, we use the pseudodata from the validation design point
     experimental_results = data_IO.data_array_from_h5(config.output_dir, 'observables.h5', pseudodata_index=closure_index, observable_filter=emulation_config.observable_filter)
@@ -73,7 +76,7 @@ def run_mcmc(config, closure_index=-1):
         # Note: we pass the emulators and experimental data as args to the log_posterior function
         logger.info('Initializing sampler...')
         sampler = LoggingEnsembleSampler(config.n_walkers, ndim, _log_posterior,
-                                        args=[min, max, emulation_config, emulation_results, experimental_results],
+                                        args=[min, max, emulation_config, emulation_results, experimental_results, emulator_cov_unexplained],
                                         pool=pool)
 
         # Generate random starting positions for each walker
@@ -176,7 +179,7 @@ def map_parameters(posterior, method='quantile'):
     return map_parameters
 
 #---------------------------------------------------------------
-def _log_posterior(X, min, max, emulation_config, emulation_results, experimental_results):
+def _log_posterior(X, min, max, emulation_config, emulation_results, experimental_results, emulator_cov_unexplained):
     """
     Function to evaluate the log-posterior for a given set of input parameters.
 
@@ -213,7 +216,9 @@ def _log_posterior(X, min, max, emulation_config, emulation_results, experimenta
         # Returns dict of matrices of emulator predictions:
         #     emulator_predictions['central_value'] -- (n_samples, n_features)
         #     emulator_predictions['cov'] -- (n_samples, n_features, n_features)
-        emulator_predictions = emulation.predict(X[inside], emulation_config, emulation_group_results=emulation_results)
+        emulator_predictions = emulation.predict(X[inside], emulation_config, 
+                                                 emulation_group_results=emulation_results,
+                                                 emulator_cov_unexplained=emulator_cov_unexplained)
 
         # Construct array to store the difference between emulator prediction and experimental data
         # (using broadcasting to subtract each data point from each emulator prediction)

@@ -268,7 +268,7 @@ if __name__ == '__main__':
     parser.add_argument('-c', '--configFile',
                         help='Path of config file for analysis',
                         action='store', type=str,
-                        default='../config/hadron_jet_RAA.yaml', )
+                        default='../config/jet_substructure.yaml', )
     args = parser.parse_args()
 
     logger.info('Configuring...')

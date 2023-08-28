@@ -210,6 +210,45 @@ def write_emulators(config: EmulationGroupConfig, output_dict: dict[str, Any]) -
     with filename.open('wb') as f:
 	    pickle.dump(output_dict, f)
 
+####################################################################################################################
+def compute_emulator_cov_unexplained(emulation_config, emulation_results):
+    '''
+    Compute the predictive variance due to PC truncation, for all emulator groups.
+    See further details in compute_emulator_group_cov_unexplained().
+    '''
+    emulator_cov_unexplained = {}
+    if not emulation_results:
+        emulation_results = emulation_config.read_all_emulator_groups()
+    for emulation_group_name, emulation_group_config in emulation_config.emulation_groups_config.items():
+        emulation_group_result = emulation_results.get(emulation_group_name)
+        emulator_cov_unexplained[emulation_group_name] = compute_emulator_group_cov_unexplained(emulation_group_config, emulation_group_result)
+
+####################################################################################################################
+def compute_emulator_group_cov_unexplained(emulation_group_config, emulation_group_result):
+    '''
+    Compute the predictive variance due to PC truncation, for a given emulator group.
+    We can do this by decomposing the original covariance in feature space:
+      C_Y = S D^2 S^T
+          = S_{<=n_pc} D^2_{<=n_pc} S_{<=n_pc}^T + S_{>n_pc} D^2_{>n_pc} S_{>n_pc}^T
+    In general, we want to estimate the covariance as a function of theta.
+    We can do this for the first term by estimating it with the emulator covariance constructed above,
+      as a function of theta.
+    We can't do this with the second term, since we didn't emulate it -- so we estimate it,
+      treating it as independent of theta, and add it to the emulator covariance:
+        Sigma_unexplained = 1/n_samples * S_{>n_pc} D^2_{>n_pc} S_{>n_pc}^T,
+      where we will include the 1/n_samples factor to account for the fact that we are estimating the covariance from a set of samples.
+    See eqs 21-22 of https://arxiv.org/pdf/2102.11337.pdf
+    TODO: double check this (and compare to https://github.com/jdmulligan/STAT/blob/master/src/emulator.py#L145)
+
+    We will generally pre-compute this once in mcmc.py to save time, although we define this function
+    here to allow us to re-compute it as needed if it is not pre-computed (e.g. when plotting).
+    '''
+    pca = emulation_group_result['PCA']['pca']
+    S_unexplained = pca.components_.T[:,emulation_group_config.n_pc:]
+    D_unexplained = np.diag(pca.explained_variance_[emulation_group_config.n_pc:])
+    emulator_cov_unexplained = S_unexplained.dot(D_unexplained.dot(S_unexplained.T))
+
+    return emulator_cov_unexplained
 
 ####################################################################################################################
 def nd_block_diag(arrays):
@@ -371,7 +410,8 @@ class SortEmulationGroupObservables:
 def predict(parameters: npt.NDArray[np.float64],
             emulation_config: EmulationConfig,
             merge_predictions_over_groups: bool = True,
-            emulation_group_results: dict[str, dict[str, Any]] | None = None) -> dict[str, npt.NDArray[np.float64]]:
+            emulation_group_results: dict[str, dict[str, Any]] | None = None,
+            emulator_cov_unexplained: dict = {}) -> dict[str, npt.NDArray[np.float64]]:
     """
     Construct dictionary of emulator predictions for each observable
 
@@ -380,10 +420,14 @@ def predict(parameters: npt.NDArray[np.float64],
     :param bool merge_predictions_over_groups: whether to merge predictions over emulation groups (True)
                                                or return a dictionary of predictions for each group (False). Default: True
     :param dict emulator_group_results: dictionary containing results from each emulation group. If None, read from file.
+    :param dict emulator_cov_unexplained: dictionary containing the unexplained variance due to PC truncation for each emulation group.
+                                          Generally we will precompute this in mcmc.py to save time,
+                                          but if it is not precomputed (e.g. when plotting) we automatically compute it here. 
     :return dict emulator_predictions: dictionary containing matrices of central values and covariance
     """
     if emulation_group_results is None:
         emulation_group_results = {}
+
     predict_output = {}
     for emulation_group_name, emulation_group_config in emulation_config.emulation_groups_config.items():
         emulation_group_result = emulation_group_results.get(emulation_group_name)
@@ -395,10 +439,17 @@ def predict(parameters: npt.NDArray[np.float64],
         if emulation_group_result is None:
             emulation_group_result = read_emulators(emulation_group_config)
 
+        # Compute unexplained variance due to PC truncation for this emulator group, if not already precomputed
+        if emulator_cov_unexplained:
+            emulator_group_cov_unexplained=emulator_cov_unexplained[emulation_group_name]
+        else:
+            emulator_group_cov_unexplained=compute_emulator_group_cov_unexplained(emulation_group_config, emulation_group_result)
+
         predict_output[emulation_group_name] = predict_emulation_group(
-            parameters=parameters,
-            results=emulation_group_result,
-            config=emulation_group_config,
+            parameters,
+            emulation_group_result,
+            emulation_group_config,
+            emulator_group_cov_unexplained=emulator_group_cov_unexplained
         )
 
     # Allow the option to return immediately to allow the study of performance per emulation group
@@ -410,7 +461,7 @@ def predict(parameters: npt.NDArray[np.float64],
 
 
 ####################################################################################################################
-def predict_emulation_group(parameters, results, config):
+def predict_emulation_group(parameters, results, emulation_group_config, emulator_group_cov_unexplained=np.array([])):
     '''
     Construct dictionary of emulator predictions for each observable in an emulation group.
 
@@ -431,25 +482,28 @@ def predict_emulation_group(parameters, results, config):
     # The emulators are stored as a list (one for each PC)
     emulators = results['emulators']
 
+    if not emulator_group_cov_unexplained.any():
+        emulator_group_cov_unexplained = compute_emulator_group_cov_unexplained(emulation_group_config, results)
+
     # Get predictions (in PC space) from each emulator and concatenate them into a numpy array with shape (n_samples, n_PCs)
     # Note: we just get the std rather than cov, since we are interested in the predictive uncertainty
     #       of a given point, not the correlation between different sample points.
     n_samples = parameters.shape[0]
-    emulator_central_value = np.zeros((n_samples, config.n_pc))
-    emulator_variance = np.zeros((n_samples, config.n_pc))
+    emulator_central_value = np.zeros((n_samples, emulation_group_config.n_pc))
+    emulator_variance = np.zeros((n_samples, emulation_group_config.n_pc))
     for i,emulator in enumerate(emulators):
         y_central_value, y_std = emulator.predict(parameters, return_std=True) # Alternately: return_cov=True
         emulator_central_value[:,i] = y_central_value
         emulator_variance[:,i] = y_std**2
     # Construct (diagonal) covariance matrix from the variances, for use in uncertainty propagation
     emulator_cov = np.apply_along_axis(np.diagflat, 1, emulator_variance)
-    assert emulator_cov.shape == (n_samples, config.n_pc, config.n_pc)
+    assert emulator_cov.shape == (n_samples, emulation_group_config.n_pc, emulation_group_config.n_pc)
 
     # Reconstruct the physical space from the PCs, and invert preprocessing.
     # Note we use array broadcasting to calculate over all samples.
     pca = results['PCA']['pca']
     scaler = results['PCA']['scaler']
-    emulator_central_value_reconstructed_scaled = emulator_central_value.dot(pca.components_[:config.n_pc,:])
+    emulator_central_value_reconstructed_scaled = emulator_central_value.dot(pca.components_[:emulation_group_config.n_pc,:])
     emulator_central_value_reconstructed = scaler.inverse_transform(emulator_central_value_reconstructed_scaled)
 
     # Propagate uncertainty through the linear transformation back to feature space.
@@ -464,30 +518,16 @@ def predict_emulation_group(parameters, results, config):
     # Note: should be equivalent to: https://github.com/jdmulligan/STAT/blob/master/src/emulator.py#L145
     # TODO: one can make this faster with broadcasting/einsum
     n_features = pca.components_.shape[1]
-    S = pca.components_.T[:,:config.n_pc]
+    S = pca.components_.T[:,:emulation_group_config.n_pc]
     emulator_cov_reconstructed_scaled = np.zeros((n_samples, n_features, n_features))
     for i_sample in range(n_samples):
         emulator_cov_reconstructed_scaled[i_sample] = S.dot(emulator_cov[i_sample].dot(S.T))
     assert emulator_cov_reconstructed_scaled.shape == (n_samples, n_features, n_features)
 
     # Include predictive variance due to truncated PCs.
-    # We can do this by decomposing the original covariance in feature space:
-    #   C_Y = S D^2 S^T
-    #       = S_{<=n_pc} D^2_{<=n_pc} S_{<=n_pc}^T + S_{>n_pc} D^2_{>n_pc} S_{>n_pc}^T
-    # In general, we want to estimate the covariance as a function of theta.
-    # We can do this for the first term by estimating it with the emulator covariance constructed above,
-    #   as a function of theta.
-    # We can't do this with the second term, since we didn't emulate it -- so we estimate it,
-    #   treating it as independent of theta, and add it to the emulator covariance:
-    #     Sigma_unexplained = 1/n_samples * S_{>n_pc} D^2_{>n_pc} S_{>n_pc}^T,
-    #   where we include the 1/n_samples factor to account for the fact that we are estimating the covariance from a set of samples.
-    # See eqs 21-22 of https://arxiv.org/pdf/2102.11337.pdf
-    # TODO: double check this (and compare to https://github.com/jdmulligan/STAT/blob/master/src/emulator.py#L145)
-    S_unexplained = pca.components_.T[:,config.n_pc:]
-    D_unexplained = np.diag(pca.explained_variance_[config.n_pc:])
-    emulator_cov_unexplained = S_unexplained.dot(D_unexplained.dot(S_unexplained.T)) / n_samples
+    # See comments in mcmc.py for further details. 
     for i_sample in range(n_samples):
-        emulator_cov_reconstructed_scaled[i_sample] += emulator_cov_unexplained
+        emulator_cov_reconstructed_scaled[i_sample] += emulator_group_cov_unexplained / n_samples
 
     # Propagate uncertainty: inverse preprocessing
     # We only need to undo the unit variance scaling, since the shift does not affect the covariance matrix.

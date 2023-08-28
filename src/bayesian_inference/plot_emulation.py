@@ -309,7 +309,8 @@ def _plot_emulator_observables(results, config, plot_dir, validation_set=False):
     Y_dict = data_IO.observable_dict_from_matrix(Y, observables, config=config, validation_set=validation_set, observable_filter=config.observable_filter)
 
     # Get emulator predictions
-    emulator_predictions = emulation.predict_emulation_group(parameters=design, results=results, config=config)
+    emulator_predictions = emulation.predict_emulation_group(design, results, config)
+    
     emulator_predictions_dict = data_IO.observable_dict_from_matrix(emulator_predictions['central_value'],
                                                                     observables,
                                                                     validation_set=validation_set,
@@ -353,7 +354,7 @@ def _plot_emulator_residuals(results, config, plot_dir, validation_set=False):
     Y_dict = data_IO.observable_dict_from_matrix(Y, observables, config=config, validation_set=validation_set, observable_filter=config.observable_filter)
 
     # Get emulator predictions
-    emulator_predictions = emulation.predict_emulation_group(parameters=design, results=results, config=config)
+    emulator_predictions = emulation.predict_emulation_group(design, results, config)
     emulator_predictions_dict = data_IO.observable_dict_from_matrix(emulator_predictions['central_value'],
                                                                     observables,
                                                                     cov=emulator_predictions['cov'],
