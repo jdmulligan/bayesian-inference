@@ -2,19 +2,19 @@
 #-------------------------------------------
 # General parameters
 
-output_dir: '/home/james/jetscape-docker/bayesian-inference/output/20230827'
+output_dir: '/home/james/jetscape-docker/bayesian-inference/output/20230828'
 
 initialize_observables: False
 preprocess_input_data: False
-fit_emulators: True
+fit_emulators: False
 run_mcmc: False
 run_closure_tests: False
 
 plot:
   input_data: False
-  emulators: True
-  mcmc: False
-  qhat: False
+  emulators: False
+  mcmc: True
+  qhat: True
   closure_tests: False
 
 debug_level: 0
@@ -40,8 +40,11 @@ parameters:
   preprocessing_parameters: &default_preprocessing_parameters
     smoothing:
       outlier_n_RMS: 2.
-      interpolation_method: "cubic_spline" # or "linear" for a faster method
-      max_n_feature_outliers_to_interpolate: 1
+      # NOTE: As of 28 August 2023, there seems to be something wrong with the cubic spline, such that it will
+      #       interpolate down to negative values. For now, better to just use the linear approach.
+      interpolation_method: "linear" # "linear" or "cubic_spline
+      #max_n_feature_outliers_to_interpolate: 1
+      max_n_feature_outliers_to_interpolate: 2
 
   #-------------------------------------------
   # Emulator parameters
@@ -93,8 +96,8 @@ parameters:
   # MCMC parameters
   mcmc_parameters: &default_mcmc_parameters
     n_walkers: 100
-    n_burn_steps: 1000
-    n_sampling_steps: 5000
+    n_burn_steps: 200
+    n_sampling_steps: 1000
     n_logging_steps: 100
 
   #-------------------------------------------
@@ -133,44 +136,92 @@ analysis_base: &model_base
   alpha: 0.2
   validation_indices: [200, 230] # For exp parameterization, these are the same for all sqrts (i.e. all points 200-229 inclusive)
   design_points_to_exclude: [
+    ###########
+    # 1st draft
+    ###########
     # Found using n_RMS = 2.
+    ## Round 1
+    #18, 36, 37, 44, 48, 51, 69, 73, 77, 89, 100, 104, 111, 147, 165, 173, 188, 189,
+    ## Validation from round 1
+    #214, 224, 229,
+    ## Round 2 (none from validation)
+    #22, 43, 45, 97, 117, 126, 176,
+    ## Round 3 (none from validation)
+    #9, 13, 25, 134,
+    ## Round 4 (none from validation)
+    #8, 60, 108,
+    ## Round 5 (none from validation)
+    #59,
+    ###########
+    # 2nd draft
+    ###########
+    # Found using n_RMS = 2, n_max = 2 (with bug fixes compared to the first time)
     # Round 1
-    18, 36, 37, 44, 48, 51, 69, 73, 77, 89, 100, 104, 111, 147, 165, 173, 188, 189,
-    # Validation from round 1
-    214, 224, 229,
-    # Round 2 (none from validation)
-    22, 43, 45, 97, 117, 126, 176,
-    # Round 3 (none from validation)
-    9, 13, 25, 134,
-    # Round 4 (none from validation)
-    8, 60, 108,
-    # Round 5 (none from validation)
-    59,
+    ## Large statistical errors
+    ## Std
+    #18, 36, 37, 43, 44, 48, 51, 69, 73, 89, 97, 104, 111, 147, 168,
+    ## Validation
+    #214, 217, 224,
+    ## Large central value differences
+    #18, 21, 22, 28, 36, 48, 51, 59, 73, 74, 79, 89, 118, 121, 140, 142, 143, 147, 151, 168, 180, 187,
+    ## Validation
+    #200, 214,
+    # Combined:
+    18, 21, 22, 28, 36, 37, 43, 44, 48, 51, 59, 69, 73, 74, 79, 89, 97, 104, 111, 118, 121, 140, 142, 143, 147, 151, 168, 180, 187, 200, 214, 217, 224,
+    # Round 2
+    ## Large statistical errors
+    ## Std
+    #8, 9, 13, 45, 173,
+    ## Validation
+    #229,
+    ## Large central value differences
+    #8, 30, 98, 188,
+    # Combined:
+    8, 9, 13, 30, 45, 98, 173, 188, 229,
+    # Spot points based on observable correlations
+    # 125: theta_g and z_g have one very low point, that's far away from everything else
+    125
   ]
   # Optionally: apply cuts to x-variable ranges (e.g. hadron pt > 10 GeV)
   # This will remove any bins outside of the cut range for observable names containing the listed key
-  cuts:
-    'hadron__pt_': [10, 1000]
+  #cuts:
+  #  'hadron__pt_': [10, 1000]
+
+# Define base config for hadron analysis, since we will re-run with different pt cuts
+analysis_hadron_base: &analysis_hadron
+  parameters:
+    preprocessing:
+      <<: *default_preprocessing_parameters
+    emulators:
+      default_group:
+        <<: *default_emulator_parameters
+        observable_list:
+          - 'hadron__pt_'
+    mcmc:
+      <<: *default_mcmc_parameters
+    closure:
+      <<: *default_closure_parameters
+  <<: *model_base
+  plot_panel_shapes: [[3,3], [3,3]]
 
 analyses:
 
-  analysis1:
-    parameters:
-      preprocessing:
-        <<: *default_preprocessing_parameters
-      emulators:
-        default_group:
-          <<: *default_emulator_parameters
-          observable_list:
-            - 'hadron__pt_'
-      mcmc:
-        <<: *default_mcmc_parameters
-      closure:
-        <<: *default_closure_parameters
-    <<: *model_base
-    plot_panel_shapes: [[3,3], [3,3]]
+  analysis_hadron10_1000:
+    <<: *analysis_hadron
+    cuts:
+      'hadron__pt_': [10, 1000]
 
-  analysis2:
+  analysis_hadron30-1000:
+    <<: *analysis_hadron
+    cuts:
+      'hadron__pt_': [30, 1000]
+
+  #analysis_hadron10-30:
+  #  <<: *analysis_hadron
+  #  cuts:
+  #    'hadron__pt_': [10, 30]
+
+  analysis_jet:
     parameters:
       preprocessing:
         <<: *default_preprocessing_parameters
@@ -186,9 +237,11 @@ analyses:
       closure:
         <<: *default_closure_parameters
     <<: *model_base
+    cuts:
+      'chjet__pt_star__': [16, 100]
     plot_panel_shapes: [[3,3], [3,3], [3,3]]
 
-  analysis3:
+  analysis_hadron10-1000_jet:
     parameters:
       preprocessing:
         <<: *default_preprocessing_parameters
@@ -208,18 +261,16 @@ analyses:
       closure:
         <<: *default_closure_parameters
     <<: *model_base
+    cuts:
+      'hadron__pt_': [10, 1000]
+      'chjet__pt_star__': [16, 100]
     plot_panel_shapes: [[3,3], [3,3], [3,3], [3,3], [3,3]]
 
-
-  analysis4:
+  analysis_jet_substructure:
     parameters:
       preprocessing:
         <<: *default_preprocessing_parameters
       emulators:
-        hadron_group:
-          <<: *default_emulator_parameters
-          observable_list:
-            - 'hadron__pt_'
         jet_group:
           <<: *default_emulator_parameters
           observable_list:
@@ -240,4 +291,40 @@ analyses:
       closure:
         <<: *default_closure_parameters
     <<: *model_base
-    plot_panel_shapes: [[3,3], [3,3], [3,3], [3,3], [3,3], [3,3]]
+    cuts:
+      'chjet__pt_star__': [16, 100]
+    plot_panel_shapes: [[3,3], [3,3], [3,3], [3,3], [3,3]]
+
+  #analysis_hadron10-1000_jet_substructure:
+  #  parameters:
+  #    preprocessing:
+  #      <<: *default_preprocessing_parameters
+  #    emulators:
+  #      hadron_group:
+  #        <<: *default_emulator_parameters
+  #        observable_list:
+  #          - 'hadron__pt_'
+  #      jet_group:
+  #        <<: *default_emulator_parameters
+  #        observable_list:
+  #          - 'jet__pt_'
+  #        observable_exclude_list:
+  #          - "pt_y_atlas"
+  #      substructure_groomed_group:
+  #        <<: *default_emulator_parameters
+  #        observable_list:
+  #          - 'chjet__zg_'
+  #          - 'chjet__tg_'
+  #      substructure_Dz_group:
+  #        <<: *default_emulator_parameters
+  #        observable_list:
+  #          - 'jet__Dz_'
+  #    mcmc:
+  #      <<: *default_mcmc_parameters
+  #    closure:
+  #      <<: *default_closure_parameters
+  #  <<: *model_base
+  #  cuts:
+  #    'hadron__pt_': [10, 1000]
+  #    'chjet__pt_star__': [16, 100]
+  #  plot_panel_shapes: [[3,3], [3,3], [3,3], [3,3], [3,3], [3,3]]
