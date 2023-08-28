@@ -195,10 +195,13 @@ def _smooth_statistical_outliers_in_predictions(
             )
         elif outlier_identification_method == "large_central_value_difference":
             # Find additional outliers based on central values which are dramatically different than the others
-            outliers = _find_outliers_based_on_central_values(
-                values=all_observables[prediction_key][observable_key]["y"],
-                outliers_config=preprocessing_config.smoothing_outliers_config,
-            )
+            if len(all_observables[prediction_key][observable_key]["y"]) > 2:
+                outliers = _find_outliers_based_on_central_values(
+                    values=all_observables[prediction_key][observable_key]["y"],
+                    outliers_config=preprocessing_config.smoothing_outliers_config,
+                )
+            else:
+                outliers = ((), ())  # type: ignore[assignment]
         else:
             msg = f"Unrecognized outlier identification mode {outlier_identification_method}."
             raise ValueError(msg)
@@ -248,7 +251,7 @@ def _smooth_statistical_outliers_in_predictions(
                 # Validation
                 if len(observable_bin_centers[mask]) == 1:
                     # Skip - we can't interpolate one point.
-                    msg = f"Skipping observable \"{observable_key}\", {design_point=} because it has only one point to anchor the interpolation."
+                    msg = f"Skipping observable \"{observable_key}\", {design_point=} because it has only one point to anchor the interpolation. {mask=}"
                     logger.info(msg)
                     # And add to the list since we can't make it work.
                     if observable_key not in outliers_we_are_unable_to_remove:
@@ -342,6 +345,7 @@ def _perform_QA_and_reformat_outliers(
     # NOTE: If we have to skip, we record the design point so we can consider excluding it due
     #       to that observable.
     outlier_features_to_interpolate_per_design_point: dict[int, list[int]] = {}
+    #logger.info(f"{observable_key=}, {outlier_features_per_design_point=}")
     for k, v in outlier_features_per_design_point.items():
         #logger.debug("------------------------")
         #logger.debug(f"{k=}, {v=}")
@@ -380,12 +384,19 @@ def _perform_QA_and_reformat_outliers(
                         logger.info(msg)
                 # Reset for the next point
                 indices_of_outliers_that_are_one_apart = set()
+        # There are indices left over at the end of the loop which we need to take care of.
+        # eg. If all points are considered outliers
+        if indices_of_outliers_that_are_one_apart:
+            if len(indices_of_outliers_that_are_one_apart) > preprocessing_config.smoothing_max_n_feature_outliers_to_interpolate:
+                # Since we are looking at the distances, we want to remove the points that make up that distance.
+                #logger.info(f"Ended on {indices_of_outliers_that_are_one_apart=}")
+                accumulated_indices_to_remove.update(indices_of_outliers_that_are_one_apart)
 
         # Now that we've determine which points we want to remove from our interpolation (accumulated_indices_to_remove),
         # let's actually remove them from our list.
         # NOTE: We sort again because sets are not ordered.
         outlier_features_to_interpolate_per_design_point[k] = sorted(list(set(v) - accumulated_indices_to_remove))
-        #logger.debug(f"features kept for interpolation: {outlier_features_to_interpolate_per_design_point[k]}")
+        #logger.debug(f"design point {k}: features kept for interpolation: {outlier_features_to_interpolate_per_design_point[k]}")
 
         # And we'll keep track of what we can't interpolate
         if accumulated_indices_to_remove:
@@ -441,17 +452,23 @@ def _find_outliers_based_on_central_values(
     #    logger.info(f"{values=}")
 
     # Now, handle the edges. Here, we need to select the 1th and -2th points
-    s = np.ones(values.shape[0], dtype=np.bool_)
-    s[1] = False
-    s[-2] = False
-    # Now, we'll repeat the calculation with the diff and rMS
-    diff_between_features_for_edges = np.abs(np.diff(values[s, :], axis=0))
-    rms = np.sqrt(np.mean(diff_between_features_for_edges**2, axis=-1))
-    outliers_in_diff_mask_edges = (
-        diff_between_features_for_edges > (outliers_config.n_RMS * rms[:, np.newaxis])
-    )
-    output[0, :] = outliers_in_diff_mask_edges[0, :] & outliers_in_diff_mask[0, :]
-    output[-1, :] = outliers_in_diff_mask_edges[-1, :] & outliers_in_diff_mask[-1, :]
+    if values.shape[0] > 4:
+        s = np.ones(values.shape[0], dtype=np.bool_)
+        s[1] = False
+        s[-2] = False
+        # Now, we'll repeat the calculation with the diff and rMS
+        diff_between_features_for_edges = np.abs(np.diff(values[s, :], axis=0))
+        rms = np.sqrt(np.mean(diff_between_features_for_edges**2, axis=-1))
+        outliers_in_diff_mask_edges = (
+            diff_between_features_for_edges > (outliers_config.n_RMS * rms[:, np.newaxis])
+        )
+        output[0, :] = outliers_in_diff_mask_edges[0, :] & outliers_in_diff_mask[0, :]
+        output[-1, :] = outliers_in_diff_mask_edges[-1, :] & outliers_in_diff_mask[-1, :]
+    else:
+        # Too short - just have to take what we have
+        output[0, :] = outliers_in_diff_mask[0, :]
+        output[-1, :] = outliers_in_diff_mask[-1, :]
+
     # NOTE: Recall that np.where returns (n_feature_index, n_design_point_index) as separate arrays
     outliers = np.where(output)
     return outliers  # type: ignore[return-value]
