@@ -160,20 +160,20 @@ def plot(config: emulation.EmulationConfig):
 
     # Compare smoothed predictions for all design points
     # Start with individual so we can look in detail
-    #_plot_predictions_for_all_design_points(
-    #    config=config,
-    #    plot_dir=plot_dir,
-    #    select_which_to_plot=["standard"],
-    #    grid_size=(3, 3),
-    #    validation_set=False,
-    #)
-    #_plot_predictions_for_all_design_points(
-    #    config=config,
-    #    plot_dir=plot_dir,
-    #    select_which_to_plot=["preprocessed"],
-    #    grid_size=(3, 3),
-    #    validation_set=False,
-    #)
+    _plot_predictions_for_all_design_points(
+        config=config,
+        plot_dir=plot_dir,
+        select_which_to_plot=["standard"],
+        grid_size=(3, 3),
+        validation_set=False,
+    )
+    _plot_predictions_for_all_design_points(
+        config=config,
+        plot_dir=plot_dir,
+        select_which_to_plot=["preprocessed"],
+        grid_size=(3, 3),
+        validation_set=False,
+    )
     ## And then combined for convenient comparison
     #_plot_predictions_for_all_design_points(
     #    config=config,
