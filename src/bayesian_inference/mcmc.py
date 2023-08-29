@@ -19,9 +19,9 @@ import os
 import pickle
 
 import emcee
+import multiprocessing
 import numpy as np
 from scipy.linalg import lapack
-from multiprocessing import Pool
 
 from bayesian_inference import common_base
 from bayesian_inference import data_IO
@@ -70,7 +70,10 @@ def run_mcmc(config, closure_index=-1):
     #       If needed we can create a h5py dataset for compression/chunking
 
     # We can use multiprocessing in emcee to parallelize the independent walkers
-    with Pool() as pool:
+    # NOTE: We need to use `spawn` rather than `fork` on linux. Otherwise, the some of the caching mechanisms
+    #       (eg. used in learning the emulator group mapping doesn't work)
+    multiprocessing.set_start_method('spawn')
+    with multiprocessing.Pool() as pool:
 
         # Construct sampler (we create a dummy daughter class from emcee.EnsembleSampler, to add some logging info)
         # Note: we pass the emulators and experimental data as args to the log_posterior function
