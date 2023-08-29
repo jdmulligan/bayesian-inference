@@ -79,10 +79,11 @@ class ObservableGrouping:
         # Setup
         # Data
         all_observables_dict = data_IO.read_dict_from_h5(config.output_dir, observables_filename)
-        #df = pd.DataFrame(observables[:, :3])
-        #df = pd.DataFrame(observables)
         # Add design point as a column so we can use it (eg. with hue)
-        design_points = np.array(all_observables_dict["Design_indices"])
+        design_key = "Design_indices"
+        if validation_set:
+            design_key += "_validation"
+        design_points = np.array(all_observables_dict[design_key])
 
         if self.observable_by_observable:
             observables = data_IO.predictions_matrix_from_h5(
@@ -94,6 +95,7 @@ class ObservableGrouping:
             observables_dict = data_IO.observable_dict_from_matrix(
                 observables,
                 all_observables_dict,
+                validation_set=validation_set,
                 observable_filter=config.observable_filter
             )
 
@@ -160,67 +162,73 @@ def plot(config: emulation.EmulationConfig):
 
     # Compare smoothed predictions for all design points
     # Start with individual so we can look in detail
-    _plot_predictions_for_all_design_points(
-        config=config,
-        plot_dir=plot_dir,
-        select_which_to_plot=["standard"],
-        grid_size=(3, 3),
-        validation_set=False,
-    )
-    _plot_predictions_for_all_design_points(
-        config=config,
-        plot_dir=plot_dir,
-        select_which_to_plot=["preprocessed"],
-        grid_size=(3, 3),
-        validation_set=False,
-    )
-    ## And then combined for convenient comparison
-    #_plot_predictions_for_all_design_points(
-    #    config=config,
-    #    plot_dir=plot_dir,
-    #    select_which_to_plot=["standard", "preprocessed"],
-    #    grid_size=(3, 3),
-    #    validation_set=False,
-    #)
+    for validation_set in [False, True]:
+        _plot_predictions_for_all_design_points(
+            config=config,
+            plot_dir=plot_dir,
+            select_which_to_plot=["standard"],
+            grid_size=(3, 3),
+            validation_set=validation_set,
+        )
+        _plot_predictions_for_all_design_points(
+            config=config,
+            plot_dir=plot_dir,
+            select_which_to_plot=["preprocessed"],
+            grid_size=(3, 3),
+            validation_set=validation_set,
+        )
+        ## And then combined for convenient comparison
+        #_plot_predictions_for_all_design_points(
+        #    config=config,
+        #    plot_dir=plot_dir,
+        #    select_which_to_plot=["standard", "preprocessed"],
+        #    grid_size=(3, 3),
+        #    validation_set=validation_set,
+        #)
 
     #for observables_filename in ["observables.h5", "observables_preprocessed.h5"]:
     for observables_filename in ["observables_preprocessed.h5"]:
-        ## First, plot the pair correlations for each observables
-        #_plot_pairplot_correlations(
-        #    config=config,
-        #    plot_dir=plot_dir,
-        #    observable_grouping=ObservableGrouping(observable_by_observable=True),
-        #    annotate_design_points=False,
-        #    observables_filename=observables_filename,
-        #)
-        # Observable-by-observable, labeling and printing problematic design points
-        identified_outliers = _plot_pairplot_correlations(
-            config=config,
-            plot_dir=plot_dir,
-            observable_grouping=ObservableGrouping(observable_by_observable=True),
-            outliers_config=preprocess_input_data.OutliersConfig(n_RMS=4.),
-            observables_filename=observables_filename,
-        )
-        logger.info(f"{identified_outliers=}")
-        summarized_design_points = set()
-        for outlier_design_points in identified_outliers.values():
-            summarized_design_points.update(outlier_design_points)
-        logger.info(f"Summary of outlier design points ({len(summarized_design_points)=}): {summarized_design_points}")
-        # Annotate all design points observable-by-observable
-        _plot_pairplot_correlations(
-            config=config,
-            plot_dir=plot_dir,
-            observable_grouping=ObservableGrouping(observable_by_observable=True),
-            annotate_design_points=True,
-            observables_filename=observables_filename,
-        )
-        # Group by emulator groups
-        #_plot_pairplot_correlations(
-        #    config=config,
-        #    plot_dir=plot_dir,
-        #    observable_grouping=ObservableGrouping(emulator_groups=True),
-        #    observables_filename=observables_filename,
-        #)
+        for validation_set in [True, False]:
+            ## First, plot the pair correlations for each observables
+            #_plot_pairplot_correlations(
+            #    config=config,
+            #    plot_dir=plot_dir,
+            #    observable_grouping=ObservableGrouping(observable_by_observable=True),
+            #    annotate_design_points=False,
+            #    validation_set=validation_set,
+            #    observables_filename=observables_filename,
+            #)
+            # Observable-by-observable, labeling and printing problematic design points
+            identified_outliers = _plot_pairplot_correlations(
+                config=config,
+                plot_dir=plot_dir,
+                observable_grouping=ObservableGrouping(observable_by_observable=True),
+                outliers_config=preprocess_input_data.OutliersConfig(n_RMS=4.),
+                validation_set=validation_set,
+                observables_filename=observables_filename,
+            )
+            logger.info(f"{identified_outliers=}")
+            summarized_design_points = set()
+            for outlier_design_points in identified_outliers.values():
+                summarized_design_points.update(outlier_design_points)
+            logger.info(f"Summary of outlier design points ({len(summarized_design_points)=}): {summarized_design_points}")
+            # Annotate all design points observable-by-observable
+            _plot_pairplot_correlations(
+                config=config,
+                plot_dir=plot_dir,
+                observable_grouping=ObservableGrouping(observable_by_observable=True),
+                annotate_design_points=True,
+                validation_set=validation_set,
+                observables_filename=observables_filename,
+            )
+            # Group by emulator groups
+            #_plot_pairplot_correlations(
+            #    config=config,
+            #    plot_dir=plot_dir,
+            #    observable_grouping=ObservableGrouping(emulator_groups=True),
+            #    validation_set=validation_set,
+            #    observables_filename=observables_filename,
+            #)
 
 
 ####################################################################################################################
@@ -319,6 +327,7 @@ def _plot_pairplot_correlations(
     outliers_config: preprocess_input_data.OutliersConfig | None = None,
     annotate_design_points: bool = False,
     use_experimental_data: bool = False,
+    validation_set: bool = False,
     observables_filename: str = "observables.h5",
 ) -> dict[str, set]:
     """ Plot pair correlations.
@@ -346,11 +355,13 @@ def _plot_pairplot_correlations(
         observables = observables["y"]
         # In the case of data, this is trivially one "design point"
     else:
-        observables = data_IO.predictions_matrix_from_h5(config.output_dir, filename=observables_filename, validation_set=False, observable_filter=config.observable_filter)
+        observables = data_IO.predictions_matrix_from_h5(config.output_dir, filename=observables_filename, validation_set=validation_set, observable_filter=config.observable_filter)
 
     # Determine output name
     observables_filename_label = observables_filename.split(".")[0]
     filename = f"{observables_filename_label}_pairplot_correlations"
+    if validation_set:
+        filename += "_validation"
     if observable_grouping is not None:
         filename += f"__{observable_grouping.label}"
     if annotate_design_points:
@@ -359,7 +370,7 @@ def _plot_pairplot_correlations(
         filename += "__outliers"
 
     # We want a shape of (n_design_points, n_features)
-    df_generator = observable_grouping.gen(config=config, observables_filename=observables_filename, validation_set=False)
+    df_generator = observable_grouping.gen(config=config, observables_filename=observables_filename, validation_set=validation_set)
 
     # k -> v is label -> design_points
     identified_outliers: dict[str, set[int]] = {}
