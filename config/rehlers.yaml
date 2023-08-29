@@ -6,9 +6,9 @@
 #output_dir: 'output/20230827'
 output_dir: 'output/20230828'
 
-initialize_observables: False
-preprocess_input_data: False
-fit_emulators: False
+initialize_observables: True
+preprocess_input_data: True
+fit_emulators: True
 run_mcmc: False
 run_closure_tests: False
 
@@ -186,6 +186,8 @@ analysis_base: &model_base
   # This will remove any bins outside of the cut range for observable names containing the listed key
   cuts:
     'hadron__pt_': [10, 1000]
+    '200__AuAu__inclusive_chjet__pt_star__R0.2__0-10': [14, 1000]
+    '200__AuAu__inclusive_chjet__pt_star__R0.4__0-10': [16, 1000]
 
 analyses:
   #analysis_determine_fluctuating:

@@ -411,7 +411,7 @@ def predict(parameters: npt.NDArray[np.float64],
             emulation_config: EmulationConfig,
             merge_predictions_over_groups: bool = True,
             emulation_group_results: dict[str, dict[str, Any]] | None = None,
-            emulator_cov_unexplained: dict = {}) -> dict[str, npt.NDArray[np.float64]]:
+            emulator_cov_unexplained: dict | None = None) -> dict[str, npt.NDArray[np.float64]]:
     """
     Construct dictionary of emulator predictions for each observable
 
@@ -422,11 +422,13 @@ def predict(parameters: npt.NDArray[np.float64],
     :param dict emulator_group_results: dictionary containing results from each emulation group. If None, read from file.
     :param dict emulator_cov_unexplained: dictionary containing the unexplained variance due to PC truncation for each emulation group.
                                           Generally we will precompute this in mcmc.py to save time,
-                                          but if it is not precomputed (e.g. when plotting) we automatically compute it here. 
+                                          but if it is not precomputed (e.g. when plotting) we automatically compute it here.
     :return dict emulator_predictions: dictionary containing matrices of central values and covariance
     """
     if emulation_group_results is None:
         emulation_group_results = {}
+    if emulator_cov_unexplained is None:
+        emulator_cov_unexplained = {}
 
     predict_output = {}
     for emulation_group_name, emulation_group_config in emulation_config.emulation_groups_config.items():
@@ -461,7 +463,7 @@ def predict(parameters: npt.NDArray[np.float64],
 
 
 ####################################################################################################################
-def predict_emulation_group(parameters, results, emulation_group_config, emulator_group_cov_unexplained=np.array([])):
+def predict_emulation_group(parameters, results, emulation_group_config, emulator_group_cov_unexplained: npt.NDArray[np.float64] | None = None):
     '''
     Construct dictionary of emulator predictions for each observable in an emulation group.
 
@@ -482,7 +484,7 @@ def predict_emulation_group(parameters, results, emulation_group_config, emulato
     # The emulators are stored as a list (one for each PC)
     emulators = results['emulators']
 
-    if not emulator_group_cov_unexplained.any():
+    if emulator_group_cov_unexplained is None:
         emulator_group_cov_unexplained = compute_emulator_group_cov_unexplained(emulation_group_config, results)
 
     # Get predictions (in PC space) from each emulator and concatenate them into a numpy array with shape (n_samples, n_PCs)
@@ -525,7 +527,7 @@ def predict_emulation_group(parameters, results, emulation_group_config, emulato
     assert emulator_cov_reconstructed_scaled.shape == (n_samples, n_features, n_features)
 
     # Include predictive variance due to truncated PCs.
-    # See comments in mcmc.py for further details. 
+    # See comments in mcmc.py for further details.
     for i_sample in range(n_samples):
         emulator_cov_reconstructed_scaled[i_sample] += emulator_group_cov_unexplained / n_samples
 
