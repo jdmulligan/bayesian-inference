@@ -178,8 +178,12 @@ analysis_base: &model_base
     # Combined:
     8, 9, 13, 30, 45, 98, 173, 188, 229,
     # Spot points based on observable correlations
-    # 125: theta_g and z_g have one very low point, that's far away from everything else
-    125
+    # 125: theta_g and z_g have two very low point, that's far away from everything else
+    125, 203,
+    # Only shows up for 200__AuAu__inclusive_chjet__pt_star__R0.4__0-10 after restricting the input pt range
+    5, 131, 182,
+    # 2760__PbPb__inclusive_jet__pt_cms__R0.3__5-10 (somehow was missed earlier - I suppose removing other points reduced the variance)
+    65,
   ]
   # Optionally: apply cuts to x-variable ranges (e.g. hadron pt > 10 GeV)
   # This will remove any bins outside of the cut range for observable names containing the listed key
@@ -194,7 +198,7 @@ analysis_hadron_base: &analysis_hadron
     emulators:
       default_group:
         <<: *default_emulator_parameters
-        
+
         observable_list:
           - 'hadron__pt_'
     mcmc:
