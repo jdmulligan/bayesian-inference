@@ -64,7 +64,7 @@ def initialize_observables_dict_from_tables(table_dir, analysis_config, paramete
                                                   ['y_err'] -- statistical uncertainty
 
        observables['Design_validation']... -- design points for validation set
-       observables['Design_validation_indices'][parameterization] -- indices of validation design points included for a given parameterization
+       observables['Design_indices_validation'][parameterization] -- indices of validation design points included for a given parameterization
        observables['Prediction_validation']... -- predictions for validation set
 
        where observable_label follows the convention from the table filenames:
@@ -148,14 +148,14 @@ def initialize_observables_dict_from_tables(table_dir, analysis_config, paramete
                     data_keys = observables['Data'].keys()
                     msg = f'{observable_label} not found in observables[Data]: {data_keys}'
                     raise ValueError(msg)
-                
+
                 # Check that data and prediction have the same size
                 data_size = observables['Data'][observable_label]['y'].shape[0]
                 prediction_size = prediction_values.shape[0]
                 if data_size != prediction_size:
                     msg = f'({filename_prediction_values}) has different shape ({prediction_size}) than Data ({data_size}) -- before cuts.'
                     raise ValueError(msg)
-                
+
                 # Apply cuts to the prediction values and errors (as well as data dict)
                 # We do this by construct a mask of bins (rows) to keep
                 cuts = analysis_config['cuts']
@@ -167,7 +167,7 @@ def initialize_observables_dict_from_tables(table_dir, analysis_config, paramete
                         prediction_errors = prediction_errors[mask,:]
                         for key in observables['Data'][observable_label].keys():
                             observables['Data'][observable_label][key] = observables['Data'][observable_label][key][mask]
-                
+
                 # Check that data and prediction have the same size
                 data_size = observables['Data'][observable_label]['y'].shape[0]
                 prediction_size = prediction_values.shape[0]
