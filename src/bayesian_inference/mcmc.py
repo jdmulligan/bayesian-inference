@@ -72,8 +72,10 @@ def run_mcmc(config, closure_index=-1):
     # We can use multiprocessing in emcee to parallelize the independent walkers
     # NOTE: We need to use `spawn` rather than `fork` on linux. Otherwise, the some of the caching mechanisms
     #       (eg. used in learning the emulator group mapping doesn't work)
-    multiprocessing.set_start_method('spawn')
-    with multiprocessing.Pool() as pool:
+    # NOTE: We use `get_context` here to avoid having to globally specify the context. Plus, it then should be fine
+    #       to repeated call this function. (`set_context` can only be called once - otherwise, it's a runtime error).
+    ctx = multiprocessing.get_context('spawn')
+    with ctx.Pool() as pool:
 
         # Construct sampler (we create a dummy daughter class from emcee.EnsembleSampler, to add some logging info)
         # Note: we pass the emulators and experimental data as args to the log_posterior function
