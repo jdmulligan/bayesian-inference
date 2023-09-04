@@ -13,7 +13,7 @@ import yaml
 from pathlib import Path
 
 from bayesian_inference import data_IO, preprocess_input_data, emulation, mcmc
-from bayesian_inference import plot_input_data, plot_emulation, plot_mcmc, plot_qhat, plot_closure
+from bayesian_inference import plot_input_data, plot_emulation, plot_mcmc, plot_qhat, plot_closure, plot_analyses
 
 from bayesian_inference import common_base, helpers
 
@@ -258,6 +258,10 @@ class SteerAnalysis(common_base.CommonBase):
                     logger.info("")
 
         # Plots across multiple analyses
+        if self.plot['across_analyses']:
+            # NOTE: This is a departure from the standard API, but we need a convention for how
+            #       to pass multiple analyses, so we'll just go with it for now.
+            plot_analyses.plot(self.analyses, self.config_file, self.output_dir)
 
 
 ####################################################################################################################
