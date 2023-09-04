@@ -12,6 +12,7 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
+sns.set_context('paper', rc={'font.size':18,'axes.titlesize':18,'axes.labelsize':18})
 
 from bayesian_inference import data_IO, mcmc
 from bayesian_inference import plot_qhat
@@ -62,7 +63,9 @@ def plot(analyses: dict[str, Any], config_file: str, output_dir: str) -> None:
         configs=configs,
         plot_dir=plot_dir,
         E=100,
-        cred_level=0.9, n_samples=5000,
+        cred_level=0.9,
+        n_samples=5000,
+        plot_mean=False,
     )
 
 
@@ -87,8 +90,19 @@ def plot_qhat_across_analyses(
     :param int n_x: number of T or E points to plot
     :param 1darray target_design_point: if closure test, design point corresponding to "truth" qhat value
     '''
-    fig, ax = plt.subplots(figsize=(10, 6))
-    for (analysis_name, result), posterior, config in zip(results.items(), posteriors.values(), configs.values()):
+
+    colors = [
+        sns.xkcd_rgb['light blue'],
+        "#FF8301",   # orange,
+    ]
+    already_drawn_prior_credible_interval = False
+
+    fig, ax = plt.subplots()
+    for color, (analysis_name, result), posterior, config in zip(colors, results.items(), posteriors.values(), configs.values()):
+        # TODO: Labels are hard coded...
+        analysis_label = "Jet"
+        if "substructure" in analysis_name:
+            analysis_label = "Jet substructure"
         # Sample posterior parameters without replacement
         if posterior.shape[0] < n_samples:
             n_samples = posterior.shape[0]
@@ -112,10 +126,10 @@ def plot_qhat_across_analyses(
             qhat_posteriors = np.array([plot_qhat.qhat(posterior_samples, config, T=T, E=E) for E in x_array])
 
         # Plot mean qhat values for each T or E
+        qhat_mean = np.mean(qhat_posteriors, axis=1)
         if plot_mean:
-            qhat_mean = np.mean(qhat_posteriors, axis=1)
-            ax.plot(x_array, qhat_mean, #sns.xkcd_rgb['denim blue'],
-                    linewidth=2., linestyle='--', label='Mean')
+            ax.plot(x_array, qhat_mean, color=color, #sns.xkcd_rgb['denim blue'],
+                    linewidth=2., linestyle='--', label=f'{analysis_label}: Mean')
 
         # Plot the MAP value as well for each T or E
         if plot_map:
@@ -124,18 +138,18 @@ def plot_qhat_across_analyses(
             elif T:
                 qhat_map = np.array([plot_qhat.qhat(mcmc.map_parameters(posterior_samples), config, T=T, E=E) for E in x_array])
             ax.plot(x_array, qhat_map, #sns.xkcd_rgb['medium green'],
-                    linewidth=2., linestyle='--', label='MAP')
+                    linewidth=2., linestyle='--', label=f'{analysis_label}: MAP')
 
         # Get credible interval for each T or E
         h = [mcmc.credible_interval(qhat_values, confidence=cred_level) for qhat_values in qhat_posteriors]
         credible_low = [i[0] for i in h]
         credible_up =  [i[1] for i in h]
-        ax.fill_between(x_array, credible_low, credible_up, #color=sns.xkcd_rgb['light blue'],
-                        label=f'Posterior {int(cred_level*100)}% Credible Interval')
+        ax.fill_between(x_array, credible_low, credible_up, color=color, #alpha=0.8 if color == "#FF8301" else 1.0, #color=sns.xkcd_rgb['light blue'],
+                        label=f'{analysis_label}: Posterior {int(cred_level*100)}% Credible Interval')
 
         # Plot prior as well, for comparison
         # TODO: one could also plot some type of "information gain" metric, e.g. KL divergence
-        if plot_prior:
+        if plot_prior and not already_drawn_prior_credible_interval:
 
             # Generate samples
             prior_samples = plot_qhat._generate_prior_samples(config, n_samples=n_samples)
@@ -150,8 +164,9 @@ def plot_qhat_across_analyses(
             h_prior = [mcmc.credible_interval(qhat_values, confidence=cred_level) for qhat_values in qhat_priors]
             credible_low_prior = [i[0] for i in h_prior]
             credible_up_prior =  [i[1] for i in h_prior]
-            ax.fill_between(x_array, credible_low_prior, credible_up_prior, color=sns.xkcd_rgb['light blue'],
+            ax.fill_between(x_array, credible_low_prior, credible_up_prior, color=color, #color=sns.xkcd_rgb['light blue'],
                             alpha=0.3, label=f'Prior {int(cred_level*100)}% Credible Interval')
+            already_drawn_prior_credible_interval = True
 
         # If closure test: Plot truth qhat value
         # We will return a dict of info needed for plotting closure plots, including a
@@ -174,14 +189,16 @@ def plot_qhat_across_analyses(
     ax.set_xlabel(xlabel)
     ax.set_ylabel(r'$\hat{q}/T^3$')
     ymin = 0
-    if plot_mean:
-        ymax = 2*max(qhat_mean)
-    elif plot_map:
+    if plot_map:
         ymax = 2*max(qhat_map)
+    else:
+        # Use mean in all other cases
+        ymax = 2*max(qhat_mean)
     ax.set_ylim([ymin, ymax])
     ax.legend(title=f'{label}, {config.parameterization}', title_fontsize=12,
-            loc='upper right', fontsize=12)
+            loc='upper right', fontsize=12, frameon=False)
 
+    fig.tight_layout()
     fig.savefig(f'{plot_dir}/qhat_{suffix}.pdf')
     plt.close('all')
 
