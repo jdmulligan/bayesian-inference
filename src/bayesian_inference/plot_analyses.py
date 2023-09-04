@@ -100,9 +100,9 @@ def plot_qhat_across_analyses(
     fig, ax = plt.subplots()
     for color, (analysis_name, result), posterior, config in zip(colors, results.items(), posteriors.values(), configs.values()):
         # TODO: Labels are hard coded...
-        analysis_label = "Jet"
+        analysis_label = "Jet $R_{\mathrm{AA}}$"
         if "substructure" in analysis_name:
-            analysis_label = "Jet substructure"
+            analysis_label = "Jet $R_{\mathrm{AA}}$ + substructure"
         # Sample posterior parameters without replacement
         if posterior.shape[0] < n_samples:
             n_samples = posterior.shape[0]
@@ -140,13 +140,6 @@ def plot_qhat_across_analyses(
             ax.plot(x_array, qhat_map, #sns.xkcd_rgb['medium green'],
                     linewidth=2., linestyle='--', label=f'{analysis_label}: MAP')
 
-        # Get credible interval for each T or E
-        h = [mcmc.credible_interval(qhat_values, confidence=cred_level) for qhat_values in qhat_posteriors]
-        credible_low = [i[0] for i in h]
-        credible_up =  [i[1] for i in h]
-        ax.fill_between(x_array, credible_low, credible_up, color=color, #alpha=0.8 if color == "#FF8301" else 1.0, #color=sns.xkcd_rgb['light blue'],
-                        label=f'{analysis_label}: Posterior {int(cred_level*100)}% Credible Interval')
-
         # Plot prior as well, for comparison
         # TODO: one could also plot some type of "information gain" metric, e.g. KL divergence
         if plot_prior and not already_drawn_prior_credible_interval:
@@ -165,8 +158,16 @@ def plot_qhat_across_analyses(
             credible_low_prior = [i[0] for i in h_prior]
             credible_up_prior =  [i[1] for i in h_prior]
             ax.fill_between(x_array, credible_low_prior, credible_up_prior, color=color, #color=sns.xkcd_rgb['light blue'],
-                            alpha=0.3, label=f'Prior {int(cred_level*100)}% Credible Interval')
+                            alpha=0.3, label=f'Prior {int(cred_level*100)}% Credible Interval (CI)')
             already_drawn_prior_credible_interval = True
+
+        # Get credible interval for each T or E
+        h = [mcmc.credible_interval(qhat_values, confidence=cred_level) for qhat_values in qhat_posteriors]
+        credible_low = [i[0] for i in h]
+        credible_up =  [i[1] for i in h]
+        ax.fill_between(x_array, credible_low, credible_up, color=color, #alpha=0.8 if color == "#FF8301" else 1.0, #color=sns.xkcd_rgb['light blue'],
+                        label=f'{analysis_label}: Posterior {int(cred_level*100)}% CI')
+
 
         # If closure test: Plot truth qhat value
         # We will return a dict of info needed for plotting closure plots, including a
@@ -195,8 +196,18 @@ def plot_qhat_across_analyses(
         # Use mean in all other cases
         ymax = 2*max(qhat_mean)
     ax.set_ylim([ymin, ymax])
-    ax.legend(title=f'{label}, {config.parameterization}', title_fontsize=12,
+    ax.legend(title=f'{label}', title_fontsize=12,
             loc='upper right', fontsize=12, frameon=False)
+
+    # Add preliminary label
+    # TODO: Remove this...
+    #ax.text(0.05, 0.05,
+    #        'JETSCAPE Preliminary',
+    #        horizontalalignment="left",
+    #        verticalalignment="bottom",
+    #        multialignment="left",
+    #        transform=ax.transAxes
+    #    )
 
     fig.tight_layout()
     fig.savefig(f'{plot_dir}/qhat_{suffix}.pdf')
