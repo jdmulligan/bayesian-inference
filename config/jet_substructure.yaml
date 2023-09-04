@@ -2,19 +2,19 @@
 #-------------------------------------------
 # General parameters
 
-output_dir: '/home/james/jetscape-docker/bayesian-inference/output/20230828-QM'
+output_dir: 'output/20230829-QM'
 
-initialize_observables: False
-preprocess_input_data: False
+initialize_observables: True
+preprocess_input_data: True
 fit_emulators: True
-run_mcmc: False
+run_mcmc: True
 run_closure_tests: False
 
 plot:
   input_data: False
-  emulators: True
-  mcmc: False
-  qhat: False
+  emulators: False
+  mcmc: True
+  qhat: True
   closure_tests: False
 
 debug_level: 0
@@ -24,7 +24,7 @@ debug_level: 0
 observable_table_dir: '/rstorage/jetscape/STAT-Bayesian/Analysis1/20230116/tables'
 
 # We make use of some info in the JETSCAPE-analysis config that was used to aggregate/plot observables
-observable_config_dir: '/home/james/jetscape-docker/JETSCAPE-analysis/config'
+observable_config_dir: '../jetscape-analysis/config'
 
 # Filename of the observables file that we will use. This could be the standard one, or it could
 # have some predictions preprocessing applied to it.
@@ -210,30 +210,36 @@ analysis_hadron_base: &analysis_hadron
 
 analyses:
 
-  analysis_jet:
-    parameters:
-      preprocessing:
-        <<: *default_preprocessing_parameters
-      emulators:
-        default_group:
-          <<: *default_emulator_parameters
-          n_pc: 5
-          observable_list:
-            - 'jet__pt_'
-          observable_exclude_list:
-            - "pt_y_atlas"
-            - "2760__PbPb__inclusive_chjet__pt_alice"
-      mcmc:
-        <<: *default_mcmc_parameters
-      closure:
-        <<: *default_closure_parameters
-    <<: *model_base
-    cuts:
-      'chjet__pt_star__R0.2': [14, 100]
-      'chjet__pt_star__R0.4': [16, 100]
-    plot_panel_shapes: [[3,3], [3,3], [3,3]]
+  ########################
+  # Main analyses for QM23
+  ########################
+  #analysis_jet:
+  #  parameters:
+  #    preprocessing:
+  #      <<: *default_preprocessing_parameters
+  #    emulators:
+  #      default_group:
+  #        <<: *default_emulator_parameters
+  #        n_pc: 5
+  #        observable_list:
+  #          - 'jet__pt_'
+  #        observable_exclude_list:
+  #          - "pt_y_atlas"
+  #          - "2760__PbPb__inclusive_chjet__pt_alice"
+  #    mcmc:
+  #      <<: *default_mcmc_parameters
+  #      n_walkers: 200
+  #      n_burn_steps: 1000
+  #      n_sampling_steps: 25000
+  #    closure:
+  #      <<: *default_closure_parameters
+  #  <<: *model_base
+  #  cuts:
+  #    'chjet__pt_star__R0.2': [14, 100]
+  #    'chjet__pt_star__R0.4': [16, 100]
+  #  plot_panel_shapes: [[3,3], [3,3], [3,3]]
 
-  analysis_jet_substructure:
+  analysis_jet_substructure_n_walkers_100_long_prod:
     parameters:
       preprocessing:
         <<: *default_preprocessing_parameters
@@ -259,6 +265,9 @@ analyses:
             - 'jet__Dz_'
       mcmc:
         <<: *default_mcmc_parameters
+        n_walkers: 100
+        n_burn_steps: 1000
+        n_sampling_steps: 50000
       closure:
         <<: *default_closure_parameters
     <<: *model_base
@@ -266,6 +275,9 @@ analyses:
       'chjet__pt_star__R0.2': [14, 100]
       'chjet__pt_star__R0.4': [16, 100]
     plot_panel_shapes: [[3,3], [3,3], [3,3], [3,3], [3,3]]
+
+
+
 
 
   #analysis_hadron10_1000:
@@ -350,185 +362,185 @@ analyses:
   #############
   # 100 walkers
   #############
-  analysis_jet_n_walkers_100:
-    parameters:
-      preprocessing:
-        <<: *default_preprocessing_parameters
-      emulators:
-        default_group:
-          <<: *default_emulator_parameters
-          n_pc: 5
-          observable_list:
-            - 'jet__pt_'
-          observable_exclude_list:
-            - "pt_y_atlas"
-            - "2760__PbPb__inclusive_chjet__pt_alice"
-      mcmc:
-        <<: *default_mcmc_parameters
-        n_walkers: 100
-      closure:
-        <<: *default_closure_parameters
-    <<: *model_base
-    cuts:
-      'chjet__pt_star__R0.2': [14, 100]
-      'chjet__pt_star__R0.4': [16, 100]
-    plot_panel_shapes: [[3,3], [3,3], [3,3]]
+  #analysis_jet_n_walkers_100:
+  #  parameters:
+  #    preprocessing:
+  #      <<: *default_preprocessing_parameters
+  #    emulators:
+  #      default_group:
+  #        <<: *default_emulator_parameters
+  #        n_pc: 5
+  #        observable_list:
+  #          - 'jet__pt_'
+  #        observable_exclude_list:
+  #          - "pt_y_atlas"
+  #          - "2760__PbPb__inclusive_chjet__pt_alice"
+  #    mcmc:
+  #      <<: *default_mcmc_parameters
+  #      n_walkers: 100
+  #    closure:
+  #      <<: *default_closure_parameters
+  #  <<: *model_base
+  #  cuts:
+  #    'chjet__pt_star__R0.2': [14, 100]
+  #    'chjet__pt_star__R0.4': [16, 100]
+  #  plot_panel_shapes: [[3,3], [3,3], [3,3]]
 
-  analysis_jet_substructure_n_walkers_100:
-    parameters:
-      preprocessing:
-        <<: *default_preprocessing_parameters
-      emulators:
-        jet_group:
-          <<: *default_emulator_parameters
-          n_pc: 5
-          observable_list:
-            - 'jet__pt_'
-          observable_exclude_list:
-            - "pt_y_atlas"
-            - "2760__PbPb__inclusive_chjet__pt_alice"
-        substructure_groomed_group:
-          <<: *default_emulator_parameters
-          n_pc: 11
-          observable_list:
-            - 'chjet__zg_'
-            - 'chjet__tg_'
-        substructure_Dz_group:
-          <<: *default_emulator_parameters
-          n_pc: 25
-          observable_list:
-            - 'jet__Dz_'
-      mcmc:
-        <<: *default_mcmc_parameters
-        n_walkers: 100
-      closure:
-        <<: *default_closure_parameters
-    <<: *model_base
-    cuts:
-      'chjet__pt_star__R0.2': [14, 100]
-      'chjet__pt_star__R0.4': [16, 100]
-    plot_panel_shapes: [[3,3], [3,3], [3,3], [3,3], [3,3]]
+  #analysis_jet_substructure_n_walkers_100:
+  #  parameters:
+  #    preprocessing:
+  #      <<: *default_preprocessing_parameters
+  #    emulators:
+  #      jet_group:
+  #        <<: *default_emulator_parameters
+  #        n_pc: 5
+  #        observable_list:
+  #          - 'jet__pt_'
+  #        observable_exclude_list:
+  #          - "pt_y_atlas"
+  #          - "2760__PbPb__inclusive_chjet__pt_alice"
+  #      substructure_groomed_group:
+  #        <<: *default_emulator_parameters
+  #        n_pc: 11
+  #        observable_list:
+  #          - 'chjet__zg_'
+  #          - 'chjet__tg_'
+  #      substructure_Dz_group:
+  #        <<: *default_emulator_parameters
+  #        n_pc: 25
+  #        observable_list:
+  #          - 'jet__Dz_'
+  #    mcmc:
+  #      <<: *default_mcmc_parameters
+  #      n_walkers: 100
+  #    closure:
+  #      <<: *default_closure_parameters
+  #  <<: *model_base
+  #  cuts:
+  #    'chjet__pt_star__R0.2': [14, 100]
+  #    'chjet__pt_star__R0.4': [16, 100]
+  #  plot_panel_shapes: [[3,3], [3,3], [3,3], [3,3], [3,3]]
 
-  #############
-  # 125 walkers
-  #############
-  analysis_jet_n_walkers_125:
-    parameters:
-      preprocessing:
-        <<: *default_preprocessing_parameters
-      emulators:
-        default_group:
-          <<: *default_emulator_parameters
-          n_pc: 5
-          observable_list:
-            - 'jet__pt_'
-          observable_exclude_list:
-            - "pt_y_atlas"
-            - "2760__PbPb__inclusive_chjet__pt_alice"
-      mcmc:
-        <<: *default_mcmc_parameters
-        n_walkers: 125
-      closure:
-        <<: *default_closure_parameters
-    <<: *model_base
-    cuts:
-      'chjet__pt_star__R0.2': [14, 100]
-      'chjet__pt_star__R0.4': [16, 100]
-    plot_panel_shapes: [[3,3], [3,3], [3,3]]
+  ##############
+  ## 125 walkers
+  ##############
+  #analysis_jet_n_walkers_125:
+  #  parameters:
+  #    preprocessing:
+  #      <<: *default_preprocessing_parameters
+  #    emulators:
+  #      default_group:
+  #        <<: *default_emulator_parameters
+  #        n_pc: 5
+  #        observable_list:
+  #          - 'jet__pt_'
+  #        observable_exclude_list:
+  #          - "pt_y_atlas"
+  #          - "2760__PbPb__inclusive_chjet__pt_alice"
+  #    mcmc:
+  #      <<: *default_mcmc_parameters
+  #      n_walkers: 125
+  #    closure:
+  #      <<: *default_closure_parameters
+  #  <<: *model_base
+  #  cuts:
+  #    'chjet__pt_star__R0.2': [14, 100]
+  #    'chjet__pt_star__R0.4': [16, 100]
+  #  plot_panel_shapes: [[3,3], [3,3], [3,3]]
 
-  analysis_jet_substructure_n_walkers_125:
-    parameters:
-      preprocessing:
-        <<: *default_preprocessing_parameters
-      emulators:
-        jet_group:
-          <<: *default_emulator_parameters
-          n_pc: 5
-          observable_list:
-            - 'jet__pt_'
-          observable_exclude_list:
-            - "pt_y_atlas"
-            - "2760__PbPb__inclusive_chjet__pt_alice"
-        substructure_groomed_group:
-          <<: *default_emulator_parameters
-          n_pc: 11
-          observable_list:
-            - 'chjet__zg_'
-            - 'chjet__tg_'
-        substructure_Dz_group:
-          <<: *default_emulator_parameters
-          n_pc: 25
-          observable_list:
-            - 'jet__Dz_'
-      mcmc:
-        <<: *default_mcmc_parameters
-        n_walkers: 125
-      closure:
-        <<: *default_closure_parameters
-    <<: *model_base
-    cuts:
-      'chjet__pt_star__R0.2': [14, 100]
-      'chjet__pt_star__R0.4': [16, 100]
-    plot_panel_shapes: [[3,3], [3,3], [3,3], [3,3], [3,3]]
+  #analysis_jet_substructure_n_walkers_125:
+  #  parameters:
+  #    preprocessing:
+  #      <<: *default_preprocessing_parameters
+  #    emulators:
+  #      jet_group:
+  #        <<: *default_emulator_parameters
+  #        n_pc: 5
+  #        observable_list:
+  #          - 'jet__pt_'
+  #        observable_exclude_list:
+  #          - "pt_y_atlas"
+  #          - "2760__PbPb__inclusive_chjet__pt_alice"
+  #      substructure_groomed_group:
+  #        <<: *default_emulator_parameters
+  #        n_pc: 11
+  #        observable_list:
+  #          - 'chjet__zg_'
+  #          - 'chjet__tg_'
+  #      substructure_Dz_group:
+  #        <<: *default_emulator_parameters
+  #        n_pc: 25
+  #        observable_list:
+  #          - 'jet__Dz_'
+  #    mcmc:
+  #      <<: *default_mcmc_parameters
+  #      n_walkers: 125
+  #    closure:
+  #      <<: *default_closure_parameters
+  #  <<: *model_base
+  #  cuts:
+  #    'chjet__pt_star__R0.2': [14, 100]
+  #    'chjet__pt_star__R0.4': [16, 100]
+  #  plot_panel_shapes: [[3,3], [3,3], [3,3], [3,3], [3,3]]
 
-  #############
-  # 150 walkers
-  #############
-  analysis_jet_n_walkers_150:
-    parameters:
-      preprocessing:
-        <<: *default_preprocessing_parameters
-      emulators:
-        default_group:
-          <<: *default_emulator_parameters
-          n_pc: 5
-          observable_list:
-            - 'jet__pt_'
-          observable_exclude_list:
-            - "pt_y_atlas"
-            - "2760__PbPb__inclusive_chjet__pt_alice"
-      mcmc:
-        <<: *default_mcmc_parameters
-        n_walkers: 150
-      closure:
-        <<: *default_closure_parameters
-    <<: *model_base
-    cuts:
-      'chjet__pt_star__R0.2': [14, 100]
-      'chjet__pt_star__R0.4': [16, 100]
-    plot_panel_shapes: [[3,3], [3,3], [3,3]]
+  ##############
+  ## 150 walkers
+  ##############
+  #analysis_jet_n_walkers_150:
+  #  parameters:
+  #    preprocessing:
+  #      <<: *default_preprocessing_parameters
+  #    emulators:
+  #      default_group:
+  #        <<: *default_emulator_parameters
+  #        n_pc: 5
+  #        observable_list:
+  #          - 'jet__pt_'
+  #        observable_exclude_list:
+  #          - "pt_y_atlas"
+  #          - "2760__PbPb__inclusive_chjet__pt_alice"
+  #    mcmc:
+  #      <<: *default_mcmc_parameters
+  #      n_walkers: 150
+  #    closure:
+  #      <<: *default_closure_parameters
+  #  <<: *model_base
+  #  cuts:
+  #    'chjet__pt_star__R0.2': [14, 100]
+  #    'chjet__pt_star__R0.4': [16, 100]
+  #  plot_panel_shapes: [[3,3], [3,3], [3,3]]
 
-  analysis_jet_substructure_n_walkers_150:
-    parameters:
-      preprocessing:
-        <<: *default_preprocessing_parameters
-      emulators:
-        jet_group:
-          <<: *default_emulator_parameters
-          n_pc: 5
-          observable_list:
-            - 'jet__pt_'
-          observable_exclude_list:
-            - "pt_y_atlas"
-            - "2760__PbPb__inclusive_chjet__pt_alice"
-        substructure_groomed_group:
-          <<: *default_emulator_parameters
-          n_pc: 11
-          observable_list:
-            - 'chjet__zg_'
-            - 'chjet__tg_'
-        substructure_Dz_group:
-          <<: *default_emulator_parameters
-          n_pc: 25
-          observable_list:
-            - 'jet__Dz_'
-      mcmc:
-        <<: *default_mcmc_parameters
-        n_walkers: 150
-      closure:
-        <<: *default_closure_parameters
-    <<: *model_base
-    cuts:
-      'chjet__pt_star__R0.2': [14, 100]
-      'chjet__pt_star__R0.4': [16, 100]
-    plot_panel_shapes: [[3,3], [3,3], [3,3], [3,3], [3,3]]
+  #analysis_jet_substructure_n_walkers_150:
+  #  parameters:
+  #    preprocessing:
+  #      <<: *default_preprocessing_parameters
+  #    emulators:
+  #      jet_group:
+  #        <<: *default_emulator_parameters
+  #        n_pc: 5
+  #        observable_list:
+  #          - 'jet__pt_'
+  #        observable_exclude_list:
+  #          - "pt_y_atlas"
+  #          - "2760__PbPb__inclusive_chjet__pt_alice"
+  #      substructure_groomed_group:
+  #        <<: *default_emulator_parameters
+  #        n_pc: 11
+  #        observable_list:
+  #          - 'chjet__zg_'
+  #          - 'chjet__tg_'
+  #      substructure_Dz_group:
+  #        <<: *default_emulator_parameters
+  #        n_pc: 25
+  #        observable_list:
+  #          - 'jet__Dz_'
+  #    mcmc:
+  #      <<: *default_mcmc_parameters
+  #      n_walkers: 150
+  #    closure:
+  #      <<: *default_closure_parameters
+  #  <<: *model_base
+  #  cuts:
+  #    'chjet__pt_star__R0.2': [14, 100]
+  #    'chjet__pt_star__R0.4': [16, 100]
+  #  plot_panel_shapes: [[3,3], [3,3], [3,3], [3,3], [3,3]]
