@@ -9,7 +9,7 @@ The end-to-end workflow consists of:
 - Fitting Gaussian Processes to emulate the physics model at any $\theta$.
 - Sampling the posterior $P(\theta|D)$ using MCMC, with a Gaussian likelihood constructed by comparing the emulated physics model $f(\theta)$ to published experimental measurements $D$ from the Large Hadron Collider (LHC) and the Relativistic Heavy Ion Collider (RHIC).
 
-This results in a constraint on the transverse diffusion coefficient $\hat{q}$ describing a jet propagating through deconfined QCD matter.
+This results in a constraint on the transverse diffusion coefficient $\hat{q}$ describing a jet with energy $E$ propagating through deconfined QCD matter with temperature $T$.
 ![image](https://github.com/jdmulligan/bayesian-inference/assets/16219745/faac0d39-39ad-4acf-a898-91ec51d57a31)
 
 
