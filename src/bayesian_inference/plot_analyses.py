@@ -196,7 +196,7 @@ def plot_qhat_across_analyses(
         # Use mean in all other cases
         ymax = 2*max(qhat_mean)
     ax.set_ylim([ymin, ymax])
-    ax.legend(title=f'{label}', title_fontsize=12,
+    ax.legend(title=f'{label}, 0-10% central data', title_fontsize=13,
             loc='upper right', fontsize=12, frameon=False)
 
     # Add preliminary label
