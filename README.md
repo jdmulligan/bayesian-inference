@@ -21,7 +21,7 @@ The data pipeline consists of the following optional steps:
 3. Run MCMC
 4. Plot results and validation
 
-The analysis is steered by the script `steer_analysis.py`, where you can specify which parts of the pipeline you want to run, along with a config file (e.g. 'jet_substructure.yaml').
+The analysis is steered by the script `steer_analysis.py`, where you can specify which parts of the pipeline you want to run, along with a config file (e.g. `jet_substructure.yaml`).
 
 The config files will specify which steps to run along with input/output paths for each step, where applicable.
 
