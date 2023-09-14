@@ -1,8 +1,37 @@
-# bayesian-inference
+# Bayesian inference of QCD transport properties
 
-Analysis code to implement Bayesian inference for heavy-ion jet measurements.
+This repository contains analysis code to implement Bayesian inference of one of the key emergent quantities of quantum chromodynamics (QCD), the jet transverse diffusion coefficient $\hat{q}$.
+The initial results were published in [arXiv:2102.11337](https://inspirehep.net/literature/1847995), and the the most recent results were presented at [Quark Matter 2023](https://indico.cern.ch/event/1139644/).
 
-## Setup software environment – on hiccup cluster
+The end-to-end workflow consists of:
+- Simulating a physics model $f(\theta)$ at a collection of design points $\theta$ using the [JETSCAPE](https://github.com/JETSCAPE/JETSCAPE) framework – requiring $\mathcal{O}(10M)$ CPU-hours.
+- Using PCA to reduce the dimensionality of the feature space.
+- Fitting Gaussian Processes to emulate the physics model at any $\theta$.
+- Sampling the posterior $P(\theta|D)$ using MCMC, with a Gaussian likelihood constructed by comparing the emulated physics model $f(\theta)$ to published experimental measurements $D$ from the Large Hadron Collider (LHC) and the Relativistic Heavy Ion Collider (RHIC).
+
+This results in a constraint on the transverse diffusion coefficient $\hat{q}$ describing a jet propagating through deconfined QCD matter.
+![image](https://github.com/jdmulligan/bayesian-inference/assets/16219745/faac0d39-39ad-4acf-a898-91ec51d57a31)
+
+
+## Running the data pipeline
+
+The data pipeline consists of the following optional steps:
+1. Read in the design points, predictions, experimental data, and uncertainties
+2. Perform PCA and fit GP emulators
+3. Run MCMC
+4. Plot results and validation
+
+The analysis is steered by the script `steer_analysis.py`, where you can specify which parts of the pipeline you want to run, along with a config file (e.g. 'jet_substructure.yaml').
+
+The config files will specify which steps to run along with input/output paths for each step, where applicable.
+
+### To run the analysis:
+```
+python steer_analysis.py -c ./config/jet_substructure.yaml
+```
+
+
+## Setup software environment – example on hiccup cluster
 <details>
   <summary>Click for details</summary>
 <br/> 
@@ -54,20 +83,3 @@ Now we are ready to run our scripts.
 
    
 </details>
-
-## Run the data pipeline
-
-The data pipeline consists of the following optional steps:
-1. Read in the design points, predictions, experimental data, and uncertainties
-2. Fit emulators
-3. Run MCMC
-4. Plot
-
-The analysis is steered by the script `steer_analysis.py`, where you can specify which parts of the pipeline you want to run, along with a config file (e.g. `hadron_jet_RAA.yaml` or 'substructure.yaml').
-
-The config files will specify which steps to run along with input/output paths for each step, where applicable.
-
-### To run the analysis:
-```
-python steer_analysis.py -c ./config/hadron_jet_RAA.yaml
-```
