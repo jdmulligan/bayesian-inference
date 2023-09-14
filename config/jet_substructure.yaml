@@ -16,6 +16,7 @@ plot:
   mcmc: True
   qhat: True
   closure_tests: False
+  across_analyses: True
 
 debug_level: 0
 
@@ -213,31 +214,31 @@ analyses:
   ########################
   # Main analyses for QM23
   ########################
-  #analysis_jet:
-  #  parameters:
-  #    preprocessing:
-  #      <<: *default_preprocessing_parameters
-  #    emulators:
-  #      default_group:
-  #        <<: *default_emulator_parameters
-  #        n_pc: 5
-  #        observable_list:
-  #          - 'jet__pt_'
-  #        observable_exclude_list:
-  #          - "pt_y_atlas"
-  #          - "2760__PbPb__inclusive_chjet__pt_alice"
-  #    mcmc:
-  #      <<: *default_mcmc_parameters
-  #      n_walkers: 200
-  #      n_burn_steps: 1000
-  #      n_sampling_steps: 25000
-  #    closure:
-  #      <<: *default_closure_parameters
-  #  <<: *model_base
-  #  cuts:
-  #    'chjet__pt_star__R0.2': [14, 100]
-  #    'chjet__pt_star__R0.4': [16, 100]
-  #  plot_panel_shapes: [[3,3], [3,3], [3,3]]
+  analysis_jet:
+    parameters:
+      preprocessing:
+        <<: *default_preprocessing_parameters
+      emulators:
+        default_group:
+          <<: *default_emulator_parameters
+          n_pc: 5
+          observable_list:
+            - 'jet__pt_'
+          observable_exclude_list:
+            - "pt_y_atlas"
+            - "2760__PbPb__inclusive_chjet__pt_alice"
+      mcmc:
+        <<: *default_mcmc_parameters
+        n_walkers: 200
+        n_burn_steps: 1000
+        n_sampling_steps: 25000
+      closure:
+        <<: *default_closure_parameters
+    <<: *model_base
+    cuts:
+      'chjet__pt_star__R0.2': [14, 100]
+      'chjet__pt_star__R0.4': [16, 100]
+    plot_panel_shapes: [[3,3], [3,3], [3,3]]
 
   analysis_jet_substructure_n_walkers_100_long_prod:
     parameters:
@@ -275,6 +276,9 @@ analyses:
       'chjet__pt_star__R0.2': [14, 100]
       'chjet__pt_star__R0.4': [16, 100]
     plot_panel_shapes: [[3,3], [3,3], [3,3], [3,3], [3,3]]
+
+
+
 
 
 

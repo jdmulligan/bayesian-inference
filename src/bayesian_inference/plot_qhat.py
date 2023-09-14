@@ -53,7 +53,7 @@ def plot(config):
     _plot_observable_sensitivity(posterior, plot_dir, config, delta=0.1, n_samples=1000)
 
 #---------------------------------------------------------------[]
-def plot_qhat(posterior, plot_dir, config, E=0, T=0, cred_level=0., n_samples=5000, n_x=50, 
+def plot_qhat(posterior, plot_dir, config, E=0, T=0, cred_level=0., n_samples=5000, n_x=50,
               plot_prior=True, plot_mean=True, plot_map=False, target_design_point=np.array([])):
     '''
     Plot qhat credible interval from posterior samples,
@@ -155,7 +155,7 @@ def plot_qhat(posterior, plot_dir, config, E=0, T=0, cred_level=0., n_samples=50
     ymin = 0
     if plot_mean:
         ymax = 2*max(qhat_mean)
-    elif plot_map: 
+    elif plot_map:
         ymax = 2*max(qhat_map)
     axes = plt.gca()
     axes.set_ylim([ymin, ymax])
@@ -177,7 +177,7 @@ def _plot_observable_sensitivity(posterior, plot_dir, config, delta=0.1, n_sampl
 
     Note: this is just a normalized partial derivative, dO_j/dx_i * (x_i/O_j)
 
-    Based on: 
+    Based on:
       - https://arxiv.org/abs/2011.01430
       - https://link.springer.com/article/10.1007/BF00547132
     '''
@@ -187,9 +187,9 @@ def _plot_observable_sensitivity(posterior, plot_dir, config, delta=0.1, n_sampl
 
     # Plot sensitivity index for each parameter
     for i_parameter in range(posterior.shape[1]):
-        _plot_single_parameter_observable_sensitivity(map_parameters, i_parameter, 
+        _plot_single_parameter_observable_sensitivity(map_parameters, i_parameter,
                                                       plot_dir, config, delta=delta)
-    
+
     # TODO: Plot sensitivity for qhat:
     #   S(qhat, O_j, delta) = 1/delta * [O_j(qhat_map') - O_j(qhat_map)] / O_j(qhat)
     # In the current qhat formulation, qhat = qhat(x_0=alpha_s_fix) only depends on x_0=alpha_s_fix.
@@ -197,7 +197,7 @@ def _plot_observable_sensitivity(posterior, plot_dir, config, delta=0.1, n_sampl
     # If we want to explicitly compute S(qhat), we need to evaluate the emulator at qhat_map'=(1+delta)*qhat_map.
     # In principle one should find the x_0 corresponding to (1+delta)*qhat_map.
     # For simplicity we can just evaluate x_0'=x_0(1+delta) and then redefine delta=qhat(x_0')-qhat(x_0) -- but
-    #   this is excatly the same as the S(x_0) plot above, up the redefinition of delta.
+    #   this is exactly the same as the S(x_0) plot above, up the redefinition of delta.
     # It may nevertheless be nice to add since a plot of S(qhat) will likely be more salient to viewers.
 
 #---------------------------------------------------------------
@@ -218,7 +218,7 @@ def _plot_single_parameter_observable_sensitivity(map_parameters, i_parameter, p
     x_prime[i_parameter] = (1+delta)*x_prime[i_parameter]
     x = np.expand_dims(x, axis=0)
     x_prime = np.expand_dims(x_prime, axis=0)
-    
+
     # Get emulator predictions at the two points
     emulation_config = emulation.EmulationConfig.from_config_file(
         analysis_name=config.analysis_name,
@@ -232,9 +232,9 @@ def _plot_single_parameter_observable_sensitivity(map_parameters, i_parameter, p
 
     # Convert to dict: emulator_predictions[observable_label]
     observables = data_IO.read_dict_from_h5(config.output_dir, 'observables.h5', verbose=False)
-    emulator_predictions_x_dict = data_IO.observable_dict_from_matrix(emulator_predictions_x['central_value'], 
+    emulator_predictions_x_dict = data_IO.observable_dict_from_matrix(emulator_predictions_x['central_value'],
                                                                       observables, observable_filter=emulation_config.observable_filter)
-    emulator_predictions_x_prime_dict = data_IO.observable_dict_from_matrix(emulator_predictions_x_prime['central_value'], 
+    emulator_predictions_x_prime_dict = data_IO.observable_dict_from_matrix(emulator_predictions_x_prime['central_value'],
                                                                             observables, observable_filter=emulation_config.observable_filter)
 
     # Construct dict of sensitivity index, in same format as emulator_predictions['central_value']
@@ -244,7 +244,7 @@ def _plot_single_parameter_observable_sensitivity(map_parameters, i_parameter, p
         x = emulator_predictions_x_dict['central_value'][observable_label]
         x_prime = emulator_predictions_x_prime_dict['central_value'][observable_label]
         sensitivity_index_dict[observable_label] = 1/delta * (x_prime - x) / x
-    
+
     # Plot
     plot_list = [sensitivity_index_dict]
     columns = [0]
@@ -254,7 +254,7 @@ def _plot_single_parameter_observable_sensitivity(map_parameters, i_parameter, p
     ylabel = rf'$S({param}, \mathcal{{O}}, \delta)$'
     #ylabel = rf'$S({param}, \mathcal{{O}}, \delta) = \frac{{1}}{{\delta}} \frac{{\mathcal{{O}}([1+\delta] {param})-\mathcal{{O}}({param})}}{{\mathcal{{O}}({param})}}$'
     filename = f'sensitivity_index_{i_parameter}.pdf'
-    plot_utils.plot_observable_panels(plot_list, labels, colors, columns, config, plot_dir, filename, 
+    plot_utils.plot_observable_panels(plot_list, labels, colors, columns, config, plot_dir, filename,
                                       linewidth=1, ymin=-5, ymax=5, ylabel=ylabel, plot_exp_data=False, bar_plot=True)
 
 #---------------------------------------------------------------
